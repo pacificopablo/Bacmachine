@@ -258,12 +258,26 @@ function getDerivedVote() {
   return a === b ? (b === 'P' ? 'Player' : 'Banker') : (b === 'P' ? 'Banker' : 'Player');
 }
 
-function getWager(conf) {
-  if (!baseBet || conf <= 60) return 0;
-  const multipliers = [1, 2, 3, 5, 7];
-  const depth = Math.min(recoveryAttempts, multipliers.length - 1);
-  let stake = baseBet * multipliers[depth];
-  return Math.min(stake, currentBalance);
+// ✅ Enhanced Recovery Logic (BaseBet Multiples)
+function getWager(confidence) {
+  if (!baseBet || confidence <= 60) return 0;
+
+  const profit = currentBalance - startingBankroll;
+  if (profit >= 0) return baseBet;
+
+  const lossToRecover = -profit;
+  const payoutRatio = confidence > 70 ? 1 : 0.95;
+
+  for (let multiplier = 1; multiplier <= 10; multiplier++) {
+    const stake = baseBet * multiplier;
+    const expectedProfit = stake * payoutRatio;
+    if (expectedProfit >= lossToRecover && stake <= currentBalance) {
+      return parseFloat(stake.toFixed(2));
+    }
+  }
+
+  const maxMultiplier = Math.floor(currentBalance / baseBet);
+  return parseFloat((baseBet * maxMultiplier).toFixed(2));
 }
 
 function updateDisplay() {
