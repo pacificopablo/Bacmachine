@@ -106,8 +106,8 @@
 
 <div class="section" id="history"></div>
 <div class="section" id="prediction">AI Prediction: Waiting...</div>
-<div class="section" id="streakInfo"></div>
 <div class="section" id="betSuggestion"></div>
+<div class="section" id="recoveryBadge" style="color:#d35400;"></div>
 <div class="section" id="currentWager">💵 Current Wager: 0</div>
 <div class="section" id="bankrollDisplay">💼 Balance: - | Profit: -</div>
 <div class="section" id="longtermStatus"></div>
@@ -258,7 +258,7 @@ function getDerivedVote() {
   return a === b ? (b === 'P' ? 'Player' : 'Banker') : (b === 'P' ? 'Banker' : 'Player');
 }
 
-// ✅ Enhanced Recovery Logic (BaseBet Multiples)
+// ✅ Recovery using baseBet multiples
 function getWager(confidence) {
   if (!baseBet || confidence <= 60) return 0;
 
@@ -291,9 +291,14 @@ function updateDisplay() {
     pred.confidence > 75 ? "💰 Aggressive Bet" :
     pred.confidence > 65 ? "🎯 Normal Bet" :
     pred.confidence > 60 ? "💡 Conservative Bet" : "";
-  document.getElementById("streakInfo").innerText =
-    winLoss.slice(-3).every(r => r === 'loss') ? `🧊 Cold Streak - Recovery Depth: ${recoveryAttempts}` :
-    winLoss.slice(-3).every(r => r === 'win') ? `🔥 Hot Streak` : '';
+
+  // 🛠 Show Recovery Badge
+  if (recoveryMode && currentBalance < startingBankroll) {
+    const lossToRecover = (startingBankroll - currentBalance).toFixed(2);
+    document.getElementById("recoveryBadge").innerText = `🛠 Recovery Mode ON – Target: $${lossToRecover}`;
+  } else {
+    document.getElementById("recoveryBadge").innerText = '';
+  }
 
   const wager = getWager(pred.confidence);
   document.getElementById("currentWager").innerText = `💵 Current Wager: ${wager.toFixed(2)}`;
