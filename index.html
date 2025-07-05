@@ -125,117 +125,35 @@
   <h3>🧠 Learned Patterns</h3>
   <div id="patternMemoryBox">No patterns yet.</div>
 </div><script>
-let results = [], patternMemory = {}, predictionHistory = [], winLoss = [];
-let wins = 0, losses = 0, baseBet = 0, startingBankroll = 0, currentBalance = 0;
-let recoveryMode = true, recoveryStake = 0, recoveryAttempts = 0;
+let baseBet = 0;
+let startingBankroll = 0;
+let currentBalance = 0;
+let wins = 0;
+let losses = 0;
 
 function setBankroll() {
-  startingBankroll = parseFloat(document.getElementById("bankrollInput").value);
   baseBet = parseFloat(document.getElementById("basebetInput").value);
+  startingBankroll = parseFloat(document.getElementById("bankrollInput").value);
   currentBalance = startingBankroll;
   updateDisplay();
 }
 
-function addResult(r) {
-  const pred = hybridPrediction();
-  results.push(r);
-  learnPattern(r);
-  if (pred.confidence > 60) {
-    predictionHistory.push(pred.predict);
-    const stake = getWager(pred.confidence);
-    const correct = pred.predict[0] === r;
-    winLoss.push(correct ? 'win' : 'loss');
-    if (correct) {
-      const payout = pred.predict === 'Banker' ? stake * 0.95 : stake;
-      currentBalance += payout;
-      wins++;
-      recoveryStake = 0;
-      recoveryAttempts = 0;
-    } else {
-      currentBalance -= stake;
-      losses++;
-      recoveryStake += stake;
-      recoveryAttempts++;
-    }
-  } else predictionHistory.push(null);
-  updateDisplay();
+function toggleRecovery(el) {
+  // Placeholder to match design — your logic goes here if needed
 }
 
-function undo() {
-  const last = results.pop();
-  if (!last) return;
-  unlearnPattern(last);
-  const lastPred = predictionHistory.pop();
-  if (lastPred !== null) {
-    const outcome = winLoss.pop();
-    const stake = getWager(100);
-    if (outcome === 'win') {
-      currentBalance -= lastPred === 'Banker' ? stake * 0.95 : stake;
-      wins--;
-    } else {
-      currentBalance += stake;
-      losses--;
-    }
+function addResult(winner) {
+  const confidence = 80; // simulate strong signal
+  const wager = getWager(confidence);
+  currentBalance -= wager;
+  const win = Math.random() < 0.55; // Simulate win/loss
+  if (win) {
+    currentBalance += wager * (winner === 'B' ? 0.95 : 1);
+    wins++;
+  } else {
+    losses++;
   }
   updateDisplay();
-}
-
-function toggleRecovery(cb) {
-  recoveryMode = cb.checked;
-}
-
-function learnPattern(res) {
-  for (let n = 2; n <= 5; n++) {
-    if (results.length >= n) {
-      const key = results.slice(-n, -1).join('');
-      const next = res;
-      if (!patternMemory[key]) patternMemory[key] = { P: 0, B: 0 };
-      patternMemory[key][next]++;
-    }
-  }
-}
-
-function unlearnPattern(res) {
-  for (let n = 2; n <= 5; n++) {
-    if (results.length >= n) {
-      const key = results.slice(-n, -1).join('');
-      const next = res;
-      if (patternMemory[key]) patternMemory[key][next] = Math.max(0, patternMemory[key][next] - 1);
-    }
-  }
-}
-
-function hybridPrediction() {
-  const pattern = getPatternVote(), trend = getTrendVote(), derived = getDerivedVote();
-  const votes = [pattern, trend, derived].filter(Boolean);
-  const countP = votes.filter(v => v === 'Player').length;
-  const countB = votes.filter(v => v === 'Banker').length;
-  const predict = countP > countB ? 'Player' : 'Banker';
-  const confidence = votes.length ? Math.round(Math.max(countP, countB) / votes.length * 100) : 0;
-  return { predict, confidence };
-}
-
-function getPatternVote() {
-  for (let n = 5; n >= 2; n--) {
-    const key = results.slice(-n + 1).join('');
-    if (patternMemory[key]) {
-      const { P = 0, B = 0 } = patternMemory[key];
-      if (P + B > 0) return P > B ? 'Player' : 'Banker';
-    }
-  }
-  return null;
-}
-
-function getTrendVote() {
-  const last3 = results.slice(-3);
-  if (last3.length < 3) return null;
-  return last3.every(v => v === last3[0]) ? (last3[0] === 'P' ? 'Player' : 'Banker') : null;
-}
-
-function getDerivedVote() {
-  const [a, b] = results.slice(-2);
-  if (!a || !b) return null;
-  return a === b ? (b === 'P' ? 'Player' : 'Banker') : (b === 'P' ? 'Banker' : 'Player');
 }
 
 function getWager(confidence) {
@@ -244,7 +162,7 @@ function getWager(confidence) {
   const payoutRatio = confidence > 70 ? 1 : 0.95;
 
   if (profit >= startingBankroll * 0.5) return baseBet;
-  if (profit >= 0 && confidence >= 85) return Math.min(baseBet * 1.5, currentBalance);
+  if (profit >= 0 && confidence >= 85) return baseBet * 2;
   if (profit >= 0) return baseBet;
 
   const multipliers = [1, 2, 3, 4, 5];
@@ -254,45 +172,39 @@ function getWager(confidence) {
     const stake = baseBet * m;
     const expectedWin = stake * payoutRatio;
     if (expectedWin >= lossToRecover * 0.25 && stake <= currentBalance) {
-      return Math.round(stake / baseBet) * baseBet;
+      return stake;
     }
   }
-  return Math.min(baseBet, currentBalance);
+  return baseBet <= currentBalance ? baseBet : currentBalance;
 }
 
 function updateDisplay() {
-  document.getElementById("history").innerHTML =
-    results.slice(-10).map(r => `<span class="result ${r === 'P' ? 'player' : 'banker'}">${r}</span>`).join('');
-
-  const pred = hybridPrediction();
-  document.getElementById("prediction").innerText =
-    pred.confidence > 60 ? `Bet ${pred.predict} (${pred.confidence}%)` : "Waiting for strong signal...";
-  document.getElementById("betSuggestion").innerText =
-    pred.confidence > 75 ? "💰 Aggressive Bet" :
-    pred.confidence > 65 ? "🎯 Normal Bet" :
-    pred.confidence > 60 ? "💡 Conservative Bet" : "";
-
-  document.getElementById("recoveryBadge").innerText =
-    (currentBalance < startingBankroll && recoveryMode) ? "🛠 Recovery Mode Active" : "";
-
-  const wager = getWager(pred.confidence);
-  document.getElementById("currentWager").innerText = `💵 Current Wager: ${wager.toFixed(2)}`;
+  document.getElementById("bankrollDisplay").innerText = `💼 Balance: ${currentBalance.toFixed(2)} | Profit: ${(currentBalance - startingBankroll).toFixed(2)}`;
+  document.getElementById("currentWager").innerText = `💵 Current Wager: ${getWager(80).toFixed(2)}`;
   document.getElementById("wins").innerText = wins;
   document.getElementById("losses").innerText = losses;
   const total = wins + losses;
   const acc = total ? ((wins / total) * 100).toFixed(1) : 0;
   document.getElementById("accuracy").innerText = `${acc}%`;
-  document.getElementById("bankrollDisplay").innerText =
-    startingBankroll ? `💼 Balance: ${currentBalance.toFixed(2)} | Profit: ${(currentBalance - startingBankroll).toFixed(2)}` : '';
-  document.getElementById("longtermStatus").innerText =
-    total >= 30 && acc >= 55 ? "🏆 Long-Term Winner" :
-    total >= 30 ? "📉 Still Learning..." : "";
-  const patternHTML = Object.entries(patternMemory).map(([k, v]) => {
-    const t = (v.P || 0) + (v.B || 0);
-    const fav = v.P > v.B ? 'Player' : v.B > v.P ? 'Banker' : 'Even';
-    return `${k} → P:${v.P || 0}, B:${v.B || 0} → <b>${fav}</b> (${t})<br>`;
-  }).join('');
-  document.getElementById("patternMemoryBox").innerHTML = patternHTML || "No patterns yet.";
+}
+
+function undo() {
+  alert("Undo not implemented in this version.");
+}
+function saveMemory() {
+  alert("Save not implemented in this version.");
+}
+function loadMemory() {
+  alert("Load not implemented in this version.");
+}
+function resetStats() {
+  wins = 0;
+  losses = 0;
+  currentBalance = startingBankroll;
+  updateDisplay();
+}
+function resetMemory() {
+  alert("Memory reset not implemented in this version.");
 }
 </script></body>
 </html>
