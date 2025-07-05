@@ -128,9 +128,11 @@ let startingBankroll = 0;
 let currentBalance = 0;
 let wins = 0;
 let losses = 0;
+const history = [];
+const patternMemory = {};
 
 function saveState() {
-  localStorage.setItem('bfc_bankroll', JSON.stringify({ baseBet, startingBankroll, currentBalance, wins, losses }));
+  localStorage.setItem('bfc_bankroll', JSON.stringify({ baseBet, startingBankroll, currentBalance, wins, losses, history, patternMemory }));
 }
 
 function loadState() {
@@ -141,6 +143,8 @@ function loadState() {
     currentBalance = saved.currentBalance;
     wins = saved.wins;
     losses = saved.losses;
+    if (saved.history) history.push(...saved.history);
+    if (saved.patternMemory) Object.assign(patternMemory, saved.patternMemory);
     updateDisplay();
   }
 }
@@ -153,12 +157,10 @@ function setBankroll() {
   updateDisplay();
 }
 
-function toggleRecovery(el) {
-  // Optional future toggle
-}
+function toggleRecovery(el) {}
 
 function addResult(winner) {
-  const confidence = 80; // simulate signal
+  const confidence = 80;
   const wager = getWager(confidence);
   currentBalance -= wager;
   const win = Math.random() < 0.55;
@@ -168,8 +170,19 @@ function addResult(winner) {
   } else {
     losses++;
   }
+  history.push(winner);
+  learnPattern();
   saveState();
   updateDisplay();
+}
+
+function learnPattern() {
+  const len = history.length;
+  if (len < 3) return;
+  const key = history.slice(-3, -1).join('');
+  const next = history[len - 1];
+  if (!patternMemory[key]) patternMemory[key] = { P: 0, B: 0 };
+  patternMemory[key][next]++;
 }
 
 function getWager(confidence) {
@@ -202,10 +215,16 @@ function updateDisplay() {
   const total = wins + losses;
   const acc = total ? ((wins / total) * 100).toFixed(1) : 0;
   document.getElementById("accuracy").innerText = `${acc}%`;
+  document.getElementById("history").innerHTML = history.map(r => `<span class="result ${r === 'P' ? 'player' : 'banker'}">${r}</span>`).join('');
+  document.getElementById("patternMemoryBox").innerHTML = Object.entries(patternMemory).map(([k, v]) => {
+    return `${k} → P:${v.P || 0}, B:${v.B || 0}<br>`;
+  }).join('') || 'No patterns yet.';
 }
 
 function undo() {
-  alert("Undo not implemented in this version.");
+  history.pop();
+  resetStats();
+  history.forEach(r => addResult(r));
 }
 
 function resetStats() {
@@ -220,219 +239,12 @@ function resetMemory() {
   localStorage.removeItem('bfc_bankroll');
   wins = 0;
   losses = 0;
+  history.length = 0;
+  Object.keys(patternMemory).forEach(k => delete patternMemory[k]);
   currentBalance = startingBankroll;
   updateDisplay();
 }
 
 loadState();
-</script></body>
-</html> html><html lang="en">
-<head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>💸 BFC - Money Machine v3.3</title>
-  <style>
-    body {
-      font-family: 'Segoe UI', sans-serif;
-      background: #f4f6f8;
-      margin: 0;
-      padding: 20px;
-      color: #222;
-    }
-    h1 {
-      text-align: center;
-      margin-bottom: 20px;
-      font-size: 28px;
-      color: #333;
-    }
-    .flex-row {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 10px;
-      justify-content: center;
-      margin: 10px 0;
-    }
-    button {
-      padding: 10px 20px;
-      border: none;
-      background: #007bff;
-      color: white;
-      border-radius: 10px;
-      cursor: pointer;
-      font-weight: 600;
-      transition: background 0.3s ease;
-    }
-    button:hover {
-      background: #0056b3;
-    }
-    input[type=number] {
-      padding: 10px;
-      font-size: 16px;
-      border: 1px solid #ccc;
-      border-radius: 8px;
-      width: 150px;
-    }
-    label {
-      font-size: 16px;
-      display: flex;
-      align-items: center;
-      gap: 6px;
-    }
-    .section {
-      text-align: center;
-      margin: 12px 0;
-      font-size: 18px;
-      font-weight: bold;
-    }
-    .result {
-      display: inline-block;
-      padding: 6px 14px;
-      border-radius: 8px;
-      margin: 2px;
-      font-weight: bold;
-    }
-    .player {
-      background: #cce4ff;
-      color: #004085;
-    }
-    .banker {
-      background: #ffdada;
-      color: #721c24;
-    }
-    .scroll-box {
-      max-height: 300px;
-      overflow-y: auto;
-      background: #ffffff;
-      border: 1px solid #ccc;
-      padding: 12px;
-      font-size: 14px;
-      border-radius: 10px;
-      box-shadow: 0 2px 5px rgba(0,0,0,0.05);
-      margin-top: 20px;
-    }
-    .stat-box {
-      background: #ffffff;
-      border-radius: 10px;
-      padding: 15px;
-      box-shadow: 0 2px 8px rgba(0,0,0,0.1);
-      display: inline-block;
-      text-align: center;
-      margin-top: 10px;
-    }
-    #recoveryBadge {
-      color: #d35400;
-    }
-  </style>
-</head>
-<body><h1>💸 BFC - Money Machine v3.3</h1><div class="flex-row">
-  <button onclick="addResult('P')">Player</button>
-  <button onclick="addResult('B')">Banker</button>
-  <button onclick="undo()">Undo</button>
-</div><div class="section" id="history"></div>
-<div class="section" id="prediction">AI Prediction: Waiting...</div>
-<div class="section" id="betSuggestion"></div>
-<div class="section" id="recoveryBadge"></div>
-<div class="section" id="currentWager">💵 Current Wager: 0</div>
-<div class="section" id="bankrollDisplay">💼 Balance: - | Profit: -</div>
-<div class="section" id="longtermStatus"></div><div class="flex-row">
-  <input type="number" id="bankrollInput" placeholder="Enter bankroll" />
-  <input type="number" id="basebetInput" placeholder="Base Bet (e.g. 100)" />
-  <button onclick="setBankroll()">Set Bankroll</button>
-</div><div class="flex-row">
-  <label><input type="checkbox" id="recoveryToggle" onchange="toggleRecovery(this)" checked /> Enable Recovery</label>
-</div><div class="flex-row">
-  <button onclick="saveMemory()">📀 Save</button>
-  <button onclick="loadMemory()">📅 Load</button>
-  <button onclick="resetStats()">🔄 Reset Stats</button>
-  <button onclick="resetMemory()">🧠 Reset Memory</button>
-</div><div class="stat-box">
-  ✅ Wins: <span id="wins">0</span> |
-  ❌ Losses: <span id="losses">0</span> |
-  📊 Accuracy: <span id="accuracy">0%</span>
-</div><div class="scroll-box">
-  <h3>🧠 Learned Patterns</h3>
-  <div id="patternMemoryBox">No patterns yet.</div>
-</div><script>
-let baseBet = 0;
-let startingBankroll = 0;
-let currentBalance = 0;
-let wins = 0;
-let losses = 0;
-
-function setBankroll() {
-  baseBet = parseFloat(document.getElementById("basebetInput").value);
-  startingBankroll = parseFloat(document.getElementById("bankrollInput").value);
-  currentBalance = startingBankroll;
-  updateDisplay();
-}
-
-function toggleRecovery(el) {
-  // Placeholder to match design — your logic goes here if needed
-}
-
-function addResult(winner) {
-  const confidence = 80; // simulate strong signal
-  const wager = getWager(confidence);
-  currentBalance -= wager;
-  const win = Math.random() < 0.55; // Simulate win/loss
-  if (win) {
-    currentBalance += wager * (winner === 'B' ? 0.95 : 1);
-    wins++;
-  } else {
-    losses++;
-  }
-  updateDisplay();
-}
-
-function getWager(confidence) {
-  if (!baseBet || confidence <= 60) return 0;
-  const profit = currentBalance - startingBankroll;
-  const payoutRatio = confidence > 70 ? 1 : 0.95;
-
-  if (profit >= startingBankroll * 0.5) return baseBet;
-  if (profit >= 0 && confidence >= 85) return baseBet * 2;
-  if (profit >= 0) return baseBet;
-
-  const multipliers = [1, 2, 3, 4, 5];
-  const lossToRecover = -profit;
-
-  for (let m of multipliers) {
-    const stake = baseBet * m;
-    const expectedWin = stake * payoutRatio;
-    if (expectedWin >= lossToRecover * 0.25 && stake <= currentBalance) {
-      return stake;
-    }
-  }
-  return baseBet <= currentBalance ? baseBet : currentBalance;
-}
-
-function updateDisplay() {
-  document.getElementById("bankrollDisplay").innerText = `💼 Balance: ${currentBalance.toFixed(2)} | Profit: ${(currentBalance - startingBankroll).toFixed(2)}`;
-  document.getElementById("currentWager").innerText = `💵 Current Wager: ${getWager(80).toFixed(2)}`;
-  document.getElementById("wins").innerText = wins;
-  document.getElementById("losses").innerText = losses;
-  const total = wins + losses;
-  const acc = total ? ((wins / total) * 100).toFixed(1) : 0;
-  document.getElementById("accuracy").innerText = `${acc}%`;
-}
-
-function undo() {
-  alert("Undo not implemented in this version.");
-}
-function saveMemory() {
-  alert("Save not implemented in this version.");
-}
-function loadMemory() {
-  alert("Load not implemented in this version.");
-}
-function resetStats() {
-  wins = 0;
-  losses = 0;
-  currentBalance = startingBankroll;
-  updateDisplay();
-}
-function resetMemory() {
-  alert("Memory reset not implemented in this version.");
-}
 </script></body>
 </html>
