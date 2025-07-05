@@ -269,6 +269,7 @@ function getWager(confidence) {
 }
 
 function updateDisplay() {
+  checkStopPlay();
   checkProfitLock();
   document.getElementById("history").innerHTML =
     results.slice(-10).map(r => `<span class="result ${r === 'P' ? 'player' : 'banker'}">${r}</span>`).join('');
@@ -342,6 +343,17 @@ function resetMemory() {
 }
 
 loadMemory();
+
+function checkStopPlay() {
+  const profit = currentBalance - startingBankroll;
+  const profitPercent = (profit / startingBankroll) * 100;
+
+  if (profitPercent >= 60 || profitPercent <= -30) {
+    alert(`⛔ AI recommends stopping play.
+Reason: ${profitPercent >= 60 ? 'Profit target reached' : 'Significant loss detected'}
+Profit: ${profit.toFixed(2)} (${profitPercent.toFixed(1)}%)`);
+  }
+}
 
 function checkProfitLock() {
   const profit = currentBalance - startingBankroll;
