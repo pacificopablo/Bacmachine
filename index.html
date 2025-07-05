@@ -93,7 +93,7 @@
     }
   </style>
 </head>
-<body><h1>💸 BFC - Money Machine </h1><div class="flex-row">
+<body><h1>💸 BFC - Money Machine v3.3</h1><div class="flex-row">
   <button onclick="addResult('P')">Player</button>
   <button onclick="addResult('B')">Banker</button>
   <button onclick="undo()">Undo</button>
@@ -236,11 +236,24 @@ function getDerivedVote() {
 
 function getWager(confidence) {
   if (!baseBet || confidence <= 60) return 0;
+
   const profit = currentBalance - startingBankroll;
-  if (profit >= 0 || !recoveryMode) return baseBet;
+  const payoutRatio = confidence > 70 ? 1 : 0.95;
+
+  if (profit >= baseBet * 5) {
+    // Reduce risk but stay within baseBet multiples
+    return baseBet * 1;
+  }
+
+  if (profit >= 0) {
+    // Normal betting when in profit
+    return baseBet;
+  }
+
+  // Smart low-risk recovery when in loss
   const multipliers = [1, 1.5, 2, 2.5, 3];
   const lossToRecover = -profit;
-  const payoutRatio = confidence > 70 ? 1 : 0.95;
+
   for (let m of multipliers) {
     const stake = baseBet * m;
     const expectedWin = stake * payoutRatio;
@@ -248,10 +261,15 @@ function getWager(confidence) {
       return parseFloat(stake.toFixed(2));
     }
   }
+
+  return Math.min(baseBet, currentBalance);
+}
+  }
   return Math.min(baseBet, currentBalance);
 }
 
 function updateDisplay() {
+  checkProfitLock();
   document.getElementById("history").innerHTML =
     results.slice(-10).map(r => `<span class="result ${r === 'P' ? 'player' : 'banker'}">${r}</span>`).join('');
 
@@ -324,5 +342,49 @@ function resetMemory() {
 }
 
 loadMemory();
+
+function checkProfitLock() {
+  const profit = currentBalance - startingBankroll;
+  const profitPercent = (profit / startingBankroll) * 100;
+
+  // Overall 50% lock
+  if (profitPercent >= 50) {
+    alert(`🏆 Overall Profit Lock Triggered: +${profit.toFixed(2)} (${profitPercent.toFixed(1)}%)
+Stats will reset and bankroll updated.`);
+    wins = losses = 0;
+    winLoss.length = 0;
+    startingBankroll = currentBalance;
+    saveMemory();
+    updateDisplay();
+    return;
+  }
+
+  // Per shoe 5% lock
+  const shoeProfit = winLoss.reduce((acc, outcome, idx) => {
+    const stake = getWager(100); // assuming strong signal stake
+    if (outcome === 'win') acc += stake;
+    if (outcome === 'loss') acc -= stake;
+    return acc;
+  }, 0);
+
+  const shoeProfitPercent = (shoeProfit / startingBankroll) * 100;
+
+  if (shoeProfitPercent >= 5) {
+    alert(`🟢 Shoe Profit Lock Hit: +${shoeProfit.toFixed(2)} (${shoeProfitPercent.toFixed(1)}%)
+Stats reset for new shoe.`);
+    wins = losses = 0;
+    winLoss.length = 0;
+    saveMemory();
+    updateDisplay();
+  }
+} (${profitPercent.toFixed(1)}%)
+Stats will reset to lock in gains.`);
+    wins = losses = 0;
+    winLoss.length = 0;
+    startingBankroll = currentBalance;
+    saveMemory();
+    updateDisplay();
+  }
+}
 </script></body>
 </html>
