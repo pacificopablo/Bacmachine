@@ -39,7 +39,7 @@
       background: #0056b3;
     }
     #resetBetBtn { background-color: #6c757d; }
-    input[type=number] {
+    input[type=number], select {
       padding: 10px;
       font-size: 16px;
       border: 1px solid #ccc;
@@ -128,6 +128,11 @@
   <div class="flex-row">
     <input type="number" id="bankrollInput" placeholder="Enter bankroll" />
     <input type="number" id="basebetInput" placeholder="Unit Value (e.g. 100)" />
+    <select id="stopProfitType">
+      <option value="currency">Currency ($)</option>
+      <option value="percentage">Percentage (%)</option>
+    </select>
+    <input type="number" id="stopProfitInput" placeholder="Stop Profit (e.g. 500 or 50)" />
     <button onclick="setBankroll()">Set Bankroll</button>
   </div>
 
@@ -161,6 +166,10 @@
     const results = [], patternMemory = {}, predictionHistory = [], winLoss = [];
     let wins = 0, losses = 0, baseBet = 0, startingBankroll = 0, currentBalance = 0;
     let recoveryMode = true;
+    let stopProfitType = 'percentage'; // Default to percentage
+    let stopProfitValue = 0; // User input (currency amount or percentage)
+    let stopProfitEffective = 0; // Computed stop profit in currency
+    let stopProfitReached = false; // Flag to pause betting
     let betState = {
       currentBetUnits: 1,
       totalProfit: 0,
@@ -173,13 +182,22 @@
       console.log("setBankroll called");
       const bankroll = parseFloat(document.getElementById("bankrollInput").value);
       const unitValue = parseFloat(document.getElementById("basebetInput").value);
+      const stopProfitInput = parseFloat(document.getElementById("stopProfitInput").value) || 0;
+      stopProfitType = document.getElementById("stopProfitType").value;
       if (isNaN(bankroll) || bankroll <= 0 || isNaN(unitValue) || unitValue <= 0) {
         alert("Please enter valid positive numbers for bankroll and unit value.");
         return;
       }
+      if (stopProfitInput < 0) {
+        alert("Stop profit cannot be negative.");
+        return;
+      }
       startingBankroll = bankroll;
       baseBet = unitValue;
+      stopProfitValue = stopProfitInput;
+      stopProfitEffective = stopProfitType === 'percentage' ? (stopProfitInput / 100) * bankroll : stopProfitInput;
       currentBalance = bankroll;
+      stopProfitReached = false;
       betState = {
         currentBetUnits: 1,
         totalProfit: 0,
@@ -197,7 +215,16 @@
         alert("Please set bankroll and unit value first.");
         return;
       }
+      if (stopProfitReached) {
+        alert("Stop profit target reached. Reset or adjust the target to continue betting.");
+        return;
+      }
       const pred = hybridPrediction();
+      const wager = getWager(pred.confidence);
+      if (wager > currentBalance) {
+        alert("Insufficient balance to place this bet.");
+        return;
+      }
       results.push(r);
       learnPattern(r);
       if (pred.confidence > 60) {
@@ -217,6 +244,10 @@
         predictionHistory.push(null);
         winLoss.push(null);
       }
+      if (stopProfitEffective > 0 && currentBalance - startingBankroll >= stopProfitEffective) {
+        stopProfitReached = true;
+        console.log("Stop profit reached!");
+      }
       saveMemoryFast();
       updateDisplay();
     }
@@ -224,7 +255,13 @@
     function handleWin(predicted) {
       console.log(`handleWin called with predicted: ${predicted}`);
       const unitValue = baseBet;
-      const payout = predicted === 'Banker' ? betState.currentBetUnits * 0.95 : betState.currentBetUnits;
+      const wagerUnits = recoveryMode
+        ? Math.min(
+            baseBet * [1, 2, 3, 5, 7][Math.min(betState.previousLosses.length, 4)],
+            currentBalance
+          ) / baseBet
+        : betState.currentBetUnits;
+      const payout = predicted === 'Banker' ? wagerUnits * 0.95 : wagerUnits;
       betState.totalProfit += payout;
       betState.cycleProfit += payout;
       currentBalance += payout * unitValue;
@@ -248,10 +285,16 @@
     function handleLoss() {
       console.log("handleLoss called");
       const unitValue = baseBet;
-      betState.totalProfit -= betState.currentBetUnits;
-      betState.cycleProfit -= betState.currentBetUnits;
-      betState.previousLosses.push(betState.currentBetUnits);
-      currentBalance -= betState.currentBetUnits * unitValue;
+      const wagerUnits = recoveryMode
+        ? Math.min(
+            baseBet * [1, 2, 3, 5, 7][Math.min(betState.previousLosses.length, 4)],
+            currentBalance
+          ) / baseBet
+        : betState.currentBetUnits;
+      betState.totalProfit -= wagerUnits;
+      betState.cycleProfit -= wagerUnits;
+      betState.previousLosses.push(wagerUnits);
+      currentBalance -= wagerUnits * unitValue;
       losses++;
       console.log(`Loss recorded, previousLosses: ${betState.previousLosses}`);
     }
@@ -281,29 +324,35 @@
       if (lastPred !== null) {
         const outcome = winLoss.pop();
         const unitValue = baseBet;
+        const wagerUnits = recoveryMode
+          ? Math.min(
+              baseBet * [1, 2, 3, 5, 7][Math.min(betState.previousLosses.length, 4)],
+              currentBalance
+            ) / baseBet
+          : betState.currentBetUnits;
         if (outcome === 'win') {
           console.log(`Undoing win for prediction: ${lastPred}`);
-          const payout = lastPred === 'Banker' ? betState.currentBetUnits * 0.95 : betState.currentBetUnits;
+          const payout = lastPred === 'Banker' ? wagerUnits * 0.95 : wagerUnits;
           betState.totalProfit -= payout;
           betState.cycleProfit -= payout;
           currentBalance -= payout * unitValue;
           wins--;
-          // Restore previousLosses state
+          if (betState.cycleProfit < 1 && outcome === 'win') {
+            betState.previousLosses.push(wagerUnits);
+          }
           const lastLoss = betState.previousLosses.length > 0 ? betState.previousLosses[betState.previousLosses.length - 1] : 1;
           betState.currentBetUnits = lastLoss + 1;
-          if (betState.cycleProfit < 1 && outcome === 'win') {
-            betState.previousLosses.push(betState.currentBetUnits);
-          }
         } else if (outcome === 'loss') {
           console.log("Undoing loss");
-          betState.totalProfit += betState.currentBetUnits;
-          betState.cycleProfit += betState.currentBetUnits;
+          betState.totalProfit += wagerUnits;
+          betState.cycleProfit += wagerUnits;
           betState.previousLosses.pop();
-          currentBalance += betState.currentBetUnits * unitValue;
+          currentBalance += wagerUnits * unitValue;
           losses--;
           betState.currentBetUnits = betState.previousLosses.length > 0 ? betState.previousLosses[betState.previousLosses.length - 1] + 1 : 1;
         }
       }
+      stopProfitReached = stopProfitEffective > 0 && currentBalance - startingBankroll >= stopProfitEffective;
       saveMemoryFast();
       updateDisplay();
     }
@@ -374,8 +423,8 @@
     }
 
     function getWager(conf) {
-      if (!baseBet || conf <= 60) {
-        console.log("No wager: baseBet not set or confidence <= 60%");
+      if (!baseBet || conf <= 60 || stopProfitReached) {
+        console.log("No wager: baseBet not set, confidence <= 60%, or stop profit reached");
         return 0;
       }
       if (!recoveryMode) {
@@ -398,14 +447,29 @@
 
       const pred = hybridPrediction();
       document.getElementById("prediction").innerText =
-        pred.confidence > 60 ? `Bet ${pred.predict} (${pred.confidence}%)` : "Waiting for strong signal...";
+        stopProfitReached
+          ? "🚨 Stop Profit Reached!"
+          : pred.confidence > 60
+          ? `Bet ${pred.predict} (${pred.confidence}%)`
+          : "Waiting for strong signal...";
       document.getElementById("betSuggestion").innerText =
-        pred.confidence > 75 ? "💰 Aggressive Bet" :
-        pred.confidence > 65 ? "🎯 Normal Bet" :
-        pred.confidence > 60 ? "💡 Conservative Bet" : "";
+        stopProfitReached
+          ? ""
+          : pred.confidence > 75
+          ? "💰 Aggressive Bet"
+          : pred.confidence > 65
+          ? "🎯 Normal Bet"
+          : pred.confidence > 60
+          ? "💡 Conservative Bet"
+          : "";
       document.getElementById("streakInfo").innerText =
-        winLoss.slice(-3).every(r => r === 'loss') ? `🧊 Cold Streak - Losses: ${betState.previousLosses.length}` :
-        winLoss.slice(-3).every(r => r === 'win') ? `🔥 Hot Streak` : '';
+        stopProfitReached
+          ? ""
+          : winLoss.slice(-3).every(r => r === 'loss')
+          ? `🧊 Cold Streak - Losses: ${betState.previousLosses.length}`
+          : winLoss.slice(-3).every(r => r === 'win')
+          ? `🔥 Hot Streak`
+          : '';
 
       const wager = getWager(pred.confidence);
       document.getElementById("currentWager").innerText = `💵 Current Wager: ${wager.toFixed(2)}`;
@@ -416,14 +480,22 @@
       document.getElementById("accuracy").innerText = `${acc}%`;
 
       document.getElementById("bankrollDisplay").innerText =
-        startingBankroll ? `💼 Balance: ${currentBalance.toFixed(2)} | Profit: ${(currentBalance - startingBankroll).toFixed(2)}` : '';
-
+        startingBankroll
+          ? `💼 Balance: ${currentBalance.toFixed(2)} | Profit: ${(currentBalance - startingBankroll).toFixed(2)}`
+          : '';
       const previousLosses = betState.previousLosses.length > 0 ? betState.previousLosses.join(', ') : 'None';
+      const stopProfitDisplay =
+        stopProfitValue > 0
+          ? stopProfitType === 'percentage'
+            ? `${stopProfitValue}% ($${stopProfitEffective.toFixed(2)})`
+            : `$${stopProfitValue.toFixed(2)}`
+          : 'Not Set';
       document.getElementById("bankrollDisplay").innerHTML += `
         <br><span>Current Bet: $${(betState.currentBetUnits * baseBet).toFixed(2)} (${betState.currentBetUnits} units)</span>
         <br><span>Previous Losses (Units): ${previousLosses}</span>
         <br><span class="${betState.cycleProfit >= 1 ? 'cycle-reset' : ''}">Cycle Profit: $${(betState.cycleProfit * baseBet).toFixed(2)}</span>
         <br><span>Total Profit: $${(betState.totalProfit * baseBet).toFixed(2)}</span>
+        <br><span>Stop Profit Target: ${stopProfitDisplay} | Status: ${stopProfitReached ? '🚨 Reached' : 'Active'}</span>
       `;
 
       const patternHTML = Object.entries(patternMemory).map(([k, v]) => {
@@ -450,7 +522,11 @@
         startingBankroll,
         currentBalance,
         betState,
-        winLoss
+        winLoss,
+        stopProfitType,
+        stopProfitValue,
+        stopProfitEffective,
+        stopProfitReached
       }));
     }
 
@@ -464,6 +540,10 @@
         baseBet = Number(stats.baseBet) || 0;
         startingBankroll = Number(stats.startingBankroll) || 0;
         currentBalance = Number(stats.currentBalance) || 0;
+        stopProfitType = stats.stopProfitType || 'percentage';
+        stopProfitValue = Number(stats.stopProfitValue) || 0;
+        stopProfitEffective = Number(stats.stopProfitEffective) || 0;
+        stopProfitReached = stats.stopProfitReached || false;
         betState = stats.betState || {
           currentBetUnits: 1,
           totalProfit: 0,
@@ -472,6 +552,8 @@
         };
         if (Array.isArray(stats.winLoss)) winLoss.push(...stats.winLoss);
         document.getElementById("recoveryToggle").checked = recoveryMode;
+        document.getElementById("stopProfitType").value = stopProfitType;
+        document.getElementById("stopProfitInput").value = stopProfitValue || '';
         updateDisplay();
       } catch (e) {
         console.error("Failed to load memory:", e);
@@ -481,9 +563,13 @@
 
     function resetStats() {
       console.log("resetStats called");
-      if (confirm("Reset win/loss stats and betting state?")) {
+      if (confirm("Reset win/loss stats, betting state, and stop profit?")) {
         wins = losses = 0;
         currentBalance = startingBankroll;
+        stopProfitType = 'percentage';
+        stopProfitValue = 0;
+        stopProfitEffective = 0;
+        stopProfitReached = false;
         betState = {
           currentBetUnits: 1,
           totalProfit: 0,
@@ -491,6 +577,8 @@
           previousLosses: []
         };
         winLoss.length = 0;
+        document.getElementById("stopProfitType").value = stopProfitType;
+        document.getElementById("stopProfitInput").value = '';
         updateDisplay();
       }
     }
