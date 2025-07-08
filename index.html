@@ -38,6 +38,7 @@
     button:hover {
       background: #0056b3;
     }
+    #resetBetBtn { background-color: #6c757d; }
     input[type=number] {
       padding: 10px;
       font-size: 16px;
@@ -92,262 +93,417 @@
       text-align: center;
       margin-top: 10px;
     }
+    .bet-controls {
+      margin-bottom: 1rem;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+      justify-content: center;
+      width: 100%;
+      max-width: 90vw;
+    }
+    .cycle-reset {
+      color: #28a745;
+      font-weight: bold;
+    }
   </style>
 </head>
 <body>
+  <h1>💸 BFC - Money Machine v3.3</h1>
 
-<h1>💸 BFC - Money Machine v3.3</h1>
+  <div class="flex-row">
+    <button onclick="addResult('P')">Player</button>
+    <button onclick="addResult('B')">Banker</button>
+    <button onclick="undo()">Undo</button>
+  </div>
 
-<div class="flex-row">
-  <button onclick="addResult('P')">Player</button>
-  <button onclick="addResult('B')">Banker</button>
-  <button onclick="undo()">Undo</button>
-</div>
+  <div class="section" id="history"></div>
+  <div class="section" id="prediction">AI Prediction: Waiting...</div>
+  <div class="section" id="streakInfo"></div>
+  <div class="section" id="betSuggestion"></div>
+  <div class="section" id="currentWager">💵 Current Wager: 0</div>
+  <div class="section" id="bankrollDisplay">💼 Balance: - | Profit: -</div>
+  <div class="section" id="longtermStatus"></div>
 
-<div class="section" id="history"></div>
-<div class="section" id="prediction">AI Prediction: Waiting...</div>
-<div class="section" id="streakInfo"></div>
-<div class="section" id="betSuggestion"></div>
-<div class="section" id="currentWager">💵 Current Wager: 0</div>
-<div class="section" id="bankrollDisplay">💼 Balance: - | Profit: -</div>
-<div class="section" id="longtermStatus"></div>
+  <div class="flex-row">
+    <input type="number" id="bankrollInput" placeholder="Enter bankroll" />
+    <input type="number" id="basebetInput" placeholder="Unit Value (e.g. 100)" />
+    <button onclick="setBankroll()">Set Bankroll</button>
+  </div>
 
-<div class="flex-row">
-  <input type="number" id="bankrollInput" placeholder="Enter bankroll" />
-  <input type="number" id="basebetInput" placeholder="Base Bet (e.g. 100)" />
-  <button onclick="setBankroll()">Set Bankroll</button>
-</div>
+  <div class="flex-row">
+    <label><input type="checkbox" id="recoveryToggle" onchange="toggleRecovery(this)" checked /> Enable BFC Recovery Mode</label>
+  </div>
 
-<div class="flex-row">
-  <label><input type="checkbox" id="recoveryToggle" onchange="toggleRecovery(this)" checked /> Enable Recovery</label>
-</div>
+  <div class="bet-controls">
+    <button id="resetBetBtn" onclick="resetBet()">Reset Bet</button>
+  </div>
 
-<div class="flex-row">
-  <button onclick="saveMemory()">💾 Save</button>
-  <button onclick="loadMemory()">📥 Load</button>
-  <button onclick="resetStats()">🔄 Reset Stats</button>
-  <button onclick="resetMemory()">🧠 Reset Memory</button>
-</div>
+  <div class="flex-row">
+    <button onclick="saveMemory()">💾 Save</button>
+    <button onclick="loadMemory()">📥 Load</button>
+    <button onclick="resetStats()">🔄 Reset Stats</button>
+    <button onclick="resetMemory()">🧠 Reset Memory</button>
+  </div>
 
-<div class="stat-box">
-  ✅ Wins: <span id="wins">0</span> |
-  ❌ Losses: <span id="losses">0</span> |
-  📊 Accuracy: <span id="accuracy">0%</span>
-</div>
+  <div class="stat-box">
+    ✅ Wins: <span id="wins">0</span> |
+    ❌ Losses: <span id="losses">0</span> |
+    📊 Accuracy: <span id="accuracy">0%</span>
+  </div>
 
-<div class="scroll-box">
-  <h3>🧠 Learned Patterns</h3>
-  <div id="patternMemoryBox">No patterns yet.</div>
-</div>
+  <div class="scroll-box">
+    <h3>🧠 Learned Patterns</h3>
+    <div id="patternMemoryBox">No patterns yet.</div>
+  </div>
 
-<script>
-const results = [], patternMemory = {}, predictionHistory = [], winLoss = [];
-let wins = 0, losses = 0, baseBet = 0, startingBankroll = 0, currentBalance = 0;
-let recoveryMode = true, recoveryStake = 0, recoveryAttempts = 0;
-let saveTimeout = null;
+  <script>
+    const results = [], patternMemory = {}, predictionHistory = [], winLoss = [];
+    let wins = 0, losses = 0, baseBet = 0, startingBankroll = 0, currentBalance = 0;
+    let recoveryMode = true;
+    let betState = {
+      currentBetUnits: 1,
+      totalProfit: 0,
+      cycleProfit: 0,
+      previousLosses: []
+    };
+    let saveTimeout = null;
 
-function setBankroll() {
-  startingBankroll = parseFloat(document.getElementById("bankrollInput").value);
-  baseBet = parseFloat(document.getElementById("basebetInput").value);
-  currentBalance = startingBankroll;
-  updateDisplay();
-}
+    function setBankroll() {
+      console.log("setBankroll called");
+      const bankroll = parseFloat(document.getElementById("bankrollInput").value);
+      const unitValue = parseFloat(document.getElementById("basebetInput").value);
+      if (isNaN(bankroll) || bankroll <= 0 || isNaN(unitValue) || unitValue <= 0) {
+        alert("Please enter valid positive numbers for bankroll and unit value.");
+        return;
+      }
+      startingBankroll = bankroll;
+      baseBet = unitValue;
+      currentBalance = bankroll;
+      betState = {
+        currentBetUnits: 1,
+        totalProfit: 0,
+        cycleProfit: 0,
+        previousLosses: []
+      };
+      wins = losses = 0;
+      winLoss.length = 0;
+      updateDisplay();
+    }
 
-function addResult(r) {
-  const pred = hybridPrediction();
-  results.push(r);
-  learnPattern(r);
-  if (pred.confidence > 60) {
-    predictionHistory.push(pred.predict);
-    const stake = getWager(pred.confidence);
-    const correct = pred.predict[0] === r;
-    winLoss.push(correct ? 'win' : 'loss');
-    if (correct) {
-      const payout = pred.predict === 'Banker' ? stake * 0.95 : stake;
-      currentBalance += payout;
+    function addResult(r) {
+      console.log(`addResult called with result: ${r}`);
+      if (!baseBet || !startingBankroll) {
+        alert("Please set bankroll and unit value first.");
+        return;
+      }
+      const pred = hybridPrediction();
+      results.push(r);
+      learnPattern(r);
+      if (pred.confidence > 60) {
+        predictionHistory.push(pred.predict);
+        const correct = pred.predict[0] === r;
+        if (correct) {
+          console.log(`Prediction correct: ${pred.predict}, handling win`);
+          handleWin(pred.predict);
+          winLoss.push('win');
+        } else {
+          console.log(`Prediction incorrect: ${pred.predict} vs ${r}, handling loss`);
+          handleLoss();
+          winLoss.push('loss');
+        }
+      } else {
+        console.log("No prediction (confidence <= 60%), skipping win/loss");
+        predictionHistory.push(null);
+        winLoss.push(null);
+      }
+      saveMemoryFast();
+      updateDisplay();
+    }
+
+    function handleWin(predicted) {
+      console.log(`handleWin called with predicted: ${predicted}`);
+      const unitValue = baseBet;
+      const payout = predicted === 'Banker' ? betState.currentBetUnits * 0.95 : betState.currentBetUnits;
+      betState.totalProfit += payout;
+      betState.cycleProfit += payout;
+      currentBalance += payout * unitValue;
       wins++;
-      recoveryStake = 0;
-      recoveryAttempts = 0;
-    } else {
-      currentBalance -= stake;
+      if (betState.cycleProfit >= 1) {
+        console.log("Cycle profit >= 1, resetting bet state");
+        betState.currentBetUnits = 1;
+        betState.cycleProfit = 0;
+        betState.previousLosses = [];
+      } else {
+        if (betState.previousLosses.length > 0) {
+          betState.previousLosses.pop();
+          console.log(`Popped last loss, previousLosses: ${betState.previousLosses}`);
+        }
+        const lastLoss = betState.previousLosses.length > 0 ? betState.previousLosses[betState.previousLosses.length - 1] : 1;
+        betState.currentBetUnits = lastLoss + 1;
+        console.log(`Set currentBetUnits to ${betState.currentBetUnits}`);
+      }
+    }
+
+    function handleLoss() {
+      console.log("handleLoss called");
+      const unitValue = baseBet;
+      betState.totalProfit -= betState.currentBetUnits;
+      betState.cycleProfit -= betState.currentBetUnits;
+      betState.previousLosses.push(betState.currentBetUnits);
+      currentBalance -= betState.currentBetUnits * unitValue;
       losses++;
-      recoveryStake += stake;
-      recoveryAttempts++;
+      console.log(`Loss recorded, previousLosses: ${betState.previousLosses}`);
     }
-  } else predictionHistory.push(null);
-  saveMemoryFast();
-  updateDisplay();
-}
 
-function undo() {
-  const last = results.pop();
-  if (!last) return;
-  unlearnPattern(last);
-  const lastPred = predictionHistory.pop();
-  if (lastPred !== null) {
-    const outcome = winLoss.pop();
-    const stake = getWager(100);
-    if (outcome === 'win') {
-      currentBalance -= lastPred === 'Banker' ? stake * 0.95 : stake;
-      wins--;
-    } else {
-      currentBalance += stake;
-      losses--;
+    function resetBet() {
+      console.log("resetBet called");
+      if (confirm("Reset betting state?")) {
+        betState = {
+          currentBetUnits: 1,
+          totalProfit: 0,
+          cycleProfit: 0,
+          previousLosses: []
+        };
+        updateDisplay();
+      }
     }
-  }
-  saveMemoryFast();
-  updateDisplay();
-}
 
-function toggleRecovery(checkbox) {
-  recoveryMode = checkbox.checked;
-  saveMemoryFast();
-}
-
-function learnPattern(res) {
-  for (let n = 2; n <= 5; n++) {
-    if (results.length >= n) {
-      const key = results.slice(-n, -1).join('');
-      const next = res;
-      if (!patternMemory[key]) patternMemory[key] = { P: 0, B: 0 };
-      patternMemory[key][next]++;
+    function undo() {
+      console.log("undo called");
+      const last = results.pop();
+      if (!last) {
+        console.log("No results to undo");
+        return;
+      }
+      unlearnPattern(last);
+      const lastPred = predictionHistory.pop();
+      if (lastPred !== null) {
+        const outcome = winLoss.pop();
+        const unitValue = baseBet;
+        if (outcome === 'win') {
+          console.log(`Undoing win for prediction: ${lastPred}`);
+          const payout = lastPred === 'Banker' ? betState.currentBetUnits * 0.95 : betState.currentBetUnits;
+          betState.totalProfit -= payout;
+          betState.cycleProfit -= payout;
+          currentBalance -= payout * unitValue;
+          wins--;
+          // Restore previousLosses state
+          const lastLoss = betState.previousLosses.length > 0 ? betState.previousLosses[betState.previousLosses.length - 1] : 1;
+          betState.currentBetUnits = lastLoss + 1;
+          if (betState.cycleProfit < 1 && outcome === 'win') {
+            betState.previousLosses.push(betState.currentBetUnits);
+          }
+        } else if (outcome === 'loss') {
+          console.log("Undoing loss");
+          betState.totalProfit += betState.currentBetUnits;
+          betState.cycleProfit += betState.currentBetUnits;
+          betState.previousLosses.pop();
+          currentBalance += betState.currentBetUnits * unitValue;
+          losses--;
+          betState.currentBetUnits = betState.previousLosses.length > 0 ? betState.previousLosses[betState.previousLosses.length - 1] + 1 : 1;
+        }
+      }
+      saveMemoryFast();
+      updateDisplay();
     }
-  }
-}
 
-function unlearnPattern(res) {
-  for (let n = 2; n <= 5; n++) {
-    if (results.length >= n) {
-      const key = results.slice(-n, -1).join('');
-      const next = res;
-      if (patternMemory[key]) patternMemory[key][next] = Math.max(0, patternMemory[key][next] - 1);
+    function toggleRecovery(checkbox) {
+      console.log(`toggleRecovery called, recoveryMode: ${checkbox.checked}`);
+      recoveryMode = checkbox.checked;
+      updateDisplay();
     }
-  }
-}
 
-function hybridPrediction() {
-  const pattern = getPatternVote(), trend = getTrendVote(), derived = getDerivedVote();
-  const votes = [pattern, trend, derived].filter(v => v);
-  const countP = votes.filter(v => v === 'Player').length;
-  const countB = votes.filter(v => v === 'Banker').length;
-  const predict = countP > countB ? 'Player' : 'Banker';
-  const confidence = votes.length ? Math.round(Math.max(countP, countB) / votes.length * 100) : 0;
-  return { predict, confidence };
-}
-
-function getPatternVote() {
-  for (let n = 5; n >= 2; n--) {
-    const key = results.slice(-n + 1).join('');
-    if (patternMemory[key]) {
-      const { P = 0, B = 0 } = patternMemory[key];
-      if (P + B > 0) return P > B ? 'Player' : 'Banker';
+    function learnPattern(res) {
+      for (let n = 2; n <= 5; n++) {
+        if (results.length >= n) {
+          const key = results.slice(-n, -1).join('');
+          const next = res;
+          if (!patternMemory[key]) patternMemory[key] = { P: 0, B: 0 };
+          patternMemory[key][next]++;
+          console.log(`Learned pattern: ${key} -> ${next}`);
+        }
+      }
     }
-  }
-  return null;
-}
 
-function getTrendVote() {
-  const last3 = results.slice(-3);
-  if (last3.length < 3) return null;
-  return last3.every(v => v === last3[0]) ? (last3[0] === 'P' ? 'Player' : 'Banker') : null;
-}
+    function unlearnPattern(res) {
+      for (let n = 2; n <= 5; n++) {
+        if (results.length >= n - 1) {
+          const key = results.slice(-n + 1, -1).join('');
+          const next = res;
+          if (patternMemory[key]) {
+            patternMemory[key][next] = Math.max(0, patternMemory[key][next] - 1);
+            console.log(`Unlearned pattern: ${key} -> ${next}`);
+          }
+        }
+      }
+    }
 
-function getDerivedVote() {
-  const [a, b] = results.slice(-2);
-  if (!a || !b) return null;
-  return a === b ? (b === 'P' ? 'Player' : 'Banker') : (b === 'P' ? 'Banker' : 'Player');
-}
+    function hybridPrediction() {
+      const pattern = getPatternVote(), trend = getTrendVote(), derived = getDerivedVote();
+      const votes = [pattern, trend, derived].filter(v => v);
+      const countP = votes.filter(v => v === 'Player').length;
+      const countB = votes.filter(v => v === 'Banker').length;
+      const predict = countP > countB ? 'Player' : 'Banker';
+      const confidence = votes.length ? Math.round(Math.max(countP, countB) / votes.length * 100) : 0;
+      console.log(`Prediction: ${predict}, Confidence: ${confidence}%`);
+      return { predict, confidence };
+    }
 
-function getWager(conf) {
-  if (!baseBet || conf <= 60) return 0;
-  const multipliers = [1, 2, 3, 5, 7];
-  const depth = Math.min(recoveryAttempts, multipliers.length - 1);
-  let stake = baseBet * multipliers[depth];
-  return Math.min(stake, currentBalance);
-}
+    function getPatternVote() {
+      for (let n = 5; n >= 2; n--) {
+        const key = results.slice(-n + 1).join('');
+        if (patternMemory[key]) {
+          const { P = 0, B = 0 } = patternMemory[key];
+          if (P + B > 0) return P > B ? 'Player' : 'Banker';
+        }
+      }
+      return null;
+    }
 
-function updateDisplay() {
-  document.getElementById("history").innerHTML =
-    results.slice(-10).map(r => `<span class="result ${r === 'P' ? 'player' : 'banker'}">${r}</span>`).join('');
+    function getTrendVote() {
+      const last3 = results.slice(-3);
+      if (last3.length < 3) return null;
+      return last3.every(v => v === last3[0]) ? (last3[0] === 'P' ? 'Player' : 'Banker') : null;
+    }
 
-  const pred = hybridPrediction();
-  document.getElementById("prediction").innerText =
-    pred.confidence > 60 ? `Bet ${pred.predict} (${pred.confidence}%)` : "Waiting for strong signal...";
-  document.getElementById("betSuggestion").innerText =
-    pred.confidence > 75 ? "💰 Aggressive Bet" :
-    pred.confidence > 65 ? "🎯 Normal Bet" :
-    pred.confidence > 60 ? "💡 Conservative Bet" : "";
-  document.getElementById("streakInfo").innerText =
-    winLoss.slice(-3).every(r => r === 'loss') ? `🧊 Cold Streak - Recovery Depth: ${recoveryAttempts}` :
-    winLoss.slice(-3).every(r => r === 'win') ? `🔥 Hot Streak` : '';
+    function getDerivedVote() {
+      const [a, b] = results.slice(-2);
+      if (!a || !b) return null;
+      return a === b ? (b === 'P' ? 'Player' : 'Banker') : (b === 'P' ? 'Banker' : 'Player');
+    }
 
-  const wager = getWager(pred.confidence);
-  document.getElementById("currentWager").innerText = `💵 Current Wager: ${wager.toFixed(2)}`;
-  document.getElementById("wins").innerText = wins;
-  document.getElementById("losses").innerText = losses;
-  const total = wins + losses;
-  const acc = total ? ((wins / total) * 100).toFixed(1) : 0;
-  document.getElementById("accuracy").innerText = `${acc}%`;
+    function getWager(conf) {
+      if (!baseBet || conf <= 60) {
+        console.log("No wager: baseBet not set or confidence <= 60%");
+        return 0;
+      }
+      if (!recoveryMode) {
+        const wager = Math.min(betState.currentBetUnits * baseBet, currentBalance);
+        console.log(`GVR wager: ${wager} (currentBetUnits: ${betState.currentBetUnits})`);
+        return wager;
+      }
+      const multipliers = [1, 2, 3, 5, 7];
+      const depth = Math.min(betState.previousLosses.length, multipliers.length - 1);
+      let stake = baseBet * multipliers[depth];
+      const wager = Math.min(stake, currentBalance);
+      console.log(`BFC wager: ${wager} (multiplier: ${multipliers[depth]})`);
+      return wager;
+    }
 
-  document.getElementById("bankrollDisplay").innerText =
-    startingBankroll ? `💼 Balance: ${currentBalance.toFixed(2)} | Profit: ${(currentBalance - startingBankroll).toFixed(2)}` : '';
+    function updateDisplay() {
+      console.log("updateDisplay called");
+      document.getElementById("history").innerHTML =
+        results.slice(-10).map(r => `<span class="result ${r === 'P' ? 'player' : 'banker'}">${r}</span>`).join('');
 
-  document.getElementById("longtermStatus").innerText =
-    total >= 30 && acc >= 55 ? "🏆 Long-Term Winner" :
-    total >= 30 ? "📉 Still Learning..." : "";
+      const pred = hybridPrediction();
+      document.getElementById("prediction").innerText =
+        pred.confidence > 60 ? `Bet ${pred.predict} (${pred.confidence}%)` : "Waiting for strong signal...";
+      document.getElementById("betSuggestion").innerText =
+        pred.confidence > 75 ? "💰 Aggressive Bet" :
+        pred.confidence > 65 ? "🎯 Normal Bet" :
+        pred.confidence > 60 ? "💡 Conservative Bet" : "";
+      document.getElementById("streakInfo").innerText =
+        winLoss.slice(-3).every(r => r === 'loss') ? `🧊 Cold Streak - Losses: ${betState.previousLosses.length}` :
+        winLoss.slice(-3).every(r => r === 'win') ? `🔥 Hot Streak` : '';
 
-  const patternHTML = Object.entries(patternMemory).map(([k, v]) => {
-    const t = (v.P || 0) + (v.B || 0);
-    const fav = v.P > v.B ? 'Player' : v.B > v.P ? 'Banker' : 'Even';
-    return `${k} → P:${v.P || 0}, B:${v.B || 0} → <b>${fav}</b> (${t})<br>`;
-  }).join('');
-  document.getElementById("patternMemoryBox").innerHTML = patternHTML || "No patterns yet.";
-}
+      const wager = getWager(pred.confidence);
+      document.getElementById("currentWager").innerText = `💵 Current Wager: ${wager.toFixed(2)}`;
+      document.getElementById("wins").innerText = wins;
+      document.getElementById("losses").innerText = losses;
+      const total = wins + losses;
+      const acc = total ? ((wins / total) * 100).toFixed(1) : 0;
+      document.getElementById("accuracy").innerText = `${acc}%`;
 
-function saveMemoryFast() {
-  clearTimeout(saveTimeout);
-  saveTimeout = setTimeout(saveMemory, 300);
-}
+      document.getElementById("bankrollDisplay").innerText =
+        startingBankroll ? `💼 Balance: ${currentBalance.toFixed(2)} | Profit: ${(currentBalance - startingBankroll).toFixed(2)}` : '';
 
-function saveMemory() {
-  localStorage.setItem('baccaratPatterns', JSON.stringify(patternMemory));
-  localStorage.setItem('baccaratStats', JSON.stringify({ wins, losses, baseBet, startingBankroll, currentBalance, recoveryStake, recoveryMode, recoveryAttempts, winLoss }));
-}
+      const previousLosses = betState.previousLosses.length > 0 ? betState.previousLosses.join(', ') : 'None';
+      document.getElementById("bankrollDisplay").innerHTML += `
+        <br><span>Current Bet: $${(betState.currentBetUnits * baseBet).toFixed(2)} (${betState.currentBetUnits} units)</span>
+        <br><span>Previous Losses (Units): ${previousLosses}</span>
+        <br><span class="${betState.cycleProfit >= 1 ? 'cycle-reset' : ''}">Cycle Profit: $${(betState.cycleProfit * baseBet).toFixed(2)}</span>
+        <br><span>Total Profit: $${(betState.totalProfit * baseBet).toFixed(2)}</span>
+      `;
 
-function loadMemory() {
-  Object.assign(patternMemory, JSON.parse(localStorage.getItem('baccaratPatterns') || '{}'));
-  const stats = JSON.parse(localStorage.getItem('baccaratStats') || '{}');
-  wins = stats.wins || 0;
-  losses = stats.losses || 0;
-  baseBet = stats.baseBet || 0;
-  startingBankroll = stats.startingBankroll || 0;
-  currentBalance = stats.currentBalance || 0;
-  recoveryStake = stats.recoveryStake || 0;
-  recoveryMode = stats.recoveryMode !== false;
-  recoveryAttempts = stats.recoveryAttempts || 0;
-  if (Array.isArray(stats.winLoss)) winLoss.push(...stats.winLoss);
-  document.getElementById("recoveryToggle").checked = recoveryMode;
-  updateDisplay();
-}
+      const patternHTML = Object.entries(patternMemory).map(([k, v]) => {
+        const t = (v.P || 0) + (v.B || 0);
+        const fav = v.P > v.B ? 'Player' : v.B > v.P ? 'Banker' : 'Even';
+        return `${k} → P:${v.P || 0}, B:${v.B || 0} → <b>${fav}</b> (${t})<br>`;
+      }).join('');
+      document.getElementById("patternMemoryBox").innerHTML = patternHTML || "No patterns yet.";
+    }
 
-function resetStats() {
-  if (confirm("Reset win/loss stats?")) {
-    wins = losses = recoveryStake = recoveryAttempts = 0;
-    currentBalance = startingBankroll;
-    winLoss.length = 0;
-    updateDisplay();
-  }
-}
+    function saveMemoryFast() {
+      console.log("saveMemoryFast called");
+      clearTimeout(saveTimeout);
+      saveTimeout = setTimeout(saveMemory, 300);
+    }
 
-function resetMemory() {
-  if (confirm("Reset all pattern memory?")) {
-    for (let key in patternMemory) delete patternMemory[key];
-    updateDisplay();
-  }
-}
+    function saveMemory() {
+      console.log("saveMemory called");
+      localStorage.setItem('baccaratPatterns', JSON.stringify(patternMemory));
+      localStorage.setItem('baccaratStats', JSON.stringify({
+        wins,
+        losses,
+        baseBet,
+        startingBankroll,
+        currentBalance,
+        betState,
+        winLoss
+      }));
+    }
 
-loadMemory();
-</script>
+    function loadMemory() {
+      console.log("loadMemory called");
+      try {
+        Object.assign(patternMemory, JSON.parse(localStorage.getItem('baccaratPatterns') || '{}'));
+        const stats = JSON.parse(localStorage.getItem('baccaratStats') || '{}');
+        wins = Number(stats.wins) || 0;
+        losses = Number(stats.losses) || 0;
+        baseBet = Number(stats.baseBet) || 0;
+        startingBankroll = Number(stats.startingBankroll) || 0;
+        currentBalance = Number(stats.currentBalance) || 0;
+        betState = stats.betState || {
+          currentBetUnits: 1,
+          totalProfit: 0,
+          cycleProfit: 0,
+          previousLosses: []
+        };
+        if (Array.isArray(stats.winLoss)) winLoss.push(...stats.winLoss);
+        document.getElementById("recoveryToggle").checked = recoveryMode;
+        updateDisplay();
+      } catch (e) {
+        console.error("Failed to load memory:", e);
+        alert("Error loading saved data. Resetting to default.");
+      }
+    }
 
+    function resetStats() {
+      console.log("resetStats called");
+      if (confirm("Reset win/loss stats and betting state?")) {
+        wins = losses = 0;
+        currentBalance = startingBankroll;
+        betState = {
+          currentBetUnits: 1,
+          totalProfit: 0,
+          cycleProfit: 0,
+          previousLosses: []
+        };
+        winLoss.length = 0;
+        updateDisplay();
+      }
+    }
+
+    function resetMemory() {
+      console.log("resetMemory called");
+      if (confirm("Reset all pattern memory?")) {
+        for (let key in patternMemory) delete patternMemory[key];
+        updateDisplay();
+      }
+    }
+
+    loadMemory();
+  </script>
 </body>
 </html>
