@@ -1,597 +1,79 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>💸 BFC - Money Machine v3.3</title>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>💸 BFC v3.4</title>
   <style>
-    body {
-      font-family: 'Segoe UI', sans-serif;
-      background: #f4f6f8;
-      margin: 0;
-      padding: 20px;
-      color: #222;
-    }
-    h1 {
-      text-align: center;
-      margin-bottom: 20px;
-      font-size: 28px;
-      color: #333;
-    }
-    .flex-row {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 10px;
-      justify-content: center;
-      margin: 10px 0;
-    }
-    button {
-      padding: 10px 20px;
-      border: none;
-      background: #007bff;
-      color: white;
-      border-radius: 10px;
-      cursor: pointer;
-      font-weight: 600;
-      transition: background 0.3s ease;
-    }
-    button:hover {
-      background: #0056b3;
-    }
-    #resetBetBtn { background-color: #6c757d; }
-    input[type=number], select {
-      padding: 10px;
-      font-size: 16px;
-      border: 1px solid #ccc;
-      border-radius: 8px;
-      width: 150px;
-    }
-    label {
-      font-size: 16px;
-      display: flex;
-      align-items: center;
-      gap: 6px;
-    }
-    .section {
-      text-align: center;
-      margin: 12px 0;
-      font-size: 18px;
-      font-weight: bold;
-    }
-    .result {
-      display: inline-block;
-      padding: 6px 14px;
-      border-radius: 8px;
-      margin: 2px;
-      font-weight: bold;
-    }
-    .player {
-      background: #cce4ff;
-      color: #004085;
-    }
-    .banker {
-      background: #ffdada;
-      color: #721c24;
-    }
-    .scroll-box {
-      max-height: 300px;
-      overflow-y: auto;
-      background: #ffffff;
-      border: 1px solid #ccc;
-      padding: 12px;
-      font-size: 14px;
-      border-radius: 10px;
-      box-shadow: 0 2px 5px rgba(0,0,0,0.05);
-      margin-top: 20px;
-    }
-    .stat-box {
-      background: #ffffff;
-      border-radius: 10px;
-      padding: 15px;
-      box-shadow: 0 2px 8px rgba(0,0,0,0.1);
-      display: inline-block;
-      text-align: center;
-      margin-top: 10px;
-    }
-    .bet-controls {
-      margin-bottom: 1rem;
-      display: flex;
-      flex-wrap: wrap;
-      gap: 0.5rem;
-      justify-content: center;
-      width: 100%;
-      max-width: 90vw;
-    }
-    .cycle-reset {
-      color: #28a745;
-      font-weight: bold;
-    }
+body{font-family:'Segoe UI',sans-serif;background:#f4f6f8;margin:0;padding:20px;color:#222}h1{text-align:center;margin-bottom:20px;font-size:28px;color:#333}.flex-row{display:flex;flex-wrap:wrap;gap:10px;justify-content:center;margin:10px 0}button{padding:10px 20px;border:none;background:#007bff;color:#fff;border-radius:10px;cursor:pointer;font-weight:600;transition:background .3s}button:hover{background:#0056b3}#resetBetBtn{background:#6c757d}input[type=number],select{padding:10px;font-size:16px;border:1px solid #ccc;border-radius:8px;width:150px}label{font-size:16px;display:flex;align-items:center;gap:6px}.section{text-align:center;margin:12px 0;font-size:18px;font-weight:700}.result{display:inline-block;padding:6px 14px;border-radius:8px;margin:2px;font-weight:700}.player{background:#cce4ff;color:#004085}.banker{background:#ffdada;color:#721c24}.scroll-box{max-height:300px;overflow-y:auto;background:#fff;border:1px solid #ccc;padding:12px;font-size:14px;border-radius:10px;box-shadow:0 2px 5px rgba(0,0,0,.05);margin-top:20px}.stat-box{background:#fff;border-radius:10px;padding:15px;box-shadow:0 2px 8px rgba(0,0,0,.1);display:inline-block;text-align:center;margin-top:10px}.bet-controls{margin-bottom:1rem;display:flex;flex-wrap:wrap;gap:.5rem;justify-content:center;width:100%;max-width:90vw}.cycle-reset{color:#28a745;font-weight:700}
   </style>
 </head>
 <body>
-  <h1>💸 BFC - Money Machine v3.3</h1>
-
+  <h1>💸 BFC v3.4</h1>
   <div class="flex-row">
     <button onclick="addResult('P')">Player</button>
     <button onclick="addResult('B')">Banker</button>
     <button onclick="undo()">Undo</button>
   </div>
-
   <div class="section" id="history"></div>
   <div class="section" id="prediction">AI Prediction: Waiting...</div>
   <div class="section" id="streakInfo"></div>
   <div class="section" id="betSuggestion"></div>
-  <div class="section" id="currentWager">💵 Current Wager: 0</div>
+  <div class="section" id="currentWager">💵 Wager: 0</div>
   <div class="section" id="bankrollDisplay">💼 Balance: - | Profit: -</div>
-  <div class="section" id="longtermStatus"></div>
-
   <div class="flex-row">
-    <input type="number" id="bankrollInput" placeholder="Enter bankroll" />
-    <input type="number" id="basebetInput" placeholder="Unit Value (e.g. 100)" />
+    <input type="number" id="bankrollInput" placeholder="Bankroll">
+    <input type="number" id="basebetInput" placeholder="Unit Value">
     <select id="stopProfitType">
-      <option value="currency">Currency ($)</option>
-      <option value="percentage">Percentage (%)</option>
+      <option value="currency">$</option>
+      <option value="percentage">%</option>
     </select>
-    <input type="number" id="stopProfitInput" placeholder="Stop Profit (e.g. 500 or 50)" />
-    <button onclick="setBankroll()">Set Bankroll</button>
+    <input type="number" id="stopProfitInput" placeholder="Stop Profit">
+    <select id="betSuggestionType">
+      <option value="conservative">Conservative</option>
+      <option value="normal">Normal</option>
+      <option value="aggressive">Aggressive</option>
+    </select>
+    <button onclick="setBankroll()">Set</button>
   </div>
-
-  <div class="flex-row">
-    <label><input type="checkbox" id="recoveryToggle" onchange="toggleRecovery(this)" checked /> Enable BFC Recovery Mode</label>
-  </div>
-
   <div class="bet-controls">
     <button id="resetBetBtn" onclick="resetBet()">Reset Bet</button>
   </div>
-
   <div class="flex-row">
-    <button onclick="saveMemory()">💾 Save</button>
-    <button onclick="loadMemory()">📥 Load</button>
-    <button onclick="resetStats()">🔄 Reset Stats</button>
-    <button onclick="resetMemory()">🧠 Reset Memory</button>
+    <button onclick="saveMemory()">💾</button>
+    <button onclick="loadMemory()">📥</button>
+    <button onclick="resetStats()">🔄</button>
+    <button onclick="resetMemory()">🧠</button>
   </div>
-
   <div class="stat-box">
-    ✅ Wins: <span id="wins">0</span> |
-    ❌ Losses: <span id="losses">0</span> |
-    📊 Accuracy: <span id="accuracy">0%</span>
+    ✅ <span id="wins">0</span> | ❌ <span id="losses">0</span> | 📊 <span id="accuracy">0%</span>
   </div>
-
   <div class="scroll-box">
-    <h3>🧠 Learned Patterns</h3>
-    <div id="patternMemoryBox">No patterns yet.</div>
+    <h3>🧠 Patterns</h3>
+    <div id="patternMemoryBox">No patterns</div>
   </div>
-
   <script>
-    const results = [], patternMemory = {}, predictionHistory = [], winLoss = [];
-    let wins = 0, losses = 0, baseBet = 0, startingBankroll = 0, currentBalance = 0;
-    let recoveryMode = true;
-    let stopProfitType = 'percentage'; // Default to percentage
-    let stopProfitValue = 0; // User input (currency amount or percentage)
-    let stopProfitEffective = 0; // Computed stop profit in currency
-    let stopProfitReached = false; // Flag to pause betting
-    let betState = {
-      currentBetUnits: 1,
-      totalProfit: 0,
-      cycleProfit: 0,
-      previousLosses: []
-    };
-    let saveTimeout = null;
-
-    function setBankroll() {
-      console.log("setBankroll called");
-      const bankroll = parseFloat(document.getElementById("bankrollInput").value);
-      const unitValue = parseFloat(document.getElementById("basebetInput").value);
-      const stopProfitInput = parseFloat(document.getElementById("stopProfitInput").value) || 0;
-      stopProfitType = document.getElementById("stopProfitType").value;
-      if (isNaN(bankroll) || bankroll <= 0 || isNaN(unitValue) || unitValue <= 0) {
-        alert("Please enter valid positive numbers for bankroll and unit value.");
-        return;
-      }
-      if (stopProfitInput < 0) {
-        alert("Stop profit cannot be negative.");
-        return;
-      }
-      startingBankroll = bankroll;
-      baseBet = unitValue;
-      stopProfitValue = stopProfitInput;
-      stopProfitEffective = stopProfitType === 'percentage' ? (stopProfitInput / 100) * bankroll : stopProfitInput;
-      currentBalance = bankroll;
-      stopProfitReached = false;
-      betState = {
-        currentBetUnits: 1,
-        totalProfit: 0,
-        cycleProfit: 0,
-        previousLosses: []
-      };
-      wins = losses = 0;
-      winLoss.length = 0;
-      updateDisplay();
-    }
-
-    function addResult(r) {
-      console.log(`addResult called with result: ${r}`);
-      if (!baseBet || !startingBankroll) {
-        alert("Please set bankroll and unit value first.");
-        return;
-      }
-      if (stopProfitReached) {
-        alert("Stop profit target reached. Reset or adjust the target to continue betting.");
-        return;
-      }
-      const pred = hybridPrediction();
-      const wager = getWager(pred.confidence);
-      if (wager > currentBalance) {
-        alert("Insufficient balance to place this bet.");
-        return;
-      }
-      results.push(r);
-      learnPattern(r);
-      if (pred.confidence > 60) {
-        predictionHistory.push(pred.predict);
-        const correct = pred.predict[0] === r;
-        if (correct) {
-          console.log(`Prediction correct: ${pred.predict}, handling win`);
-          handleWin(pred.predict);
-          winLoss.push('win');
-        } else {
-          console.log(`Prediction incorrect: ${pred.predict} vs ${r}, handling loss`);
-          handleLoss();
-          winLoss.push('loss');
-        }
-      } else {
-        console.log("No prediction (confidence <= 60%), skipping win/loss");
-        predictionHistory.push(null);
-        winLoss.push(null);
-      }
-      if (stopProfitEffective > 0 && currentBalance - startingBankroll >= stopProfitEffective) {
-        stopProfitReached = true;
-        console.log("Stop profit reached!");
-      }
-      saveMemoryFast();
-      updateDisplay();
-    }
-
-    function handleWin(predicted) {
-      console.log(`handleWin called with predicted: ${predicted}`);
-      const unitValue = baseBet;
-      const wagerUnits = recoveryMode
-        ? Math.min(
-            baseBet * [1, 2, 3, 5, 7][Math.min(betState.previousLosses.length, 4)],
-            currentBalance
-          ) / baseBet
-        : betState.currentBetUnits;
-      const payout = predicted === 'Banker' ? wagerUnits * 0.95 : wagerUnits;
-      betState.totalProfit += payout;
-      betState.cycleProfit += payout;
-      currentBalance += payout * unitValue;
-      wins++;
-      if (betState.cycleProfit >= 1) {
-        console.log("Cycle profit >= 1, resetting bet state");
-        betState.currentBetUnits = 1;
-        betState.cycleProfit = 0;
-        betState.previousLosses = [];
-      } else {
-        if (betState.previousLosses.length > 0) {
-          betState.previousLosses.pop();
-          console.log(`Popped last loss, previousLosses: ${betState.previousLosses}`);
-        }
-        const lastLoss = betState.previousLosses.length > 0 ? betState.previousLosses[betState.previousLosses.length - 1] : 1;
-        betState.currentBetUnits = lastLoss + 1;
-        console.log(`Set currentBetUnits to ${betState.currentBetUnits}`);
-      }
-    }
-
-    function handleLoss() {
-      console.log("handleLoss called");
-      const unitValue = baseBet;
-      const wagerUnits = recoveryMode
-        ? Math.min(
-            baseBet * [1, 2, 3, 5, 7][Math.min(betState.previousLosses.length, 4)],
-            currentBalance
-          ) / baseBet
-        : betState.currentBetUnits;
-      betState.totalProfit -= wagerUnits;
-      betState.cycleProfit -= wagerUnits;
-      betState.previousLosses.push(wagerUnits);
-      currentBalance -= wagerUnits * unitValue;
-      losses++;
-      console.log(`Loss recorded, previousLosses: ${betState.previousLosses}`);
-    }
-
-    function resetBet() {
-      console.log("resetBet called");
-      if (confirm("Reset betting state?")) {
-        betState = {
-          currentBetUnits: 1,
-          totalProfit: 0,
-          cycleProfit: 0,
-          previousLosses: []
-        };
-        updateDisplay();
-      }
-    }
-
-    function undo() {
-      console.log("undo called");
-      const last = results.pop();
-      if (!last) {
-        console.log("No results to undo");
-        return;
-      }
-      unlearnPattern(last);
-      const lastPred = predictionHistory.pop();
-      if (lastPred !== null) {
-        const outcome = winLoss.pop();
-        const unitValue = baseBet;
-        const wagerUnits = recoveryMode
-          ? Math.min(
-              baseBet * [1, 2, 3, 5, 7][Math.min(betState.previousLosses.length, 4)],
-              currentBalance
-            ) / baseBet
-          : betState.currentBetUnits;
-        if (outcome === 'win') {
-          console.log(`Undoing win for prediction: ${lastPred}`);
-          const payout = lastPred === 'Banker' ? wagerUnits * 0.95 : wagerUnits;
-          betState.totalProfit -= payout;
-          betState.cycleProfit -= payout;
-          currentBalance -= payout * unitValue;
-          wins--;
-          if (betState.cycleProfit < 1 && outcome === 'win') {
-            betState.previousLosses.push(wagerUnits);
-          }
-          const lastLoss = betState.previousLosses.length > 0 ? betState.previousLosses[betState.previousLosses.length - 1] : 1;
-          betState.currentBetUnits = lastLoss + 1;
-        } else if (outcome === 'loss') {
-          console.log("Undoing loss");
-          betState.totalProfit += wagerUnits;
-          betState.cycleProfit += wagerUnits;
-          betState.previousLosses.pop();
-          currentBalance += wagerUnits * unitValue;
-          losses--;
-          betState.currentBetUnits = betState.previousLosses.length > 0 ? betState.previousLosses[betState.previousLosses.length - 1] + 1 : 1;
-        }
-      }
-      stopProfitReached = stopProfitEffective > 0 && currentBalance - startingBankroll >= stopProfitEffective;
-      saveMemoryFast();
-      updateDisplay();
-    }
-
-    function toggleRecovery(checkbox) {
-      console.log(`toggleRecovery called, recoveryMode: ${checkbox.checked}`);
-      recoveryMode = checkbox.checked;
-      updateDisplay();
-    }
-
-    function learnPattern(res) {
-      for (let n = 2; n <= 5; n++) {
-        if (results.length >= n) {
-          const key = results.slice(-n, -1).join('');
-          const next = res;
-          if (!patternMemory[key]) patternMemory[key] = { P: 0, B: 0 };
-          patternMemory[key][next]++;
-          console.log(`Learned pattern: ${key} -> ${next}`);
-        }
-      }
-    }
-
-    function unlearnPattern(res) {
-      for (let n = 2; n <= 5; n++) {
-        if (results.length >= n - 1) {
-          const key = results.slice(-n + 1, -1).join('');
-          const next = res;
-          if (patternMemory[key]) {
-            patternMemory[key][next] = Math.max(0, patternMemory[key][next] - 1);
-            console.log(`Unlearned pattern: ${key} -> ${next}`);
-          }
-        }
-      }
-    }
-
-    function hybridPrediction() {
-      const pattern = getPatternVote(), trend = getTrendVote(), derived = getDerivedVote();
-      const votes = [pattern, trend, derived].filter(v => v);
-      const countP = votes.filter(v => v === 'Player').length;
-      const countB = votes.filter(v => v === 'Banker').length;
-      const predict = countP > countB ? 'Player' : 'Banker';
-      const confidence = votes.length ? Math.round(Math.max(countP, countB) / votes.length * 100) : 0;
-      console.log(`Prediction: ${predict}, Confidence: ${confidence}%`);
-      return { predict, confidence };
-    }
-
-    function getPatternVote() {
-      for (let n = 5; n >= 2; n--) {
-        const key = results.slice(-n + 1).join('');
-        if (patternMemory[key]) {
-          const { P = 0, B = 0 } = patternMemory[key];
-          if (P + B > 0) return P > B ? 'Player' : 'Banker';
-        }
-      }
-      return null;
-    }
-
-    function getTrendVote() {
-      const last3 = results.slice(-3);
-      if (last3.length < 3) return null;
-      return last3.every(v => v === last3[0]) ? (last3[0] === 'P' ? 'Player' : 'Banker') : null;
-    }
-
-    function getDerivedVote() {
-      const [a, b] = results.slice(-2);
-      if (!a || !b) return null;
-      return a === b ? (b === 'P' ? 'Player' : 'Banker') : (b === 'P' ? 'Banker' : 'Player');
-    }
-
-    function getWager(conf) {
-      if (!baseBet || conf <= 60 || stopProfitReached) {
-        console.log("No wager: baseBet not set, confidence <= 60%, or stop profit reached");
-        return 0;
-      }
-      if (!recoveryMode) {
-        const wager = Math.min(betState.currentBetUnits * baseBet, currentBalance);
-        console.log(`GVR wager: ${wager} (currentBetUnits: ${betState.currentBetUnits})`);
-        return wager;
-      }
-      const multipliers = [1, 2, 3, 5, 7];
-      const depth = Math.min(betState.previousLosses.length, multipliers.length - 1);
-      let stake = baseBet * multipliers[depth];
-      const wager = Math.min(stake, currentBalance);
-      console.log(`BFC wager: ${wager} (multiplier: ${multipliers[depth]})`);
-      return wager;
-    }
-
-    function updateDisplay() {
-      console.log("updateDisplay called");
-      document.getElementById("history").innerHTML =
-        results.slice(-10).map(r => `<span class="result ${r === 'P' ? 'player' : 'banker'}">${r}</span>`).join('');
-
-      const pred = hybridPrediction();
-      document.getElementById("prediction").innerText =
-        stopProfitReached
-          ? "🚨 Stop Profit Reached!"
-          : pred.confidence > 60
-          ? `Bet ${pred.predict} (${pred.confidence}%)`
-          : "Waiting for strong signal...";
-      document.getElementById("betSuggestion").innerText =
-        stopProfitReached
-          ? ""
-          : pred.confidence > 75
-          ? "💰 Aggressive Bet"
-          : pred.confidence > 65
-          ? "🎯 Normal Bet"
-          : pred.confidence > 60
-          ? "💡 Conservative Bet"
-          : "";
-      document.getElementById("streakInfo").innerText =
-        stopProfitReached
-          ? ""
-          : winLoss.slice(-3).every(r => r === 'loss')
-          ? `🧊 Cold Streak - Losses: ${betState.previousLosses.length}`
-          : winLoss.slice(-3).every(r => r === 'win')
-          ? `🔥 Hot Streak`
-          : '';
-
-      const wager = getWager(pred.confidence);
-      document.getElementById("currentWager").innerText = `💵 Current Wager: ${wager.toFixed(2)}`;
-      document.getElementById("wins").innerText = wins;
-      document.getElementById("losses").innerText = losses;
-      const total = wins + losses;
-      const acc = total ? ((wins / total) * 100).toFixed(1) : 0;
-      document.getElementById("accuracy").innerText = `${acc}%`;
-
-      document.getElementById("bankrollDisplay").innerText =
-        startingBankroll
-          ? `💼 Balance: ${currentBalance.toFixed(2)} | Profit: ${(currentBalance - startingBankroll).toFixed(2)}`
-          : '';
-      const previousLosses = betState.previousLosses.length > 0 ? betState.previousLosses.join(', ') : 'None';
-      const stopProfitDisplay =
-        stopProfitValue > 0
-          ? stopProfitType === 'percentage'
-            ? `${stopProfitValue}% ($${stopProfitEffective.toFixed(2)})`
-            : `$${stopProfitValue.toFixed(2)}`
-          : 'Not Set';
-      document.getElementById("bankrollDisplay").innerHTML += `
-        <br><span>Current Bet: $${(betState.currentBetUnits * baseBet).toFixed(2)} (${betState.currentBetUnits} units)</span>
-        <br><span>Previous Losses (Units): ${previousLosses}</span>
-        <br><span class="${betState.cycleProfit >= 1 ? 'cycle-reset' : ''}">Cycle Profit: $${(betState.cycleProfit * baseBet).toFixed(2)}</span>
-        <br><span>Total Profit: $${(betState.totalProfit * baseBet).toFixed(2)}</span>
-        <br><span>Stop Profit Target: ${stopProfitDisplay} | Status: ${stopProfitReached ? '🚨 Reached' : 'Active'}</span>
-      `;
-
-      const patternHTML = Object.entries(patternMemory).map(([k, v]) => {
-        const t = (v.P || 0) + (v.B || 0);
-        const fav = v.P > v.B ? 'Player' : v.B > v.P ? 'Banker' : 'Even';
-        return `${k} → P:${v.P || 0}, B:${v.B || 0} → <b>${fav}</b> (${t})<br>`;
-      }).join('');
-      document.getElementById("patternMemoryBox").innerHTML = patternHTML || "No patterns yet.";
-    }
-
-    function saveMemoryFast() {
-      console.log("saveMemoryFast called");
-      clearTimeout(saveTimeout);
-      saveTimeout = setTimeout(saveMemory, 300);
-    }
-
-    function saveMemory() {
-      console.log("saveMemory called");
-      localStorage.setItem('baccaratPatterns', JSON.stringify(patternMemory));
-      localStorage.setItem('baccaratStats', JSON.stringify({
-        wins,
-        losses,
-        baseBet,
-        startingBankroll,
-        currentBalance,
-        betState,
-        winLoss,
-        stopProfitType,
-        stopProfitValue,
-        stopProfitEffective,
-        stopProfitReached
-      }));
-    }
-
-    function loadMemory() {
-      console.log("loadMemory called");
-      try {
-        Object.assign(patternMemory, JSON.parse(localStorage.getItem('baccaratPatterns') || '{}'));
-        const stats = JSON.parse(localStorage.getItem('baccaratStats') || '{}');
-        wins = Number(stats.wins) || 0;
-        losses = Number(stats.losses) || 0;
-        baseBet = Number(stats.baseBet) || 0;
-        startingBankroll = Number(stats.startingBankroll) || 0;
-        currentBalance = Number(stats.currentBalance) || 0;
-        stopProfitType = stats.stopProfitType || 'percentage';
-        stopProfitValue = Number(stats.stopProfitValue) || 0;
-        stopProfitEffective = Number(stats.stopProfitEffective) || 0;
-        stopProfitReached = stats.stopProfitReached || false;
-        betState = stats.betState || {
-          currentBetUnits: 1,
-          totalProfit: 0,
-          cycleProfit: 0,
-          previousLosses: []
-        };
-        if (Array.isArray(stats.winLoss)) winLoss.push(...stats.winLoss);
-        document.getElementById("recoveryToggle").checked = recoveryMode;
-        document.getElementById("stopProfitType").value = stopProfitType;
-        document.getElementById("stopProfitInput").value = stopProfitValue || '';
-        updateDisplay();
-      } catch (e) {
-        console.error("Failed to load memory:", e);
-        alert("Error loading saved data. Resetting to default.");
-      }
-    }
-
-    function resetStats() {
-      console.log("resetStats called");
-      if (confirm("Reset win/loss stats, betting state, and stop profit?")) {
-        wins = losses = 0;
-        currentBalance = startingBankroll;
-        stopProfitType = 'percentage';
-        stopProfitValue = 0;
-        stopProfitEffective = 0;
-        stopProfitReached = false;
-        betState = {
-          currentBetUnits: 1,
-          totalProfit: 0,
-          cycleProfit: 0,
-          previousLosses: []
-        };
-        winLoss.length = 0;
-        document.getElementById("stopProfitType").value = stopProfitType;
-        document.getElementById("stopProfitInput").value = '';
-        updateDisplay();
-      }
-    }
-
-    function resetMemory() {
-      console.log("resetMemory called");
-      if (confirm("Reset all pattern memory?")) {
-        for (let key in patternMemory) delete patternMemory[key];
-        updateDisplay();
-      }
-    }
-
-    loadMemory();
+const r=[],pM={},pH=[],wL=[];let w=0,l=0,bB=0,sB=0,cB=0,sPT='percentage',sPV=0,sPE=0,sPR=false,bS={cBU:1,tP:0,cP:0,pL:[]},sT=null,bST='normal';
+function setBankroll(){const b=parseFloat(document.getElementById("bankrollInput").value),u=parseFloat(document.getElementById("basebetInput").value),sP=parseFloat(document.getElementById("stopProfitInput").value)||0;sPT=document.getElementById("stopProfitType").value;bST=document.getElementById("betSuggestionType").value;if(isNaN(b)||b<=0||isNaN(u)||u<=0)return alert("Invalid bankroll/unit value");if(sP<0)return alert("Invalid stop profit");sB=b;bB=u;sPV=sP;sPE=sPT==='percentage'?sP/100*b:sP;cB=b;sPR=false;bS={cBU:1,tP:0,cP:0,pL:[]};w=l=0;wL.length=0;updateDisplay()}
+function addResult(v){if(!bB||!sB)return alert("Set bankroll/unit first");if(sPR)return alert("Stop profit reached");const p=hybridPrediction(),g=getWager(p.confidence);if(g>cB)return alert("Insufficient balance");r.push(v);learn(v);if(p.confidence>60){pH.push(p.predict);const c=p.predict[0]===v;c?(handleWin(p.predict),wL.push('win')):(handleLoss(),wL.push('loss'))}else pH.push(null),wL.push(null);if(sPE>0&&cB-sB>=sPE)sPR=true;saveMemoryFast();updateDisplay()}
+function handleWin(v){const u=bB,wU=Math.min(bB*[1,2,3,5,7][Math.min(bS.pL.length,4)],cB)/bB,p=v==='Banker'?wU*.95:wU;bS.tP+=p;bS.cP+=p;cB+=p*u;w++;if(bS.cP>=1)bS.cBU=1,bS.cP=0,bS.pL=[];else{bS.pL.length>0&&bS.pL.pop();bS.cBU=(bS.pL.length>0?bS.pL[bS.pL.length-1]:1)+1}}
+function handleLoss(){const u=bB,wU=Math.min(bB*[1,2,3,5,7][Math.min(bS.pL.length,4)],cB)/bB;bS.tP-=wU;bS.cP-=wU;bS.pL.push(wU);cB-=wU*u;l++}
+function resetBet(){confirm("Reset bet?")&&(bS={cBU:1,tP:0,cP:0,pL:[]},updateDisplay())}
+function undo(){const v=r.pop();if(!v)return;unlearn(v);const p=pH.pop();if(p!==null){const o=wL.pop(),u=bB,wU=Math.min(bB*[1,2,3,5,7][Math.min(bS.pL.length,4)],cB)/bB;if(o==='win'){const t=p==='Banker'?wU*.95:wU;bS.tP-=t;bS.cP-=t;cB-=t*u;w--;o==='win'&&bS.cP<1&&bS.pL.push(wU);bS.cBU=(bS.pL.length>0?bS.pL[bS.pL.length-1]:1)+1}else if(o==='loss'){bS.tP+=wU;bS.cP+=wU;bS.pL.pop();cB+=wU*u;l--;bS.cBU=bS.pL.length>0?bS.pL[bS.pL.length-1]+1:1}}sPR=sPE>0&&cB-sB>=sPE;saveMemoryFast();updateDisplay()}
+function learn(v){for(let n=2;n<=5;n++)if(r.length>=n){const k=r.slice(-n,-1).join('');if(!pM[k])pM[k]={P:0,B:0};pM[k][v]++}}
+function unlearn(v){for(let n=2;n<=5;n++)if(r.length>=n-1){const k=r.slice(-n+1,-1).join('');pM[k]&&(pM[k][v]=Math.max(0,pM[k][v]-1))}}
+function hybridPrediction(){const p=getPatternVote(),t=getTrendVote(),d=getDerivedVote(),v=[p,t,d].filter(v=>v),cP=v.filter(v=>v==='Player').length,cB=v.filter(v=>v==='Banker').length;return{predict:cP>cB?'Player':'Banker',confidence:v.length?Math.round(Math.max(cP,cB)/v.length*100):0}}
+function getPatternVote(){for(let n=5;n>=2;n--){const k=r.slice(-n+1).join('');if(pM[k]){const{P=0,B=0}=pM[k];if(P+B>0)return P>B?'Player':'Banker'}}return null}
+function getTrendVote(){const t=r.slice(-3);return t.length<3?null:t.every(v=>v===t[0])?(t[0]==='P'?'Player':'Banker'):null}
+function getDerivedVote(){const[a,b]=r.slice(-2);return!a||!b?null:a===b?(b==='P'?'Player':'Banker'):(b==='P'?'Banker':'Player')}
+function getWager(c){if(!bB||c<=60||sPR)return 0;const m={conservative:[1,1.5,2,3,4],normal:[1,2,3,5,7],aggressive:[1,3,5,8,12]}[bST],d=Math.min(bS.pL.length,m.length-1);return Math.min(bB*m[d],cB)}
+function updateDisplay(){document.getElementById("history").innerHTML=r.slice(-10).map(v=>`<span class="result ${v==='P'?'player':'banker'}">${v}</span>`).join('');const p=hybridPrediction();document.getElementById("prediction").innerText=sPR?"🚨 Stop Profit Reached!":p.confidence>60?`Bet ${p.predict} (${p.confidence}%)`:"Waiting...";document.getElementById("betSuggestion").innerText=sPR?"":p.confidence>75?"💰 Aggressive":p.confidence>65?"🎯 Normal":p.confidence>60?"💡 Conservative":"";document.getElementById("streakInfo").innerText=sPR?"":wL.slice(-3).every(v=>v==='loss')?`🧊 Cold Streak - Losses: ${bS.pL.length}`:wL.slice(-3).every(v=>v==='win')?`🔥 Hot Streak`:"";document.getElementById("currentWager").innerText=`💵 Wager: ${getWager(p.confidence).toFixed(2)}`;document.getElementById("wins").innerText=w;document.getElementById("losses").innerText=l;const t=w+l;document.getElementById("accuracy").innerText=`${t?(w/t*100).toFixed(1):0}%`;const pL=bS.pL.length>0?bS.pL.join(', '):'None',sPD=sPV>0?sPT==='percentage'?`${sPV}% ($${sPE.toFixed(2)})`:`$${sPV.toFixed(2)}`:'Not Set';document.getElementById("bankrollDisplay").innerHTML=sB?`💼 Balance: ${cB.toFixed(2)} | Profit: ${(cB-sB).toFixed(2)}<br>Bet: $${(bS.cBU*bB).toFixed(2)} (${bS.cBU} units)<br>Losses: ${pL}<br><span class="${bS.cP>=1?'cycle-reset':''}">Cycle: $${(bS.cP*bB).toFixed(2)}</span><br>Total: $${(bS.tP*bB).toFixed(2)}<br>Stop: ${sPD} | ${sPR?'🚨 Reached':'Active'}`:'';document.getElementById("patternMemoryBox").innerHTML=Object.entries(pM).map(([k,v])=>{const t=(v.P||0)+(v.B||0),f=v.P>v.B?'Player':v.B>v.P?'Banker':'Even';return`${k}→P:${v.P||0},B:${v.B||0}→<b>${f}</b> (${t})<br>`}).join('')||"No patterns"}
+async function saveMemoryFast(){clearTimeout(sT);sT=setTimeout(saveMemory,300)}
+async function saveMemory(){try{localStorage.setItem('baccaratPatterns',JSON.stringify(pM));localStorage.setItem('baccaratStats',JSON.stringify({w,l,bB,sB,cB,bS,wL,sPT,sPV,sPE,sPR,bST}))}catch(e){alert("Error saving to cloud")}}
+async function loadMemory(){try{Object.assign(pM,JSON.parse(localStorage.getItem('baccaratPatterns')||'{}'));const s=JSON.parse(localStorage.getItem('baccaratStats')||'{}');w=Number(s.w)||0;l=Number(s.l)||0;bB=Number(s.bB)||0;sB=Number(s.sB)||0;cB=Number(s.cB)||0;sPT=s.sPT||'percentage';sPV=Number(s.sPV)||0;sPE=Number(s.sPE)||0;sPR=s.sPR||false;bS=s.bS||{cBU:1,tP:0,cP:0,pL:[]};bST=s.bST||'normal';Array.isArray(s.wL)&&wL.push(...s.wL);document.getElementById("stopProfitType").value=sPT;document.getElementById("stopProfitInput").value=sPV||'';document.getElementById("betSuggestionType").value=bST;updateDisplay()}catch(e){alert("Error loading from cloud")}}
+function resetStats(){if(confirm("Reset stats?")){w=l=0;cB=sB;sPT='percentage';sPV=0;sPE=0;sPR=false;bS={cBU:1,tP:0,cP:0,pL:[]};bST='normal';wL.length=0;document.getElementById("stopProfitType").value=sPT;document.getElementById("stopProfitInput").value='';document.getElementById("betSuggestionType").value=bST;updateDisplay()}}
+function resetMemory(){if(confirm("Reset patterns?")){for(let k in pM)delete pM[k];updateDisplay();saveMemoryFast()}}
+loadMemory();
   </script>
 </body>
 </html>
