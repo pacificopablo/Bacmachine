@@ -19,7 +19,7 @@ body{font-family:'Segoe UI',sans-serif;background:#f4f6f8;margin:0;padding:20px;
   <div class="section" id="prediction">AI Prediction: Waiting...</div>
   <div class="section" id="streakInfo"></div>
   <div class="section" id="betSuggestion"></div>
-  <div class="section" id="currentWager">💵 Wager: 0</div>
+  <div class="section" id="currentWager">💵 Wager: $0.00 (0 units)</div>
   <div class="section" id="bankrollDisplay">💼 Balance: - | Profit: -</div>
   <div class="flex-row">
     <input type="number" id="bankrollInput" placeholder="Bankroll">
@@ -52,21 +52,35 @@ body{font-family:'Segoe UI',sans-serif;background:#f4f6f8;margin:0;padding:20px;
     <h3>🧠 Patterns</h3>
     <div id="patternMemoryBox">No patterns</div>
   </div>
+  <div class="scroll-box">
+    <h3>🎯 Patterns Influencing Prediction</h3>
+    <div id="predictionPatternsBox">No patterns influencing prediction</div>
+  </div>
   <script>
-const r = [], pM = {}, pH = [], wL = [];
+const r = [], pM = {}, pH = [], wL = [], bankrollHistory = [];
 let w = 0, l = 0, bB = 0, sB = 0, cB = 0, sPT = 'percentage', sPV = 0, sPE = 0, sPR = false, bST = 'normal';
 let predictionAccuracy = { correct: 0, total: 0 }, volatility = 0;
+let peakBankroll = 0, lowestBankroll = Infinity;
 let bS = { cBU: 1, tP: 0, cP: 0, pL: [] }, sT = null;
 
 function setBankroll() {
+  console.time("setBankroll");
   console.log("setBankroll called");
   const b = parseFloat(document.getElementById("bankrollInput").value);
   const u = parseFloat(document.getElementById("basebetInput").value);
   const sP = parseFloat(document.getElementById("stopProfitInput").value) || 0;
   sPT = document.getElementById("stopProfitType").value;
   bST = document.getElementById("betSuggestionType").value;
-  if (isNaN(b) || b <= 0 || isNaN(u) || u <= 0) return alert("Invalid bankroll/unit value");
-  if (sP < 0) return alert("Invalid stop profit");
+  if (isNaN(b) || b <= 0 || isNaN(u) || u <= 0) {
+    alert("Invalid bankroll/unit value");
+    console.timeEnd("setBankroll");
+    return;
+  }
+  if (sP < 0) {
+    alert("Invalid stop profit");
+    console.timeEnd("setBankroll");
+    return;
+  }
   sB = b;
   bB = u;
   sPV = sP;
@@ -78,18 +92,35 @@ function setBankroll() {
   wL.length = 0;
   predictionAccuracy = { correct: 0, total: 0 };
   volatility = 0;
+  peakBankroll = b;
+  lowestBankroll = b;
+  bankrollHistory.length = 0;
+  bankrollHistory.push(b);
   updateDisplay();
+  console.timeEnd("setBankroll");
 }
 
 function addResult(v) {
+  console.time("addResult");
   console.log("addResult called with value:", v);
-  if (!bB || !sB) return alert("Set bankroll/unit first");
-  if (sPR) return alert("Stop profit reached");
+  if (!bB || !sB) {
+    alert("Set bankroll/unit first");
+    console.timeEnd("addResult");
+    return;
+  }
+  if (sPR) {
+    alert("Stop profit reached");
+    console.timeEnd("addResult");
+    return;
+  }
   const p = hybridPrediction();
   const g = getWager(p.confidence);
-  if (g > cB) return alert("Insufficient balance");
+  if (g > cB) {
+    alert("Insufficient balance");
+    console.timeEnd("addResult");
+    return;
+  }
   if (r.length >= 2) {
-    const lastTwo = r.slice(-1)[0] !== v;
     const recent = r.slice(-5).concat([v]);
     let switches = 0;
     for (let i = 1; i < recent.length; i++) {
@@ -104,17 +135,23 @@ function addResult(v) {
     const correct = p.predict[0] === v;
     predictionAccuracy.total++;
     if (correct) predictionAccuracy.correct++;
-    correct ? (handleWin(p.predict), wL.push('win')) : (handleLoss(), wL.push('loss'));
+    correct ? handleWin(p.predict) : handleLoss();
+    wL.push(correct ? 'win' : 'loss');
   } else {
     pH.push(null);
     wL.push(null);
   }
+  peakBankroll = Math.max(peakBankroll, cB);
+  lowestBankroll = Math.min(lowestBankroll, cB);
+  bankrollHistory.push(cB);
   if (sPE > 0 && cB - sB >= sPE) sPR = true;
   saveMemoryFast();
   updateDisplay();
+  console.timeEnd("addResult");
 }
 
 function handleWin(v) {
+  console.time("handleWin");
   console.log("handleWin called with value:", v);
   const u = bB;
   const wU = Math.min(bB * [1, 2, 3, 5, 7][Math.min(bS.pL.length, 4)], cB) / bB;
@@ -131,9 +168,11 @@ function handleWin(v) {
     bS.pL.length > 0 && bS.pL.pop();
     bS.cBU = (bS.pL.length > 0 ? bS.pL[bS.pL.length - 1] : 1) + 1;
   }
+  console.timeEnd("handleWin");
 }
 
 function handleLoss() {
+  console.time("handleLoss");
   console.log("handleLoss called");
   const u = bB;
   const wU = Math.min(bB * [1, 2, 3, 5, 7][Math.min(bS.pL.length, 4)], cB) / bB;
@@ -142,20 +181,27 @@ function handleLoss() {
   bS.pL.push(wU);
   cB -= wU * u;
   l++;
+  console.timeEnd("handleLoss");
 }
 
 function resetBet() {
+  console.time("resetBet");
   console.log("resetBet called");
   if (confirm("Reset bet?")) {
     bS = { cBU: 1, tP: 0, cP: 0, pL: [] };
     updateDisplay();
   }
+  console.timeEnd("resetBet");
 }
 
 function undo() {
+  console.time("undo");
   console.log("undo called");
   const v = r.pop();
-  if (!v) return;
+  if (!v) {
+    console.timeEnd("undo");
+    return;
+  }
   unlearn(v);
   const p = pH.pop();
   if (p !== null) {
@@ -181,6 +227,7 @@ function undo() {
       bS.cBU = bS.pL.length > 0 ? bS.pL[bS.pL.length - 1] + 1 : 1;
     }
   }
+  bankrollHistory.pop();
   if (r.length >= 2) {
     const recent = r.slice(-5);
     let switches = 0;
@@ -191,12 +238,16 @@ function undo() {
   } else {
     volatility = 0;
   }
+  peakBankroll = bankrollHistory.length > 0 ? Math.max(...bankrollHistory) : cB;
+  lowestBankroll = bankrollHistory.length > 0 ? Math.min(...bankrollHistory) : cB;
   sPR = sPE > 0 && cB - sB >= sPE;
   saveMemoryFast();
   updateDisplay();
+  console.timeEnd("undo");
 }
 
 function learn(v) {
+  console.time("learn");
   for (let n = 2; n <= 6; n++) {
     if (r.length >= n) {
       const k = r.slice(-n, -1).join('');
@@ -204,49 +255,28 @@ function learn(v) {
       pM[k][v]++;
     }
   }
+  console.timeEnd("learn");
 }
 
 function unlearn(v) {
+  console.time("unlearn");
   for (let n = 2; n <= 6; n++) {
     if (r.length >= n - 1) {
       const k = r.slice(-n + 1, -1).join('');
       pM[k] && (pM[k][v] = Math.max(0, pM[k][v] - 1));
     }
   }
+  console.timeEnd("unlearn");
 }
 
 function hybridPrediction() {
+  console.time("hybridPrediction");
   const patternVote = getPatternVote();
-  const trendVote = getTrendVote();
-  const derivedVote = getDerivedVote();
-  const weights = {
-    pattern: r.length >= 5 ? 0.5 : 0.3,
-    trend: r.length >= 3 && volatility < 0.6 ? 0.3 : 0.2,
-    derived: 0.2
-  };
-  const votes = [
-    { vote: patternVote, weight: weights.pattern },
-    { vote: trendVote, weight: weights.trend },
-    { vote: derivedVote, weight: weights.derived }
-  ].filter(v => v.vote !== null);
-  if (!votes.length) {
+  if (!patternVote) {
+    console.timeEnd("hybridPrediction");
     return { predict: 'None', confidence: 0 };
   }
-  let playerScore = 0, bankerScore = 0;
-  votes.forEach(({ vote, weight }) => {
-    if (vote === 'Player') playerScore += weight;
-    else if (vote === 'Banker') bankerScore += weight;
-  });
-  const baseConfidence = Math.round(Math.max(playerScore, bankerScore) / votes.reduce((sum, v) => sum + v.weight, 0) * 100);
-  const accuracyAdjustment = predictionAccuracy.total > 10 ? predictionAccuracy.correct / predictionAccuracy.total : 1;
-  const confidence = Math.min(baseConfidence * accuracyAdjustment, 100);
-  return {
-    predict: playerScore > bankerScore ? 'Player' : 'Banker',
-    confidence: confidence
-  };
-}
-
-function getPatternVote() {
+  let confidence = 0;
   for (let n = Math.min(6, r.length); n >= 2; n--) {
     const key = r.slice(-n + 1).join('');
     if (pM[key]) {
@@ -254,90 +284,124 @@ function getPatternVote() {
       const total = P + B;
       if (total >= Math.max(3, n)) {
         const reliability = total / (n * 2);
+        confidence = Math.round(Math.max(P, B) / total * 100 * reliability);
+        break;
+      }
+    }
+  }
+  const accuracyAdjustment = predictionAccuracy.total > 10 ? predictionAccuracy.correct / predictionAccuracy.total : 1;
+  confidence = Math.min(confidence * accuracyAdjustment, 100);
+  console.timeEnd("hybridPrediction");
+  return {
+    predict: patternVote,
+    confidence: confidence
+  };
+}
+
+function getPatternVote() {
+  console.time("getPatternVote");
+  for (let n = Math.min(6, r.length); n >= 2; n--) {
+    const key = r.slice(-n + 1).join('');
+    if (pM[key]) {
+      const { P = 0, B = 0 } = pM[key];
+      const total = P + B;
+      if (total >= Math.max(3, n)) {
+        const reliability = total / (n * 2);
+        console.timeEnd("getPatternVote");
         return P * reliability > B * reliability ? 'Player' : 'Banker';
       }
     }
   }
+  console.timeEnd("getPatternVote");
   return null;
-}
-
-function getTrendVote() {
-  const lastN = r.slice(-4);
-  if (lastN.length < 3) return null;
-  let streak = 1;
-  for (let i = lastN.length - 1; i > 0; i--) {
-    if (lastN[i] === lastN[i - 1]) streak++;
-    else break;
-  }
-  if (streak >= 3) {
-    return lastN[0] === 'P' ? 'Player' : 'Banker';
-  }
-  const isAlternating = lastN.length >= 4 && lastN[0] !== lastN[1] && lastN[1] !== lastN[2] && lastN[2] !== lastN[3];
-  if (isAlternating) {
-    return lastN[lastN.length - 1] === 'P' ? 'Banker' : 'Player';
-  }
-  return null;
-}
-
-function getDerivedVote() {
-  const [a, b] = r.slice(-2);
-  if (!a || !b) return null;
-  if (volatility < 0.4) {
-    return b === 'P' ? 'Player' : 'Banker';
-  }
-  return a === b ? (b === 'P' ? 'Banker' : 'Player') : (b === 'P' ? 'Player' : 'Banker');
 }
 
 function getWager(c) {
-  if (!bB || c <= 60 || sPR) return 0;
+  console.time("getWager");
+  if (!bB || c <= 60 || sPR) {
+    console.timeEnd("getWager");
+    return 0;
+  }
   const m = {
     conservative: [1, 1.5, 2, 3, 4],
     normal: [1, 2, 3, 5, 7],
     aggressive: [1, 3, 5, 8, 12]
   }[bST];
   const d = Math.min(bS.pL.length, m.length - 1);
-  return Math.min(bB * m[d], cB);
+  const wager = Math.min(bB * m[d], cB);
+  console.timeEnd("getWager");
+  return wager;
 }
 
 function updateDisplay() {
+  console.time("updateDisplay");
   document.getElementById("history").innerHTML = r.slice(-10).map(v => `<span class="result ${v === 'P' ? 'player' : 'banker'}">${v}</span>`).join('');
   const p = hybridPrediction();
   document.getElementById("prediction").innerText = sPR ? "🚨 Stop Profit Reached!" : p.confidence > 60 ? `Bet ${p.predict} (${p.confidence.toFixed(1)}%)` : "Waiting...";
   document.getElementById("betSuggestion").innerText = sPR ? "" : p.confidence > 75 ? "💰 Aggressive" : p.confidence > 65 ? "🎯 Normal" : p.confidence > 60 ? "💡 Conservative" : "";
   document.getElementById("streakInfo").innerText = sPR ? "" : wL.slice(-3).every(v => v === 'loss') ? `🧊 Cold Streak - Losses: ${bS.pL.length}` : wL.slice(-3).every(v => v === 'win') ? `🔥 Hot Streak` : "";
-  document.getElementById("currentWager").innerText = `💵 Wager: ${getWager(p.confidence).toFixed(2)}`;
+  const wager = getWager(p.confidence);
+  const wagerUnits = bB > 0 ? (wager / bB).toFixed(1) : 0;
+  document.getElementById("currentWager").innerText = `💵 Wager: $${wager.toFixed(2)} (${wagerUnits} units)`;
   document.getElementById("wins").innerText = w;
   document.getElementById("losses").innerText = l;
   const t = w + l;
   document.getElementById("accuracy").innerText = `${t ? (w / t * 100).toFixed(1) : 0}%`;
   const pL = bS.pL.length > 0 ? bS.pL.join(', ') : 'None';
   const sPD = sPV > 0 ? sPT === 'percentage' ? `${sPV}% ($${sPE.toFixed(2)})` : `$${sPV.toFixed(2)}` : 'Not Set';
-  document.getElementById("bankrollDisplay").innerHTML = sB ? `💼 Balance: ${cB.toFixed(2)} | Profit: ${(cB - sB).toFixed(2)}<br>Bet: $${(bS.cBU * bB).toFixed(2)} (${bS.cBU} units)<br>Losses: ${pL}<br><span class="${bS.cP >= 1 ? 'cycle-reset' : ''}">Cycle: $${(bS.cP * bB).toFixed(2)}</span><br>Total: $${(bS.tP * bB).toFixed(2)}<br>Stop: ${sPD} | ${sPR ? '🚨 Reached' : 'Active'}` : '';
+  const absDrawdown = sB ? (sB - lowestBankroll).toFixed(2) : 0;
+  const maxDrawdown = peakBankroll && peakBankroll > 0 ? ((peakBankroll - lowestBankroll) / peakBankroll * 100).toFixed(1) : 0;
+  document.getElementById("bankrollDisplay").innerHTML = sB ? `💼 Balance: ${cB.toFixed(2)} | Profit: ${(cB - sB).toFixed(2)}<br>Bet: $${(bS.cBU * bB).toFixed(2)} (${bS.cBU} units)<br>Losses: ${pL}<br><span class="${bS.cP >= 1 ? 'cycle-reset' : ''}">Cycle: $${(bS.cP * bB).toFixed(2)}</span><br>Total: $${(bS.tP * bB).toFixed(2)}<br>Stop: ${sPD} | ${sPR ? '🚨 Reached' : 'Active'}<br>Abs Drawdown: $${absDrawdown} | Max Drawdown: ${maxDrawdown}%` : '';
   document.getElementById("patternMemoryBox").innerHTML = Object.entries(pM).map(([k, v]) => {
     const t = (v.P || 0) + (v.B || 0);
     const f = v.P > v.B ? 'Player' : v.B > v.P ? 'Banker' : 'Even';
     return `${k}→P:${v.P || 0},B:${v.B || 0}→<b>${f}</b> (${t})<br>`;
   }).join('') || "No patterns";
+  let predictionPatterns = "No patterns influencing prediction";
+  if (p.predict !== 'None') {
+    for (let n = Math.min(6, r.length); n >= 2; n--) {
+      const key = r.slice(-n + 1).join('');
+      if (pM[key]) {
+        const { P = 0, B = 0 } = pM[key];
+        const total = P + B;
+        if (total >= Math.max(3, n)) {
+          const reliability = total / (n * 2);
+          const patternConfidence = Math.round(Math.max(P, B) / total * 100 * reliability);
+          predictionPatterns = `${key}→P:${P || 0},B:${B || 0}→<b>${P * reliability > B * reliability ? 'Player' : 'Banker'}</b> (${total}, ${patternConfidence}%)`;
+          break;
+        }
+      }
+    }
+  }
+  document.getElementById("predictionPatternsBox").innerHTML = predictionPatterns;
+  console.timeEnd("updateDisplay");
 }
 
-async function saveMemoryFast() {
+function saveMemoryFast() {
+  console.time("saveMemoryFast");
   console.log("saveMemoryFast called");
   clearTimeout(sT);
   sT = setTimeout(saveMemory, 300);
+  console.timeEnd("saveMemoryFast");
 }
 
 async function saveMemory() {
+  console.time("saveMemory");
   console.log("saveMemory called");
   try {
+    await new Promise(resolve => setTimeout(resolve, 0)); // Yield to prevent blocking
     localStorage.setItem('baccaratPatterns', JSON.stringify(pM));
-    localStorage.setItem('baccaratStats', JSON.stringify({ w, l, bB, sB, cB, bS, wL, sPT, sPV, sPE, sPR, bST, predictionAccuracy, volatility }));
+    localStorage.setItem('baccaratStats', JSON.stringify({ w, l, bB, sB, cB, bS, wL, sPT, sPV, sPE, sPR, bST, predictionAccuracy, volatility, peakBankroll, lowestBankroll, bankrollHistory }));
+    console.timeEnd("saveMemory");
   } catch (e) {
     console.error("Error saving to localStorage:", e);
     alert("Error saving to cloud");
+    console.timeEnd("saveMemory");
   }
 }
 
 async function loadMemory() {
+  console.time("loadMemory");
   console.log("loadMemory called");
   try {
     Object.assign(pM, JSON.parse(localStorage.getItem('baccaratPatterns') || '{}'));
@@ -355,18 +419,25 @@ async function loadMemory() {
     bST = s.bST || 'normal';
     predictionAccuracy = s.predictionAccuracy || { correct: 0, total: 0 };
     volatility = Number(s.volatility) || 0;
+    peakBankroll = Number(s.peakBankroll) || sB || 0;
+    lowestBankroll = Number(s.lowestBankroll) || sB || Infinity;
+    bankrollHistory.length = 0;
+    bankrollHistory.push(...(Array.isArray(s.bankrollHistory) ? s.bankrollHistory : [sB]));
     Array.isArray(s.wL) && wL.push(...s.wL);
     document.getElementById("stopProfitType").value = sPT;
     document.getElementById("stopProfitInput").value = sPV || '';
     document.getElementById("betSuggestionType").value = bST;
     updateDisplay();
+    console.timeEnd("loadMemory");
   } catch (e) {
     console.error("Error loading from localStorage:", e);
     alert("Error loading from cloud");
+    console.timeEnd("loadMemory");
   }
 }
 
 function resetStats() {
+  console.time("resetStats");
   console.log("resetStats called");
   if (confirm("Reset stats?")) {
     w = l = 0;
@@ -380,23 +451,29 @@ function resetStats() {
     wL.length = 0;
     predictionAccuracy = { correct: 0, total: 0 };
     volatility = 0;
+    peakBankroll = sB;
+    lowestBankroll = sB;
+    bankrollHistory.length = 0;
+    bankrollHistory.push(sB);
     document.getElementById("stopProfitType").value = sPT;
     document.getElementById("stopProfitInput").value = '';
     document.getElementById("betSuggestionType").value = bST;
     updateDisplay();
   }
+  console.timeEnd("resetStats");
 }
 
 function resetMemory() {
+  console.time("resetMemory");
   console.log("resetMemory called");
   if (confirm("Reset patterns?")) {
     for (let k in pM) delete pM[k];
     updateDisplay();
     saveMemoryFast();
   }
+  console.timeEnd("resetMemory");
 }
 
-// Ensure DOM is loaded before running loadMemory
 document.addEventListener('DOMContentLoaded', () => {
   console.log("DOM loaded, calling loadMemory");
   loadMemory();
