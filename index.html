@@ -224,6 +224,13 @@ function handleLoss() {
     bS.pL.push(wU);
     cB -= wU * u;
     l++;
+    if (bS.pL.length >= 5) { // Reset after loss on 7-unit bet
+      bS.cBU = 1;
+      bS.cP = 0;
+      bS.pL = [];
+    } else {
+      bS.cBU = bS.pL.length > 0 ? bS.pL[bS.pL.length - 1] + 1 : 1;
+    }
   } catch (e) {
     console.error("Error in handleLoss:", e);
     showNotification("Error handling loss");
@@ -470,9 +477,8 @@ async function saveMemory() {
   console.time("saveMemory");
   console.log("saveMemory button clicked");
   try {
-    // Check localStorage size to avoid quota exceeded errors
     const data = JSON.stringify({ patterns: pM, stats: { w, l, bB, sB, cB, bS, wL, sPT, sPV, sPE, sPR, bST, predictionAccuracy, volatility, peakBankroll, lowestBankroll, bankrollHistory } });
-    if (data.length > 5 * 1024 * 1024) { // 5MB limit check
+    if (data.length > 5 * 1024 * 1024) {
       console.warn("localStorage data too large, clearing old data");
       localStorage.clear();
       showNotification("Storage limit reached, cleared old data");
@@ -524,7 +530,7 @@ async function loadMemory() {
   } catch (e) {
     console.error("Error loading from localStorage:", e);
     showNotification("Failed to load from cloud, using default values");
-    localStorage.clear(); // Clear corrupted data
+    localStorage.clear();
     w = l = 0;
     bB = sB = cB = 0;
     sPT = 'percentage';
@@ -616,7 +622,6 @@ function startNewShoe() {
 document.addEventListener('DOMContentLoaded', () => {
   console.log("DOM loaded, initializing app");
   try {
-    // Verify button event listeners
     const buttons = document.querySelectorAll('button');
     buttons.forEach(button => {
       console.log(`Button found: ${button.textContent || button.innerHTML}`);
