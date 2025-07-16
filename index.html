@@ -3,13 +3,13 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>💸 BFC "Money Machine"</title>
+  <title>💸 BFC v3.4 "Money Machine"</title>
   <style>
-body{font-family:'Segoe UI',sans-serif;background:#f4f6f8;margin:0;padding:20px;color:#222}h1{text-align:center;margin-bottom:20px;font-size:28px;color:#333}.flex-row{display:flex;flex-wrap:wrap;gap:10px;justify-content:center;margin:10px 0}button{padding:10px 20px;border:none;background:#007bff;color:#fff;border-radius:10px;cursor:pointer;font-weight:600;transition:background .3s}button:hover{background:#0056b3}#resetBetBtn{background:#6c757d}input[type=number],select{padding:10px;font-size:16px;border:1px solid #ccc;border-radius:8px;width:150px}label{font-size:16px;display:flex;align-items:center;gap:6px}.section{text-align:center;margin:12px 0;font-size:18px;font-weight:700}.result{display:inline-block;padding:6px 14px;border-radius:8px;margin:2px;font-weight:700}.player{background:#cce4ff;color:#004085}.banker{background:#ffdada;color:#721c24}.tie{background:#fff3cd;color:#856404}.scroll-box{max-height:300px;overflow-y:auto;background:#fff;border:1px solid #ccc;padding:12px;font-size:14px;border-radius:10px;box-shadow:0 2px 5px rgba(0,0,0,.05);margin-top:20px}.stat-box{background:#fff;border-radius:10px;padding:15px;box-shadow:0 2px 8px rgba(0,0,0,.1);display:inline-block;text-align:center;margin-top:10px}.bet-controls{margin-bottom:1rem;display:flex;flex-wrap:wrap;gap:.5rem;justify-content:center;width:100%;max-width:90vw}.cycle-reset{color:#28a745;font-weight:700}.win-streak{color:#28a745;font-weight:700}.notification{background:#ff4444;color:#fff;padding:10px;border-radius:8px;text-align:center;margin:10px auto;max-width:90%;display:none;}
+body{font-family:'Segoe UI',sans-serif;background:#f4f6f8;margin:0;padding:20px;color:#222}h1{text-align:center;margin-bottom:20px;font-size:28px;color:#333}.flex-row{display:flex;flex-wrap:wrap;gap:10px;justify-content:center;margin:10px 0}button{padding:10px 20px;border:none;background:#007bff;color:#fff;border-radius:10px;cursor:pointer;font-weight:600;transition:background .3s}button:hover{background:#0056b3}#resetBetBtn{background:#6c757d}input[type=number],select{padding:10px;font-size:16px;border:1px solid #ccc;border-radius:8px;width:150px}label{font-size:16px;display:flex;align-items:center;gap:6px}.section{text-align:center;margin:12px 0;font-size:18px;font-weight:700}.result{display:inline-block;padding:6px 14px;border-radius:8px;margin:2px;font-weight:700}.player{background:#cce4ff;color:#004085}.banker{background:#ffdada;color:#721c24}.tie{background:#fff3cd;color:#856404}.scroll-box{max-height:300px;overflow-y:auto;background:#fff;border:1px solid #ccc;padding:12px;font-size:14px;border-radius:10px;box-shadow:0 2px 5px rgba(0,0,0,.05);margin-top:20px}.stat-box{background:#fff;border-radius:10px;padding:15px;box-shadow:0 2px 8px rgba(0,0,0,.1);display:inline-block;text-align:center;margin-top:10px}.bet-controls{margin-bottom:1rem;display:flex;flex-wrap:wrap;gap:.5rem;justify-content:center;width:100%;max-width:90vw}.cycle-reset{color:#28a745;font-weight:700}.win-streak{color:#28a745;font-weight:700}.notification{background:#ff4444;color:#fff;padding:10px;border-radius:8px;text-align:center;margin:10px auto;max-width:90%;display:none;}.paused{background:#ffc107;color:#856404;}
   </style>
 </head>
 <body>
-  <h1>💸 BFC "Money Machine"</h1>
+  <h1>💸 BFC -"Money Machine" </h1>
   <div id="notification" class="notification"></div>
   <div class="flex-row">
     <button onclick="addResult('P')">Player</button>
@@ -72,18 +72,19 @@ const r = [], pM = {}, pH = [], wL = [], bankrollHistory = [];
 let w = 0, l = 0, bB = 0, sB = 0, cB = 0, sPT = 'percentage', sPV = 0, sPE = 0, sPR = false;
 let predictionAccuracy = { correct: 0, total: 0 }, volatility = 0;
 let peakBankroll = 0, lowestBankroll = Infinity;
-let stage = 1, level = 1, consecutiveWins = 0, consecutiveLosses = 0;
+let stage = 1, level = 1, consecutiveWins = 0, consecutiveLosses = 0, paused = false;
 let bettingStrategy = 'mm'; // Default to 3 Stage M.M
 let bS = { cBU: 1, tP: 0, cP: 0, pL: [] }, sT = null;
 let betLevels = { stage1: [], stage2: [], stage3: [] };
 let dLambertUnits = 1; // D'Lembert current bet units
 let flatbetUnits = 1; // Flatbet fixed bet units
 
-function showNotification(message) {
+function showNotification(message, isPaused = false) {
   console.log(`Notification: ${message}`);
   const notification = document.getElementById('notification');
   if (notification) {
     notification.textContent = message;
+    notification.className = `notification ${isPaused ? 'paused' : ''}`;
     notification.style.display = 'block';
     setTimeout(() => { notification.style.display = 'none'; }, 3000);
   } else {
@@ -118,8 +119,8 @@ function setBankroll() {
     sPE = sPT === 'percentage' ? sP / 100 * b : sP;
     cB = b;
     sPR = false;
+    paused = false;
     if (bettingStrategy === 'mm') {
-      // Initialize 3 Stage M.M System
       betLevels = {
         stage1: [bB, bB * 2, bB * 3],
         stage2: [bB * 4, bB * 8],
@@ -129,11 +130,9 @@ function setBankroll() {
       level = 0;
       bS = { cBU: 1, tP: 0, cP: 0, pL: [] };
     } else if (bettingStrategy === 'dlambert') {
-      // Initialize D'Lembert
       dLambertUnits = 1;
       bS = { cBU: 1, tP: 0, cP: 0, pL: [] };
     } else {
-      // Initialize Flatbet
       flatbetUnits = 1;
       bS = { cBU: 1, tP: 0, cP: 0, pL: [] };
     }
@@ -173,7 +172,7 @@ function addResult(v) {
     }
     const p = hybridPrediction();
     const g = getWager();
-    if (g > cB) {
+    if (!paused && g > cB) {
       console.warn("Insufficient balance");
       showNotification("Insufficient balance");
       console.timeEnd("addResult");
@@ -194,12 +193,22 @@ function addResult(v) {
       const correct = p.predict[0] === v;
       predictionAccuracy.total++;
       if (correct) predictionAccuracy.correct++;
-      if (v === 'T') {
-        handleTie();
+      if (paused) {
+        if (correct) {
+          paused = false;
+          consecutiveLosses = 0;
+          showNotification("Win detected, resuming betting");
+        } else {
+          showNotification("Paused due to 3 consecutive losses", true);
+        }
       } else {
-        correct ? handleWin(p.predict) : handleLoss();
+        if (v === 'T') {
+          handleTie();
+        } else {
+          correct ? handleWin(p.predict) : handleLoss();
+        }
+        wL.push(v === 'T' ? 'tie' : correct ? 'win' : 'loss');
       }
-      wL.push(v === 'T' ? 'tie' : correct ? 'win' : 'loss');
     } else {
       pH.push(null);
       wL.push(null);
@@ -230,24 +239,23 @@ function handleWin(v) {
     w++;
     consecutiveWins++;
     consecutiveLosses = 0;
+    paused = false; // Resume betting on win
     let resetCycle = bS.cP > 0; // Check if cycle profit is positive
     if (bettingStrategy === 'mm') {
       if (resetCycle) {
-        // Reset cycle to Stage 1, Level 1
         stage = 1;
         level = 0;
         bS.cBU = betLevels.stage1[0] / bB;
-        bS.cP = 0; // Reset cycle profit
+        bS.cP = 0;
         showNotification(`Win! Cycle profit achieved, reset to Stage 1, Level 1, Bet ${bS.cBU} units`);
       } else {
-        // 3 Stage M.M System
         if (stage === 1) {
           if (consecutiveWins >= 2) {
             stage = 3;
             level = 0;
             bS.cBU = betLevels.stage3[0] / bB;
           } else {
-            level = level; // Stay at the same level
+            level = level;
             bS.cBU = betLevels.stage1[level] / bB;
           }
         } else if (stage === 2) {
@@ -262,22 +270,19 @@ function handleWin(v) {
       }
     } else if (bettingStrategy === 'dlambert') {
       if (resetCycle) {
-        // Reset D'Lembert to 1 unit
         dLambertUnits = 1;
         bS.cBU = dLambertUnits;
-        bS.cP = 0; // Reset cycle profit
+        bS.cP = 0;
         showNotification(`Win! Cycle profit achieved, reset to D'Lembert 1 unit`);
       } else {
-        // D'Lembert: Decrease bet by 1 unit, minimum 1
         dLambertUnits = Math.max(1, dLambertUnits - 1);
         bS.cBU = dLambertUnits;
         showNotification(`Win! D'Lembert, Bet ${bS.cBU} units`);
       }
     } else {
-      // Flatbet: Maintain fixed bet
       bS.cBU = flatbetUnits;
       if (resetCycle) {
-        bS.cP = 0; // Reset cycle profit
+        bS.cP = 0;
         showNotification(`Win! Cycle profit achieved, Flatbet remains at ${bS.cBU} unit`);
       } else {
         showNotification(`Win! Flatbet, Bet ${bS.cBU} unit`);
@@ -302,8 +307,11 @@ function handleLoss() {
     l++;
     consecutiveWins = 0;
     consecutiveLosses++;
+    if (consecutiveLosses >= 3) {
+      paused = true;
+      showNotification("Paused due to 3 consecutive losses", true);
+    }
     if (bettingStrategy === 'mm') {
-      // 3 Stage M.M System
       if (stage === 1) {
         if (consecutiveLosses >= 3) {
           stage = 2;
@@ -323,12 +331,10 @@ function handleLoss() {
       }
       showNotification(`Loss! Stage ${stage}, Level ${level + 1}, Bet ${bS.cBU} units`);
     } else if (bettingStrategy === 'dlambert') {
-      // D'Lembert: Increase bet by 1 unit
       dLambertUnits++;
       bS.cBU = dLambertUnits;
       showNotification(`Loss! D'Lembert, Bet ${bS.cBU} units`);
     } else {
-      // Flatbet: Maintain fixed bet
       bS.cBU = flatbetUnits;
       showNotification(`Loss! Flatbet, Bet ${bS.cBU} unit`);
     }
@@ -345,8 +351,8 @@ function handleTie() {
   try {
     consecutiveWins = 0;
     consecutiveLosses = 0;
+    paused = false; // Reset pause on tie
     if (bettingStrategy === 'mm') {
-      // 3 Stage M.M System: Stay at the same level
       if (stage === 1) {
         bS.cBU = betLevels.stage1[level] / bB;
       } else if (stage === 2) {
@@ -356,11 +362,9 @@ function handleTie() {
       }
       showNotification(`Tie! Stage ${stage}, Level ${level + 1}, Bet ${bS.cBU} units`);
     } else if (bettingStrategy === 'dlambert') {
-      // D'Lembert: No change in bet
       bS.cBU = dLambertUnits;
       showNotification(`Tie! D'Lembert, Bet ${bS.cBU} units`);
     } else {
-      // Flatbet: Maintain fixed bet
       bS.cBU = flatbetUnits;
       showNotification(`Tie! Flatbet, Bet ${bS.cBU} unit`);
     }
@@ -392,6 +396,7 @@ function resetBet() {
       }
       consecutiveWins = 0;
       consecutiveLosses = 0;
+      paused = false;
       updateDisplay();
     }
   } catch (e) {
@@ -418,7 +423,7 @@ function undo() {
       if (o === 'win') predictionAccuracy.correct--;
       const u = bB;
       const wU = bS.cBU; // Current bet units before undo
-      if (o === 'win') {
+      if (o === 'win' && !paused) {
         const t = p === 'Banker' ? wU * 0.95 : wU;
         bS.tP -= t;
         bS.cP -= t;
@@ -426,13 +431,11 @@ function undo() {
         w--;
         consecutiveWins--;
         if (bettingStrategy === 'mm') {
-          // Reverse 3 Stage M.M System
           if (bS.cP >= 0) {
-            // If cycle profit was positive, it was reset
-            stage = 3; // Conservative fallback
+            stage = 3;
             level = (betLevels.stage3.length - 1);
             bS.cBU = betLevels.stage3[level] / bB;
-            bS.cP += t; // Restore cycle profit
+            bS.cP += t;
           } else if (stage === 1) {
             if (consecutiveWins >= 1) {
               stage = 3;
@@ -451,27 +454,25 @@ function undo() {
             bS.cBU = betLevels.stage3[level] / bB;
           }
         } else if (bettingStrategy === 'dlambert') {
-          // Reverse D'Lembert: Increase bet by 1 unit
           dLambertUnits++;
           bS.cBU = dLambertUnits;
           if (bS.cP >= 0) {
-            bS.cP += t; // Restore cycle profit
+            bS.cP += t;
           }
         } else {
-          // Flatbet: No change in bet units
           bS.cBU = flatbetUnits;
           if (bS.cP >= 0) {
-            bS.cP += t; // Restore cycle profit
+            bS.cP += t;
           }
         }
-      } else if (o === 'loss') {
+      } else if (o === 'loss' && !paused) {
         bS.tP += wU;
         bS.cP += wU;
         cB += wU * u;
         l--;
         consecutiveLosses--;
+        if (consecutiveLosses < 3) paused = false;
         if (bettingStrategy === 'mm') {
-          // Reverse 3 Stage M.M System
           if (stage === 1) {
             if (consecutiveLosses >= 2) {
               stage = 2;
@@ -490,15 +491,13 @@ function undo() {
             bS.cBU = betLevels.stage1[0] / bB;
           }
         } else if (bettingStrategy === 'dlambert') {
-          // Reverse D'Lembert: Decrease bet by 1 unit, minimum 1
           dLambertUnits = Math.max(1, dLambertUnits - 1);
           bS.cBU = dLambertUnits;
         } else {
-          // Flatbet: No change in bet units
           bS.cBU = flatbetUnits;
         }
       } else if (o === 'tie') {
-        // Reverse tie: no change
+        paused = false;
         if (bettingStrategy === 'mm') {
           if (stage === 1) {
             bS.cBU = betLevels.stage1[level] / bB;
@@ -511,6 +510,11 @@ function undo() {
           bS.cBU = dLambertUnits;
         } else {
           bS.cBU = flatbetUnits;
+        }
+      } else if (paused) {
+        // Undo a result while paused
+        if (o === 'win') {
+          paused = true; // Stay paused if undoing a win
         }
       }
     }
@@ -616,7 +620,7 @@ function getWager() {
   console.time("getWager");
   try {
     const prediction = hybridPrediction();
-    if (!bB || prediction.predict === 'None' || sPR) {
+    if (!bB || prediction.predict === 'None' || sPR || paused) {
       console.timeEnd("getWager");
       return 0;
     }
@@ -644,8 +648,8 @@ function updateDisplay() {
   try {
     document.getElementById("history").innerHTML = r.slice(-10).map(v => `<span class="result ${v === 'P' ? 'player' : v === 'B' ? 'banker' : 'tie'}">${v === 'P' ? 'Player' : v === 'B' ? 'Banker' : 'Tie'}</span>`).join('');
     const p = hybridPrediction();
-    document.getElementById("prediction").innerText = sPR ? "🚨 Stop Profit Reached!" : p.predict !== 'None' ? `Bet ${p.predict}` : "Waiting...";
-    document.getElementById("betSuggestion").innerText = sPR ? "" : p.predict !== 'None' ? `🎯 ${bettingStrategy === 'mm' ? `3 Stage M.M (Stage ${stage}, Level ${level + 1})` : bettingStrategy === 'dlambert' ? `D'Lembert (Bet ${dLambertUnits} units)` : `Flatbet (Bet ${flatbetUnits} unit)`}` : "";
+    document.getElementById("prediction").innerText = sPR ? "🚨 Stop Profit Reached!" : paused ? "⏸ Paused: Waiting for a win" : p.predict !== 'None' ? `Bet ${p.predict}` : "Waiting...";
+    document.getElementById("betSuggestion").innerText = sPR ? "" : paused ? "" : p.predict !== 'None' ? `🎯 ${bettingStrategy === 'mm' ? `3 Stage M.M (Stage ${stage}, Level ${level + 1})` : bettingStrategy === 'dlambert' ? `D'Lembert (Bet ${dLambertUnits} units)` : `Flatbet (Bet ${flatbetUnits} unit)`}` : "";
     const winStreakLength = wL.slice().reverse().findIndex(v => v !== 'win');
     document.getElementById("streakInfo").innerHTML = sPR ? "" : wL.slice(-3).every(v => v === 'loss') ? `🧊 Cold Streak - Losses: ${l - w}` : winStreakLength >= 2 ? `<span class="win-streak">🔥 Win Streak: ${winStreakLength === -1 ? wL.length : winStreakLength} Wins!</span>` : "";
     const wager = getWager();
@@ -705,7 +709,7 @@ async function saveMemory() {
   console.time("saveMemory");
   console.log("saveMemory button clicked");
   try {
-    const data = JSON.stringify({ patterns: pM, stats: { w, l, bB, sB, cB, bS, wL, sPT, sPV, sPE, sPR, stage, level, consecutiveWins, consecutiveLosses, predictionAccuracy, volatility, peakBankroll, lowestBankroll, bankrollHistory, bettingStrategy, dLambertUnits, flatbetUnits } });
+    const data = JSON.stringify({ patterns: pM, stats: { w, l, bB, sB, cB, bS, wL, sPT, sPV, sPE, sPR, stage, level, consecutiveWins, consecutiveLosses, paused, predictionAccuracy, volatility, peakBankroll, lowestBankroll, bankrollHistory, bettingStrategy, dLambertUnits, flatbetUnits } });
     if (data.length > 5 * 1024 * 1024) {
       console.warn("localStorage data too large, clearing old data");
       localStorage.clear();
@@ -713,7 +717,7 @@ async function saveMemory() {
     }
     await new Promise(resolve => setTimeout(resolve, 0));
     localStorage.setItem('baccaratPatterns', JSON.stringify(pM));
-    localStorage.setItem('baccaratStats', JSON.stringify({ w, l, bB, sB, cB, bS, wL, sPT, sPV, sPE, sPR, stage, level, consecutiveWins, consecutiveLosses, predictionAccuracy, volatility, peakBankroll, lowestBankroll, bankrollHistory, bettingStrategy, dLambertUnits, flatbetUnits }));
+    localStorage.setItem('baccaratStats', JSON.stringify({ w, l, bB, sB, cB, bS, wL, sPT, sPV, sPE, sPR, stage, level, consecutiveWins, consecutiveLosses, paused, predictionAccuracy, volatility, peakBankroll, lowestBankroll, bankrollHistory, bettingStrategy, dLambertUnits, flatbetUnits }));
   } catch (e) {
     console.error("Error saving to localStorage:", e);
     showNotification("Failed to save to cloud");
@@ -746,6 +750,7 @@ async function loadMemory() {
       level = Number(s.level) || 0;
       consecutiveWins = Number(s.consecutiveWins) || 0;
       consecutiveLosses = Number(s.consecutiveLosses) || 0;
+      paused = s.paused || false;
       predictionAccuracy = s.predictionAccuracy || { correct: 0, total: 0 };
       volatility = Number(s.volatility) || 0;
       peakBankroll = Number(s.peakBankroll) || sB || 0;
@@ -782,6 +787,7 @@ async function loadMemory() {
     level = 0;
     consecutiveWins = 0;
     consecutiveLosses = 0;
+    paused = false;
     predictionAccuracy = { correct: 0, total: 0 };
     volatility = 0;
     peakBankroll = 0;
@@ -809,6 +815,7 @@ function resetStats() {
       sPV = 0;
       sPE = 0;
       sPR = false;
+      paused = false;
       if (bettingStrategy === 'mm') {
         stage = 1;
         level = 0;
@@ -868,6 +875,7 @@ function startNewShoe() {
       r.length = 0;
       pH.length = 0;
       wL.length = 0;
+      paused = false;
       updateDisplay();
     }
   } catch (e) {
