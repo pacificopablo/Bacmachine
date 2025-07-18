@@ -3,13 +3,13 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>💸 BFC v3.4 "Money Machine"</title>
+  <title>💸 BFC v3.5 "Money Machine"</title>
   <style>
 body{font-family:'Segoe UI',sans-serif;background:#f4f6f8;margin:0;padding:20px;color:#222}h1{text-align:center;margin-bottom:20px;font-size:28px;color:#333}.flex-row{display:flex;flex-wrap:wrap;gap:10px;justify-content:center;margin:10px 0}button{padding:10px 20px;border:none;background:#007bff;color:#fff;border-radius:10px;cursor:pointer;font-weight:600;transition:background .3s}button:hover{background:#0056b3}#resetBetBtn{background:#6c757d}input[type=number],select{padding:10px;font-size:16px;border:1px solid #ccc;border-radius:8px;width:150px}label{font-size:16px;display:flex;align-items:center;gap:6px}.section{text-align:center;margin:12px 0;font-size:18px;font-weight:700}.result{display:inline-block;padding:6px 14px;border-radius:8px;margin:2px;font-weight:700}.player{background:#cce4ff;color:#004085}.banker{background:#ffdada;color:#721c24}.tie{background:#fff3cd;color:#856404}.scroll-box{max-height:300px;overflow-y:auto;background:#fff;border:1px solid #ccc;padding:12px;font-size:14px;border-radius:10px;box-shadow:0 2px 5px rgba(0,0,0,.05);margin-top:20px}.stat-box{background:#fff;border-radius:10px;padding:15px;box-shadow:0 2px 8px rgba(0,0,0,.1);display:inline-block;text-align:center;margin-top:10px}.bet-controls{margin-bottom:1rem;display:flex;flex-wrap:wrap;gap:.5rem;justify-content:center;width:100%;max-width:90vw}.cycle-reset{color:#28a745;font-weight:700}.win-streak{color:#28a745;font-weight:700}.notification{background:#ff4444;color:#fff;padding:10px;border-radius:8px;text-align:center;margin:10px auto;max-width:90%;display:none}.paused{background:#ffc107;color:#856404}.confidence-bar{background:#ddd;border-radius:8px;height:10px;margin:5px 0;overflow:hidden}.confidence-fill{background:#28a745;height:100%;transition:width .3s}
   </style>
 </head>
 <body>
-  <h1>💸 BFC -"Money Machine" </h1>
+  <h1>💸 BFC v3.5 "Money Machine"</h1>
   <div id="notification" class="notification"></div>
   <div class="flex-row">
     <button onclick="addResult('P')">Player</button>
@@ -72,6 +72,10 @@ body{font-family:'Segoe UI',sans-serif;background:#f4f6f8;margin:0;padding:20px;
     <h3>🎯 Patterns Influencing Prediction</h3>
     <div id="predictionPatternsBox">No patterns influencing prediction</div>
   </div>
+  <div class="scroll-box">
+    <h3>🔗 Markov Transition Probabilities</h3>
+    <div id="markovMatrixBox">No transitions recorded</div>
+  </div>
   <script>
 const r = [], pM = {}, pH = [], wL = [], bankrollHistory = [];
 let w = 0, l = 0, bB = 0, sB = 0, cB = 0, sPT = 'percentage', sPV = 0, sPE = 0, sPR = false;
@@ -87,6 +91,11 @@ let oscarUnits = 1;
 let andreiUnits = 1;
 let lastLossBet = 1;
 let patternAge = {};
+let markovMatrix = {
+  P: { P: 0, B: 0, T: 0, total: 0 },
+  B: { P: 0, B: 0, T: 0, total: 0 },
+  T: { P: 0, B: 0, T: 0, total: 0 }
+};
 
 function showNotification(message, isPaused = false) {
   console.log(`Notification: ${message}`);
@@ -164,6 +173,11 @@ function setBankroll() {
     bankrollHistory.length = 0;
     bankrollHistory.push(b);
     patternAge = {};
+    markovMatrix = {
+      P: { P: 0, B: 0, T: 0, total: 0 },
+      B: { P: 0, B: 0, T: 0, total: 0 },
+      T: { P: 0, B: 0, T: 0, total: 0 }
+    };
     updateDisplay();
   } catch (e) {
     console.error("Error in setBankroll:", e);
@@ -671,6 +685,12 @@ function learn(v) {
         console.log(`Updated pattern ${k}: P:${pM[k].P}, B:${pM[k].B}, T:${pM[k].T}`);
       }
     }
+    if (r.length >= 2) {
+      const prev = r[r.length - 2];
+      markovMatrix[prev][v]++;
+      markovMatrix[prev].total++;
+      console.log(`Updated Markov transition: ${prev} -> ${v}, Matrix:`, JSON.stringify(markovMatrix));
+    }
     prunePatterns();
     console.log(`Pattern memory after learning:`, JSON.stringify(pM));
   } catch (e) {
@@ -694,6 +714,12 @@ function unlearn(v) {
           console.log(`Unlearned pattern ${k}: P:${pM[k].P}, B:${pM[k].B}, T:${pM[k].T}`);
         }
       }
+    }
+    if (r.length >= 1 && r.length < markovMatrix[v].total) {
+      const prev = r[r.length - 1];
+      markovMatrix[prev][v] = Math.max(0, markovMatrix[prev][v] - 1);
+      markovMatrix[prev].total = Math.max(0, markovMatrix[prev].total - 1);
+      console.log(`Unlearned Markov transition: ${prev} -> ${v}, Matrix:`, JSON.stringify(markovMatrix));
     }
     prunePatterns();
     console.log(`Pattern memory after unlearning:`, JSON.stringify(pM));
@@ -761,6 +787,34 @@ function getStreakInfo() {
   }
 }
 
+function getMarkovPrediction() {
+  console.time("getMarkovPrediction");
+  try {
+    if (r.length < 2) {
+      console.log("Not enough results for Markov prediction");
+      return { prediction: null, confidence: 0, probabilities: {} };
+    }
+    const last = r[r.length - 1];
+    const transitions = markovMatrix[last];
+    const total = transitions.total || 1;
+    const probabilities = {
+      Player: transitions.P / total,
+      Banker: transitions.B / total,
+      Tie: transitions.T / total
+    };
+    const maxProb = Math.max(probabilities.Player, probabilities.Banker, probabilities.Tie);
+    const prediction = maxProb === probabilities.Player ? 'Player' : maxProb === probabilities.Banker ? 'Banker' : 'Tie';
+    const confidence = maxProb * Math.min(total / 5, 1);
+    console.log(`Markov prediction: ${prediction}, confidence: ${confidence}, probabilities:`, probabilities);
+    console.timeEnd("getMarkovPrediction");
+    return { prediction, confidence, probabilities };
+  } catch (e) {
+    console.error("Error in getMarkovPrediction:", e);
+    showNotification("Error in Markov prediction");
+    return { prediction: null, confidence: 0, probabilities: {} };
+  }
+}
+
 function hybridPrediction() {
   console.time("hybridPrediction");
   try {
@@ -772,14 +826,42 @@ function hybridPrediction() {
       console.log("Not enough hands for prediction");
       showNotification(`Need ${earlyHandLimit - r.length} more hands for prediction`);
       console.timeEnd("hybridPrediction");
-      return { predict: 'None', confidence: 0, patternsUsed: [], reason: `Need ${earlyHandLimit - r.length} more hands` };
+      return { predict: 'None', confidence: 0, patternsUsed: [], reason: `Need ${earlyHandLimit - r.length} more hands`, markovProb: {} };
     }
     const patternVote = getPatternVote();
+    const markovVote = getMarkovPrediction();
     const { streakType, streakLength, isChoppy } = getStreakInfo();
-    let prediction = patternVote.prediction || 'None';
-    let confidence = patternVote.confidence || 0;
+    
+    let prediction = 'None';
+    let confidence = 0;
     let patternsUsed = patternVote.patternsUsed || [];
-    let reason = patternVote.prediction ? 'Pattern-based' : 'No strong patterns';
+    let markovProb = markovVote.probabilities || {};
+    let reason = 'No strong patterns or transitions';
+    
+    if (patternVote.prediction && markovVote.prediction) {
+      const patternWeight = 0.6;
+      const markovWeight = 0.4;
+      const scores = {
+        Player: patternVote.prediction === 'Player' ? patternVote.confidence * patternWeight : 0 + (markovVote.prediction === 'Player' ? markovVote.confidence * markovWeight : 0),
+        Banker: patternVote.prediction === 'Banker' ? patternVote.confidence * patternWeight : 0 + (markovVote.prediction === 'Banker' ? markovVote.confidence * markovWeight : 0),
+        Tie: patternVote.prediction === 'Tie' ? patternVote.confidence * patternWeight : 0 + (markovVote.prediction === 'Tie' ? markovVote.confidence * markovWeight : 0)
+      };
+      const maxScore = Math.max(scores.Player, scores.Banker, scores.Tie);
+      prediction = maxScore === scores.Player ? 'Player' : maxScore === scores.Banker ? 'Banker' : 'Tie';
+      confidence = maxScore;
+      reason = `Combined pattern (${patternVote.confidence.toFixed(2)}) and Markov (${markovVote.confidence.toFixed(2)})`;
+      console.log(`Combined prediction: ${prediction}, scores:`, scores);
+    } else if (patternVote.prediction) {
+      prediction = patternVote.prediction;
+      confidence = patternVote.confidence;
+      reason = 'Pattern-based';
+      console.log(`Pattern-based prediction: ${prediction}, confidence: ${confidence}`);
+    } else if (markovVote.prediction) {
+      prediction = markovVote.prediction;
+      confidence = markovVote.confidence;
+      reason = 'Markov-based';
+      console.log(`Markov-based prediction: ${prediction}, confidence: ${confidence}`);
+    }
 
     if (streakType && streakLength >= 3 && !isChoppy) {
       prediction = streakType;
@@ -796,12 +878,14 @@ function hybridPrediction() {
         prediction = recent[0] === recent[1] ? (recent[1] === 'P' ? 'Player' : 'Banker') : (recent[1] === 'P' ? 'Banker' : 'Player');
         confidence = 0.15;
         patternsUsed = [];
+        markovProb = {};
         reason = recent[0] === recent[1] ? 'Following recent repeat' : 'Reversing choppy pattern';
         console.log(`Fallback to recent trend: ${prediction}, confidence set to ${confidence}`);
       } else if (recent.length === 1) {
         prediction = recent[0] === 'P' ? 'Player' : 'Banker';
         confidence = 0.15;
         patternsUsed = [];
+        markovProb = {};
         reason = 'Following last outcome';
         console.log(`Fallback to last outcome: ${prediction}, confidence set to ${confidence}`);
       }
@@ -812,17 +896,18 @@ function hybridPrediction() {
       prediction = 'None';
       confidence = 0;
       patternsUsed = [];
+      markovProb = {};
       reason = `Confidence ${(confidence * 100).toFixed(1)}% below threshold`;
       showNotification(reason);
     }
 
     console.log(`Final prediction: ${prediction}, confidence: ${confidence}, reason: ${reason}`);
     console.timeEnd("hybridPrediction");
-    return { predict: prediction, confidence, patternsUsed, reason };
+    return { predict: prediction, confidence, patternsUsed, reason, markovProb };
   } catch (e) {
     console.error("Error in hybridPrediction:", e);
     showNotification("Error making prediction");
-    return { predict: 'None', confidence: 0, patternsUsed: [], reason: 'Error' };
+    return { predict: 'None', confidence: 0, patternsUsed: [], reason: 'Error', markovProb: {} };
   }
 }
 
@@ -951,6 +1036,11 @@ function updateDisplay() {
       }).join('<br>');
     }
     document.getElementById("predictionPatternsBox").innerHTML = predictionPatterns;
+    const markovDisplay = Object.entries(markovMatrix).map(([from, transitions]) => {
+      const total = transitions.total || 1;
+      return `From ${from}: P: ${(transitions.P / total * 100).toFixed(1)}%, B: ${(transitions.B / total * 100).toFixed(1)}%, T: ${(transitions.T / total * 100).toFixed(1)}% (Total: ${transitions.total})`;
+    }).join('<br>');
+    document.getElementById("markovMatrixBox").innerHTML = markovDisplay || "No transitions recorded";
     console.log("Display updated");
   } catch (e) {
     console.error("Error in updateDisplay:", e);
@@ -976,7 +1066,7 @@ async function saveMemory() {
   console.time("saveMemory");
   console.log("saveMemory button clicked");
   try {
-    const data = JSON.stringify({ patterns: pM, stats: { w, l, bB, sB, cB, bS, wL, sPT, sPV, sPE, sPR, stage, level, consecutiveWins, consecutiveLosses, paused, pauseHandCount, predictionAccuracy, volatility, peakBankroll, lowestBankroll, bankrollHistory, bettingStrategy, dLambertUnits, flatbetUnits, oscarUnits, andreiUnits, lastLossBet, patternAge } });
+    const data = JSON.stringify({ patterns: pM, stats: { w, l, bB, sB, cB, bS, wL, sPT, sPV, sPE, sPR, stage, level, consecutiveWins, consecutiveLosses, paused, pauseHandCount, predictionAccuracy, volatility, peakBankroll, lowestBankroll, bankrollHistory, bettingStrategy, dLambertUnits, flatbetUnits, oscarUnits, andreiUnits, lastLossBet, patternAge, markovMatrix } });
     if (data.length > 5 * 1024 * 1024) {
       console.warn("localStorage data too large, clearing old data");
       localStorage.clear();
@@ -984,7 +1074,7 @@ async function saveMemory() {
     }
     await new Promise(resolve => setTimeout(resolve, 0));
     localStorage.setItem('baccaratPatterns', JSON.stringify(pM));
-    localStorage.setItem('baccaratStats', JSON.stringify({ w, l, bB, sB, cB, bS, wL, sPT, sPV, sPE, sPR, stage, level, consecutiveWins, consecutiveLosses, paused, pauseHandCount, predictionAccuracy, volatility, peakBankroll, lowestBankroll, bankrollHistory, bettingStrategy, dLambertUnits, flatbetUnits, oscarUnits, andreiUnits, lastLossBet, patternAge }));
+    localStorage.setItem('baccaratStats', JSON.stringify({ w, l, bB, sB, cB, bS, wL, sPT, sPV, sPE, sPR, stage, level, consecutiveWins, consecutiveLosses, paused, pauseHandCount, predictionAccuracy, volatility, peakBankroll, lowestBankroll, bankrollHistory, bettingStrategy, dLambertUnits, flatbetUnits, oscarUnits, andreiUnits, lastLossBet, patternAge, markovMatrix }));
     console.log("Memory saved to localStorage");
   } catch (e) {
     console.error("Error saving to localStorage:", e);
@@ -1034,6 +1124,11 @@ async function loadMemory() {
       andreiUnits = Number(s.andreiUnits) || 1;
       lastLossBet = Number(s.lastLossBet) || 1;
       patternAge = s.patternAge || {};
+      markovMatrix = s.markovMatrix || {
+        P: { P: 0, B: 0, T: 0, total: 0 },
+        B: { P: 0, B: 0, T: 0, total: 0 },
+        T: { P: 0, B: 0, T: 0, total: 0 }
+      };
       document.getElementById("stopProfitType").value = sPT;
       document.getElementById("stopProfitInput").value = sPV || '';
       document.getElementById("bettingStrategy").value = bettingStrategy;
@@ -1075,6 +1170,11 @@ async function loadMemory() {
     andreiUnits = 1;
     lastLossBet = 1;
     patternAge = {};
+    markovMatrix = {
+      P: { P: 0, B: 0, T: 0, total: 0 },
+      B: { P: 0, B: 0, T: 0, total: 0 },
+      T: { P: 0, B: 0, T: 0, total: 0 }
+    };
     document.getElementById("stopProfitType").value = sPT;
     document.getElementById("stopProfitInput").value = '';
     document.getElementById("bettingStrategy").value = bettingStrategy;
@@ -1124,6 +1224,11 @@ function resetStats() {
       bankrollHistory.length = 0;
       bankrollHistory.push(sB);
       patternAge = {};
+      markovMatrix = {
+        P: { P: 0, B: 0, T: 0, total: 0 },
+        B: { P: 0, B: 0, T: 0, total: 0 },
+        T: { P: 0, B: 0, T: 0, total: 0 }
+      };
       document.getElementById("stopProfitType").value = sPT;
       document.getElementById("stopProfitInput").value = '';
       document.getElementById("bettingStrategy").value = bettingStrategy;
@@ -1143,9 +1248,14 @@ function resetMemory() {
     if (confirm("Reset patterns?")) {
       for (let k in pM) delete pM[k];
       patternAge = {};
+      markovMatrix = {
+        P: { P: 0, B: 0, T: 0, total: 0 },
+        B: { P: 0, B: 0, T: 0, total: 0 },
+        T: { P: 0, B: 0, T: 0, total: 0 }
+      };
       updateDisplay();
       saveMemoryFast();
-      console.log("Pattern memory reset");
+      console.log("Pattern memory and Markov matrix reset");
     }
   } catch (e) {
     console.error("Error in resetMemory:", e);
