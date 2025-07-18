@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <title>💸 BFC v3.4 "Money Machine"</title>
   <style>
-body{font-family:'Segoe UI',sans-serif;background:#f4f6f8;margin:0;padding:20px;color:#222}h1{text-align:center;margin-bottom:20px;font-size:28px;color:#333}.flex-row{display:flex;flex-wrap:wrap;gap:10px;justify-content:center;margin:10px 0}button{padding:10px 20px;border:none;background:#007bff;color:#fff;border-radius:10px;cursor:pointer;font-weight:600;transition:background .3s}button:hover{background:#0056b3}#resetBetBtn{background:#6c757d}input[type=number],select{padding:10px;font-size:16px;border:1px solid #ccc;border-radius:8px;width:150px}label{font-size:16px;display:flex;align-items:center;gap:6px}.section{text-align:center;margin:12px 0;font-size:18px;font-weight:700}.result{display:inline-block;padding:6px 14px;border-radius:8px;margin:2px;font-weight:700}.player{background:#cce4ff;color:#004085}.banker{background:#ffdada;color:#721c24}.tie{background:#fff3cd;color:#856404}.scroll-box{max-height:300px;overflow-y:auto;background:#fff;border:1px solid #ccc;padding:12px;font-size:14px;border-radius:10px;box-shadow:0 2px 5px rgba(0,0,0,.05);margin-top:20px}.stat-box{background:#fff;border-radius:10px;padding:15px;box-shadow:0 2px 8px rgba(0,0,0,.1);display:inline-block;text-align:center;margin-top:10px}.bet-controls{margin-bottom:1rem;display:flex;flex-wrap:wrap;gap:.5rem;justify-content:center;width:100%;max-width:90vw}.cycle-reset{color:#28a745;font-weight:700}.win-streak{color:#28a745;font-weight:700}.notification{background:#ff4444;color:#fff;padding:10px;border-radius:8px;text-align:center;margin:10px auto;max-width:90%;display:none;}.paused{background:#ffc107;color:#856404;}
+body{font-family:'Segoe UI',sans-serif;background:#f4f6f8;margin:0;padding:20px;color:#222}h1{text-align:center;margin-bottom:20px;font-size:28px;color:#333}.flex-row{display:flex;flex-wrap:wrap;gap:10px;justify-content:center;margin:10px 0}button{padding:10px 20px;border:none;background:#007bff;color:#fff;border-radius:10px;cursor:pointer;font-weight:600;transition:background .3s}button:hover{background:#0056b3}#resetBetBtn{background:#6c757d}input[type=number],select{padding:10px;font-size:16px;border:1px solid #ccc;border-radius:8px;width:150px}label{font-size:16px;display:flex;align-items:center;gap:6px}.section{text-align:center;margin:12px 0;font-size:18px;font-weight:700}.result{display:inline-block;padding:6px 14px;border-radius:8px;margin:2px;font-weight:700}.player{background:#cce4ff;color:#004085}.banker{background:#ffdada;color:#721c24}.tie{background:#fff3cd;color:#856404}.scroll-box{max-height:300px;overflow-y:auto;background:#fff;border:1px solid #ccc;padding:12px;font-size:14px;border-radius:10px;box-shadow:0 2px 5px rgba(0,0,0,.05);margin-top:20px}.stat-box{background:#fff;border-radius:10px;padding:15px;box-shadow:0 2px 8px rgba(0,0,0,.1);display:inline-block;text-align:center;margin-top:10px}.bet-controls{margin-bottom:1rem;display:flex;flex-wrap:wrap;gap:.5rem;justify-content:center;width:100%;max-width:90vw}.cycle-reset{color:#28a745;font-weight:700}.win-streak{color:#28a745;font-weight:700}.notification{background:#ff4444;color:#fff;padding:10px;border-radius:8px;text-align:center;margin:10px auto;max-width:90%;display:none}.paused{background:#ffc107;color:#856404}.confidence-bar{background:#ddd;border-radius:8px;height:10px;margin:5px 0;overflow:hidden}.confidence-fill{background:#28a745;height:100%;transition:width .3s}
   </style>
 </head>
 <body>
@@ -40,7 +40,10 @@ body{font-family:'Segoe UI',sans-serif;background:#f4f6f8;margin:0;padding:20px;
   </div>
   <div class="flex-row">
     <label>Early Hands: 
-      <input type="number" id="earlyHandLimit" value="10" min="5" max="20">
+      <input type="number" id="earlyHandLimit" value="5" min="3" max="20">
+    </label>
+    <label>Min Confidence (%): 
+      <input type="number" id="confidenceThreshold" value="10" min="0" max="100">
     </label>
   </div>
   <div class="flex-row">
@@ -72,12 +75,13 @@ const r = [], pM = {}, pH = [], wL = [], bankrollHistory = [];
 let w = 0, l = 0, bB = 0, sB = 0, cB = 0, sPT = 'percentage', sPV = 0, sPE = 0, sPR = false;
 let predictionAccuracy = { correct: 0, total: 0 }, volatility = 0;
 let peakBankroll = 0, lowestBankroll = Infinity;
-let stage = 1, level = 1, consecutiveWins = 0, consecutiveLosses = 0, paused = false;
-let bettingStrategy = 'mm'; // Default to 3 Stage M.M
+let stage = 1, level = 1, consecutiveWins = 0, consecutiveLosses = 0, paused = false, pauseHandCount = 0;
+let bettingStrategy = 'mm';
 let bS = { cBU: 1, tP: 0, cP: 0, pL: [] }, sT = null;
 let betLevels = { stage1: [], stage2: [], stage3: [] };
-let dLambertUnits = 1; // D'Lembert current bet units
-let flatbetUnits = 1; // Flatbet fixed bet units
+let dLambertUnits = 1;
+let flatbetUnits = 1;
+let patternAge = {};
 
 function showNotification(message, isPaused = false) {
   console.log(`Notification: ${message}`);
@@ -120,6 +124,7 @@ function setBankroll() {
     cB = b;
     sPR = false;
     paused = false;
+    pauseHandCount = 0;
     if (bettingStrategy === 'mm') {
       betLevels = {
         stage1: [bB, bB * 2, bB * 3],
@@ -146,6 +151,7 @@ function setBankroll() {
     lowestBankroll = b;
     bankrollHistory.length = 0;
     bankrollHistory.push(b);
+    patternAge = {};
     updateDisplay();
   } catch (e) {
     console.error("Error in setBankroll:", e);
@@ -182,32 +188,37 @@ function addResult(v) {
       const recent = r.slice(-5).concat([v]);
       let switches = 0;
       for (let i = 1; i < recent.length; i++) {
-        if (recent[i] !== recent[i - 1]) switches++;
+        if (recent[i] !== recent[i - 1] && recent[i] !== 'T' && recent[i - 1] !== 'T') switches++;
       }
       volatility = switches / (recent.length - 1);
     }
     r.push(v);
     learn(v);
+    if (paused) {
+      pauseHandCount++;
+      if (v !== 'T' && (p.predict[0] === v || pauseHandCount >= 3)) {
+        paused = false;
+        consecutiveLosses = 0;
+        pauseHandCount = 0;
+        showNotification("Resuming betting: Win or 3 hands passed");
+      } else {
+        showNotification(`Paused: Waiting for win or ${3 - pauseHandCount} more hands`, true);
+      }
+    }
     if (p.predict !== 'None') {
       pH.push(p.predict);
       const correct = p.predict[0] === v;
       predictionAccuracy.total++;
       if (correct) predictionAccuracy.correct++;
-      if (paused) {
-        if (correct) {
-          paused = false;
-          consecutiveLosses = 0;
-          showNotification("Win detected, resuming betting");
-        } else {
-          showNotification("Paused due to 3 consecutive losses", true);
-        }
-      } else {
+      if (!paused) {
         if (v === 'T') {
           handleTie();
         } else {
           correct ? handleWin(p.predict) : handleLoss();
         }
         wL.push(v === 'T' ? 'tie' : correct ? 'win' : 'loss');
+      } else {
+        wL.push(null);
       }
     } else {
       pH.push(null);
@@ -231,16 +242,17 @@ function handleWin(v) {
   console.log("handleWin called with value:", v);
   try {
     const u = bB;
-    const wU = bS.cBU; // Current bet units
-    const p = v === 'Banker' ? wU * 0.95 : wU; // Account for banker commission
+    const wU = bS.cBU;
+    const p = v === 'Banker' ? wU * 0.95 : wU;
     bS.tP += p;
     bS.cP += p;
     cB += p * u;
     w++;
     consecutiveWins++;
     consecutiveLosses = 0;
-    paused = false; // Resume betting on win
-    let resetCycle = bS.cP > 0; // Check if cycle profit is positive
+    paused = false;
+    pauseHandCount = 0;
+    let resetCycle = bS.cP > 0;
     if (bettingStrategy === 'mm') {
       if (resetCycle) {
         stage = 1;
@@ -300,7 +312,7 @@ function handleLoss() {
   console.log("handleLoss called");
   try {
     const u = bB;
-    const wU = bS.cBU; // Current bet units
+    const wU = bS.cBU;
     bS.tP -= wU;
     bS.cP -= wU;
     cB -= wU * u;
@@ -309,6 +321,7 @@ function handleLoss() {
     consecutiveLosses++;
     if (consecutiveLosses >= 3) {
       paused = true;
+      pauseHandCount = 0;
       showNotification("Paused due to 3 consecutive losses", true);
     }
     if (bettingStrategy === 'mm') {
@@ -351,7 +364,8 @@ function handleTie() {
   try {
     consecutiveWins = 0;
     consecutiveLosses = 0;
-    paused = false; // Reset pause on tie
+    paused = false;
+    pauseHandCount = 0;
     if (bettingStrategy === 'mm') {
       if (stage === 1) {
         bS.cBU = betLevels.stage1[level] / bB;
@@ -397,6 +411,7 @@ function resetBet() {
       consecutiveWins = 0;
       consecutiveLosses = 0;
       paused = false;
+      pauseHandCount = 0;
       updateDisplay();
     }
   } catch (e) {
@@ -422,7 +437,7 @@ function undo() {
       predictionAccuracy.total--;
       if (o === 'win') predictionAccuracy.correct--;
       const u = bB;
-      const wU = bS.cBU; // Current bet units before undo
+      const wU = bS.cBU;
       if (o === 'win' && !paused) {
         const t = p === 'Banker' ? wU * 0.95 : wU;
         bS.tP -= t;
@@ -471,7 +486,10 @@ function undo() {
         cB += wU * u;
         l--;
         consecutiveLosses--;
-        if (consecutiveLosses < 3) paused = false;
+        if (consecutiveLosses < 3) {
+          paused = false;
+          pauseHandCount = 0;
+        }
         if (bettingStrategy === 'mm') {
           if (stage === 1) {
             if (consecutiveLosses >= 2) {
@@ -498,6 +516,7 @@ function undo() {
         }
       } else if (o === 'tie') {
         paused = false;
+        pauseHandCount = 0;
         if (bettingStrategy === 'mm') {
           if (stage === 1) {
             bS.cBU = betLevels.stage1[level] / bB;
@@ -512,9 +531,8 @@ function undo() {
           bS.cBU = flatbetUnits;
         }
       } else if (paused) {
-        // Undo a result while paused
         if (o === 'win') {
-          paused = true; // Stay paused if undoing a win
+          paused = true;
         }
       }
     }
@@ -523,7 +541,7 @@ function undo() {
       const recent = r.slice(-5);
       let switches = 0;
       for (let i = 1; i < recent.length; i++) {
-        if (recent[i] !== recent[i - 1]) switches++;
+        if (recent[i] !== recent[i - 1] && recent[i] !== 'T' && recent[i - 1] !== 'T') switches++;
       }
       volatility = switches / (recent.length - 1);
     } else {
@@ -544,13 +562,19 @@ function undo() {
 function learn(v) {
   console.time("learn");
   try {
-    for (let n = 2; n <= 6; n++) {
+    const maxPatternLength = Math.min(3, Math.floor(r.length / 2) + 2);
+    console.log(`Learning result: ${v}, maxPatternLength: ${maxPatternLength}, current hand count: ${r.length}`);
+    for (let n = 2; n <= maxPatternLength; n++) {
       if (r.length >= n) {
         const k = r.slice(-n, -1).join('');
-        if (!pM[k]) pM[k] = { P: 0, B: 0, T: 0 };
+        if (!pM[k]) pM[k] = { P: 0, B: 0, T: 0, lastSeen: r.length };
         pM[k][v]++;
+        patternAge[k] = r.length;
+        console.log(`Updated pattern ${k}: P:${pM[k].P}, B:${pM[k].B}, T:${pM[k].T}`);
       }
     }
+    prunePatterns();
+    console.log(`Pattern memory after learning:`, JSON.stringify(pM));
   } catch (e) {
     console.error("Error in learn:", e);
     showNotification("Error learning pattern");
@@ -561,12 +585,20 @@ function learn(v) {
 function unlearn(v) {
   console.time("unlearn");
   try {
-    for (let n = 2; n <= 6; n++) {
+    const maxPatternLength = Math.min(3, Math.floor(r.length / 2) + 2);
+    console.log(`Unlearning result: ${v}, maxPatternLength: ${maxPatternLength}`);
+    for (let n = 2; n <= maxPatternLength; n++) {
       if (r.length >= n - 1) {
         const k = r.slice(-n + 1, -1).join('');
-        pM[k] && (pM[k][v] = Math.max(0, pM[k][v] - 1));
+        if (pM[k]) {
+          pM[k][v] = Math.max(0, pM[k][v] - 1);
+          patternAge[k] = r.length;
+          console.log(`Unlearned pattern ${k}: P:${pM[k].P}, B:${pM[k].B}, T:${pM[k].T}`);
+        }
       }
     }
+    prunePatterns();
+    console.log(`Pattern memory after unlearning:`, JSON.stringify(pM));
   } catch (e) {
     console.error("Error in unlearn:", e);
     showNotification("Error unlearning pattern");
@@ -574,45 +606,174 @@ function unlearn(v) {
   console.timeEnd("unlearn");
 }
 
+function prunePatterns() {
+  console.time("prunePatterns");
+  try {
+    const decayThreshold = 200;
+    const recentThreshold = 20;
+    console.log(`Pruning patterns, decayThreshold: ${decayThreshold}, recentThreshold: ${recentThreshold}`);
+    for (let k in pM) {
+      const total = (pM[k].P || 0) + (pM[k].B || 0) + (pM[k].T || 0);
+      const age = r.length - (patternAge[k] || 0);
+      if (total < 1 || (total < 2 && age > recentThreshold) || age > decayThreshold) {
+        console.log(`Pruning pattern ${k} (total: ${total}, age: ${age})`);
+        delete pM[k];
+        delete patternAge[k];
+      }
+    }
+    console.log(`Pattern memory after pruning:`, JSON.stringify(pM));
+  } catch (e) {
+    console.error("Error in prunePatterns:", e);
+    showNotification("Error pruning patterns");
+  }
+  console.timeEnd("prunePatterns");
+}
+
+function getStreakInfo() {
+  console.time("getStreakInfo");
+  try {
+    let streakType = null, streakLength = 0, isChoppy = false;
+    if (r.length >= 2) {
+      const recent = r.slice(-6).filter(x => x !== 'T');
+      if (recent.length >= 2) {
+        let switches = 0;
+        for (let i = 1; i < recent.length; i++) {
+          if (recent[i] !== recent[i - 1]) switches++;
+        }
+        isChoppy = switches / (recent.length - 1) > 0.7;
+      }
+      if (!isChoppy) {
+        const last = r.slice(-1)[0];
+        if (last !== 'T') {
+          let i = r.length - 1;
+          while (i >= 0 && r[i] === last && r[i] !== 'T') {
+            streakLength++;
+            i--;
+          }
+          streakType = last === 'P' ? 'Player' : last === 'B' ? 'Banker' : null;
+        }
+      }
+    }
+    console.log(`Streak info: type=${streakType}, length=${streakLength}, isChoppy=${isChoppy}`);
+    console.timeEnd("getStreakInfo");
+    return { streakType, streakLength, isChoppy };
+  } catch (e) {
+    console.error("Error in getStreakInfo:", e);
+    return { streakType: null, streakLength: 0, isChoppy: false };
+  }
+}
+
 function hybridPrediction() {
   console.time("hybridPrediction");
   try {
+    const earlyHandLimit = parseInt(document.getElementById("earlyHandLimit").value) || 5;
+    let confidenceThreshold = parseFloat(document.getElementById("confidenceThreshold").value) / 100 || 0.1;
+    if (r.length >= 20) confidenceThreshold = Math.max(0.05, confidenceThreshold * 0.5);
+    console.log(`hybridPrediction: hands=${r.length}, earlyHandLimit=${earlyHandLimit}, confidenceThreshold=${confidenceThreshold}`);
+    if (r.length < earlyHandLimit) {
+      console.log("Not enough hands for prediction");
+      showNotification(`Need ${earlyHandLimit - r.length} more hands for prediction`);
+      console.timeEnd("hybridPrediction");
+      return { predict: 'None', confidence: 0, patternsUsed: [], reason: `Need ${earlyHandLimit - r.length} more hands` };
+    }
     const patternVote = getPatternVote();
+    const { streakType, streakLength, isChoppy } = getStreakInfo();
+    let prediction = patternVote.prediction || 'None';
+    let confidence = patternVote.confidence || 0;
+    let patternsUsed = patternVote.patternsUsed || [];
+    let reason = patternVote.prediction ? 'Pattern-based' : 'No strong patterns';
+
+    if (streakType && streakLength >= 3 && !isChoppy) {
+      prediction = streakType;
+      confidence = Math.min(confidence + 0.3, 1);
+      reason = 'Following strong streak';
+      console.log(`Streak override: ${prediction}, confidence boosted to ${confidence}`);
+    } else if (isChoppy && prediction !== 'None') {
+      confidence *= 0.9;
+      reason = 'Choppy pattern, confidence adjusted';
+      console.log(`Choppy adjustment: confidence reduced to ${confidence}`);
+    } else if (prediction === 'None' && r.length >= 2) {
+      const recent = r.slice(-2).filter(x => x !== 'T');
+      if (recent.length >= 2) {
+        prediction = recent[0] === recent[1] ? (recent[1] === 'P' ? 'Player' : 'Banker') : (recent[1] === 'P' ? 'Banker' : 'Player');
+        confidence = 0.15;
+        patternsUsed = [];
+        reason = recent[0] === recent[1] ? 'Following recent repeat' : 'Reversing choppy pattern';
+        console.log(`Fallback to recent trend: ${prediction}, confidence set to ${confidence}`);
+      } else if (recent.length === 1) {
+        prediction = recent[0] === 'P' ? 'Player' : 'Banker';
+        confidence = 0.15;
+        patternsUsed = [];
+        reason = 'Following last outcome';
+        console.log(`Fallback to last outcome: ${prediction}, confidence set to ${confidence}`);
+      }
+    }
+
+    if (confidence < confidenceThreshold) {
+      console.log(`Confidence ${confidence} below threshold ${confidenceThreshold}`);
+      prediction = 'None';
+      confidence = 0;
+      patternsUsed = [];
+      reason = `Confidence ${(confidence * 100).toFixed(1)}% below threshold`;
+      showNotification(reason);
+    }
+
+    console.log(`Final prediction: ${prediction}, confidence: ${confidence}, reason: ${reason}`);
     console.timeEnd("hybridPrediction");
-    return {
-      predict: patternVote || 'None',
-      confidence: 0
-    };
+    return { predict: prediction, confidence, patternsUsed, reason };
   } catch (e) {
     console.error("Error in hybridPrediction:", e);
     showNotification("Error making prediction");
-    return { predict: 'None', confidence: 0 };
+    return { predict: 'None', confidence: 0, patternsUsed: [], reason: 'Error' };
   }
 }
 
 function getPatternVote() {
   console.time("getPatternVote");
   try {
-    for (let n = Math.min(6, r.length); n >= 2; n--) {
+    let maxScore = -1;
+    let prediction = null;
+    let patternsUsed = [];
+    const maxPatternLength = Math.min(3, Math.floor(r.length / 2) + 2);
+    const historicalAccuracy = predictionAccuracy.total > 0 ? Math.min(predictionAccuracy.correct / predictionAccuracy.total, 0.9) : 0.5;
+    console.log(`getPatternVote: maxPatternLength=${maxPatternLength}, historicalAccuracy=${historicalAccuracy}`);
+
+    for (let n = maxPatternLength; n >= 2; n--) {
       const key = r.slice(-n + 1).join('');
       if (pM[key]) {
         const { P = 0, B = 0, T = 0 } = pM[key];
         const total = P + B + T;
-        if (total >= Math.max(3, n)) {
-          const reliability = total / (n * 2);
-          console.timeEnd("getPatternVote");
-          if (P * reliability > B * reliability && P * reliability > T * reliability) return 'Player';
-          if (B * reliability > P * reliability && B * reliability > T * reliability) return 'Banker';
-          if (T * reliability > P * reliability && T * reliability > B * reliability) return 'Tie';
+        if (total >= 1) {
+          const reliability = Math.min(total / (n * 2), 1);
+          const ageFactor = Math.max(0.5, 1 - (r.length - (patternAge[key] || r.length)) / 200);
+          const lengthWeight = 0.2 * n;
+          const scores = {
+            Player: P * reliability * lengthWeight * ageFactor * historicalAccuracy,
+            Banker: B * reliability * lengthWeight * ageFactor * historicalAccuracy,
+            Tie: T * reliability * lengthWeight * ageFactor * historicalAccuracy
+          };
+          const maxOutcome = Math.max(scores.Player, scores.Banker, scores.Tie);
+          if (maxOutcome > maxScore) {
+            maxScore = maxOutcome;
+            prediction = scores.Player === maxOutcome ? 'Player' : scores.Banker === maxOutcome ? 'Banker' : 'Tie';
+            patternsUsed = [{ key, P, B, T, total, reliability, ageFactor, score: maxOutcome }];
+            console.log(`New best pattern: ${key}, prediction: ${prediction}, score: ${maxOutcome}`);
+          } else if (maxOutcome === maxScore) {
+            patternsUsed.push({ key, P, B, T, total, reliability, ageFactor, score: maxOutcome });
+            console.log(`Tied pattern: ${key}, score: ${maxOutcome}`);
+          }
         }
       }
     }
+
+    const confidence = maxScore > 0 ? Math.min(maxScore / 8, 1) : 0;
+    console.log(`Pattern vote result: prediction=${prediction}, confidence=${confidence}, patternsUsed=`, patternsUsed);
     console.timeEnd("getPatternVote");
-    return null;
+    return { prediction, confidence, patternsUsed };
   } catch (e) {
     console.error("Error in getPatternVote:", e);
     showNotification("Error voting on pattern");
-    return null;
+    return { prediction: null, confidence: 0, patternsUsed: [] };
   }
 }
 
@@ -634,6 +795,7 @@ function getWager() {
     }
     wager = Math.round(wager);
     wager = Math.min(wager, cB);
+    console.log(`Wager calculated: $${wager}`);
     console.timeEnd("getWager");
     return wager;
   } catch (e) {
@@ -648,7 +810,10 @@ function updateDisplay() {
   try {
     document.getElementById("history").innerHTML = r.slice(-10).map(v => `<span class="result ${v === 'P' ? 'player' : v === 'B' ? 'banker' : 'tie'}">${v === 'P' ? 'Player' : v === 'B' ? 'Banker' : 'Tie'}</span>`).join('');
     const p = hybridPrediction();
-    document.getElementById("prediction").innerText = sPR ? "🚨 Stop Profit Reached!" : paused ? "⏸ Paused: Waiting for a win" : p.predict !== 'None' ? `Bet ${p.predict}` : "Waiting...";
+    document.getElementById("prediction").innerHTML = sPR ? "🚨 Stop Profit Reached!" : 
+      paused ? `⏸ Paused: Waiting for win or ${3 - pauseHandCount} more hands` : 
+      p.predict !== 'None' ? `Bet ${p.predict} (Confidence: ${(p.confidence * 100).toFixed(1)}%)<br><small>Reason: ${p.reason}</small><div class="confidence-bar"><div class="confidence-fill" style="width:${p.confidence * 100}%"></div></div>` : 
+      `Waiting... (${p.reason || 'No prediction'})`;
     document.getElementById("betSuggestion").innerText = sPR ? "" : paused ? "" : p.predict !== 'None' ? `🎯 ${bettingStrategy === 'mm' ? `3 Stage M.M (Stage ${stage}, Level ${level + 1})` : bettingStrategy === 'dlambert' ? `D'Lembert (Bet ${dLambertUnits} units)` : `Flatbet (Bet ${flatbetUnits} unit)`}` : "";
     const winStreakLength = wL.slice().reverse().findIndex(v => v !== 'win');
     document.getElementById("streakInfo").innerHTML = sPR ? "" : wL.slice(-3).every(v => v === 'loss') ? `🧊 Cold Streak - Losses: ${l - w}` : winStreakLength >= 2 ? `<span class="win-streak">🔥 Win Streak: ${winStreakLength === -1 ? wL.length : winStreakLength} Wins!</span>` : "";
@@ -666,25 +831,19 @@ function updateDisplay() {
     document.getElementById("patternMemoryBox").innerHTML = Object.entries(pM).map(([k, v]) => {
       const t = (v.P || 0) + (v.B || 0) + (v.T || 0);
       const f = v.P > v.B && v.P > v.T ? 'Player' : v.B > v.P && v.B > v.T ? 'Banker' : v.T > v.P && v.T > v.B ? 'Tie' : 'Even';
-      return `${k}→P:${v.P || 0},B:${v.B || 0},T:${v.T || 0}→<b>${f}</b> (${t})<br>`;
+      const successRate = t > 0 ? Math.max(v.P, v.B, v.T) / t * 100 : 0;
+      const age = r.length - (patternAge[k] || 0);
+      return `${k}→P:${v.P || 0},B:${v.B || 0},T:${v.T || 0}→<b>${f}</b> (${t}, ${successRate.toFixed(1)}%, Age: ${age})<br>`;
     }).join('') || "No patterns";
     let predictionPatterns = "No patterns influencing prediction";
     if (p.predict !== 'None') {
-      for (let n = Math.min(6, r.length); n >= 2; n--) {
-        const key = r.slice(-n + 1).join('');
-        if (pM[key]) {
-          const { P = 0, B = 0, T = 0 } = pM[key];
-          const total = P + B + T;
-          if (total >= Math.max(3, n)) {
-            const reliability = total / (n * 2);
-            const predicted = P * reliability > B * reliability && P * reliability > T * reliability ? 'Player' : B * reliability > P * reliability && B * reliability > T * reliability ? 'Banker' : 'Tie';
-            predictionPatterns = `${key}→P:${P || 0},B:${B || 0},T:${T || 0}→<b>${predicted}</b> (${total})`;
-            break;
-          }
-        }
-      }
+      predictionPatterns = p.patternsUsed.map(pat => {
+        const successRate = pat.total > 0 ? Math.max(pat.P, pat.B, pat.T) / pat.total * 100 : 0;
+        return `${pat.key}→P:${pat.P || 0},B:${pat.B || 0},T:${pat.T || 0}→<b>${p.predict}</b> (${pat.total}, Reliability: ${(pat.reliability * 100).toFixed(1)}%, Score: ${pat.score.toFixed(2)})`;
+      }).join('<br>');
     }
     document.getElementById("predictionPatternsBox").innerHTML = predictionPatterns;
+    console.log("Display updated");
   } catch (e) {
     console.error("Error in updateDisplay:", e);
     showNotification("Error updating display");
@@ -709,7 +868,7 @@ async function saveMemory() {
   console.time("saveMemory");
   console.log("saveMemory button clicked");
   try {
-    const data = JSON.stringify({ patterns: pM, stats: { w, l, bB, sB, cB, bS, wL, sPT, sPV, sPE, sPR, stage, level, consecutiveWins, consecutiveLosses, paused, predictionAccuracy, volatility, peakBankroll, lowestBankroll, bankrollHistory, bettingStrategy, dLambertUnits, flatbetUnits } });
+    const data = JSON.stringify({ patterns: pM, stats: { w, l, bB, sB, cB, bS, wL, sPT, sPV, sPE, sPR, stage, level, consecutiveWins, consecutiveLosses, paused, pauseHandCount, predictionAccuracy, volatility, peakBankroll, lowestBankroll, bankrollHistory, bettingStrategy, dLambertUnits, flatbetUnits, patternAge } });
     if (data.length > 5 * 1024 * 1024) {
       console.warn("localStorage data too large, clearing old data");
       localStorage.clear();
@@ -717,7 +876,8 @@ async function saveMemory() {
     }
     await new Promise(resolve => setTimeout(resolve, 0));
     localStorage.setItem('baccaratPatterns', JSON.stringify(pM));
-    localStorage.setItem('baccaratStats', JSON.stringify({ w, l, bB, sB, cB, bS, wL, sPT, sPV, sPE, sPR, stage, level, consecutiveWins, consecutiveLosses, paused, predictionAccuracy, volatility, peakBankroll, lowestBankroll, bankrollHistory, bettingStrategy, dLambertUnits, flatbetUnits }));
+    localStorage.setItem('baccaratStats', JSON.stringify({ w, l, bB, sB, cB, bS, wL, sPT, sPV, sPE, sPR, stage, level, consecutiveWins, consecutiveLosses, paused, pauseHandCount, predictionAccuracy, volatility, peakBankroll, lowestBankroll, bankrollHistory, bettingStrategy, dLambertUnits, flatbetUnits, patternAge }));
+    console.log("Memory saved to localStorage");
   } catch (e) {
     console.error("Error saving to localStorage:", e);
     showNotification("Failed to save to cloud");
@@ -751,6 +911,7 @@ async function loadMemory() {
       consecutiveWins = Number(s.consecutiveWins) || 0;
       consecutiveLosses = Number(s.consecutiveLosses) || 0;
       paused = s.paused || false;
+      pauseHandCount = Number(s.pauseHandCount) || 0;
       predictionAccuracy = s.predictionAccuracy || { correct: 0, total: 0 };
       volatility = Number(s.volatility) || 0;
       peakBankroll = Number(s.peakBankroll) || sB || 0;
@@ -761,6 +922,7 @@ async function loadMemory() {
       bettingStrategy = s.bettingStrategy || 'mm';
       dLambertUnits = Number(s.dLambertUnits) || 1;
       flatbetUnits = Number(s.flatbetUnits) || 1;
+      patternAge = s.patternAge || {};
       document.getElementById("stopProfitType").value = sPT;
       document.getElementById("stopProfitInput").value = sPV || '';
       document.getElementById("bettingStrategy").value = bettingStrategy;
@@ -772,6 +934,7 @@ async function loadMemory() {
         };
       }
     }
+    console.log("Memory loaded from localStorage");
     updateDisplay();
   } catch (e) {
     console.error("Error loading from localStorage:", e);
@@ -788,6 +951,7 @@ async function loadMemory() {
     consecutiveWins = 0;
     consecutiveLosses = 0;
     paused = false;
+    pauseHandCount = 0;
     predictionAccuracy = { correct: 0, total: 0 };
     volatility = 0;
     peakBankroll = 0;
@@ -796,6 +960,7 @@ async function loadMemory() {
     bettingStrategy = 'mm';
     dLambertUnits = 1;
     flatbetUnits = 1;
+    patternAge = {};
     document.getElementById("stopProfitType").value = sPT;
     document.getElementById("stopProfitInput").value = '';
     document.getElementById("bettingStrategy").value = bettingStrategy;
@@ -816,6 +981,7 @@ function resetStats() {
       sPE = 0;
       sPR = false;
       paused = false;
+      pauseHandCount = 0;
       if (bettingStrategy === 'mm') {
         stage = 1;
         level = 0;
@@ -836,6 +1002,7 @@ function resetStats() {
       lowestBankroll = sB;
       bankrollHistory.length = 0;
       bankrollHistory.push(sB);
+      patternAge = {};
       document.getElementById("stopProfitType").value = sPT;
       document.getElementById("stopProfitInput").value = '';
       document.getElementById("bettingStrategy").value = bettingStrategy;
@@ -854,8 +1021,10 @@ function resetMemory() {
   try {
     if (confirm("Reset patterns?")) {
       for (let k in pM) delete pM[k];
+      patternAge = {};
       updateDisplay();
       saveMemoryFast();
+      console.log("Pattern memory reset");
     }
   } catch (e) {
     console.error("Error in resetMemory:", e);
@@ -876,7 +1045,9 @@ function startNewShoe() {
       pH.length = 0;
       wL.length = 0;
       paused = false;
+      pauseHandCount = 0;
       updateDisplay();
+      console.log("New shoe started");
     }
   } catch (e) {
     console.error("Error in startNewShoe:", e);
