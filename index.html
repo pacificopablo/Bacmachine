@@ -174,7 +174,7 @@ function setBankroll() {
 
 function addResult(v) {
   console.time("addResult");
-  console.log(`addResult button clicked with value: ${v}`);
+  console.log(`addResult button clicked with value: ${v}, paused: ${paused}`);
   try {
     if (!bB || !sB) {
       console.warn("Set bankroll/unit first");
@@ -212,25 +212,34 @@ function addResult(v) {
         paused = false;
         consecutiveLosses = 0;
         pauseHandCount = 0;
+        if (bettingStrategy === 'andrei') {
+          andreiUnits = 1;
+          lastLossBet = 1;
+          bS.cBU = 1;
+          bS.cP = 0;
+        }
         showNotification("Resuming betting: Win or 3 hands passed");
       } else {
         showNotification(`Paused: Waiting for win or ${3 - pauseHandCount} more hands`, true);
       }
-    }
-    if (p.predict !== 'None') {
+      pH.push(p.predict);
+      wL.push(null);
+    } else if (p.predict !== 'None') {
       pH.push(p.predict);
       const correct = p.predict[0] === v;
       predictionAccuracy.total++;
       if (correct) predictionAccuracy.correct++;
-      if (!paused) {
-        if (v === 'T') {
-          handleTie();
-        } else {
-          correct ? handleWin(p.predict) : handleLoss();
-        }
-        wL.push(v === 'T' ? 'tie' : correct ? 'win' : 'loss');
+      if (v === 'T') {
+        handleTie();
+        wL.push('tie');
       } else {
-        wL.push(null);
+        if (correct) {
+          handleWin(p.predict);
+          wL.push('win');
+        } else {
+          handleLoss();
+          wL.push('loss');
+        }
       }
     } else {
       pH.push(null);
@@ -327,7 +336,7 @@ function handleWin(v) {
       if (resetCycle) {
         andreiUnits = 1;
         lastLossBet = 1;
-        bS.cBU = andreiUnits;
+        bS.cBU = 1;
         bS.cP = 0;
         showNotification(`Win! Cycle profit achieved, reset to Andrei MM 1 unit`);
       } else {
@@ -364,15 +373,15 @@ function handleLoss() {
         bS.cP = 0;
         showNotification("Paused due to 3 consecutive losses, Oscar's Grind reset to 1 unit", true);
       } else if (bettingStrategy === 'andrei') {
-        lastLossBet = andreiUnits;
-        bS.cBU = andreiUnits;
+        andreiUnits = 1;
+        lastLossBet = 1;
+        bS.cBU = 1;
         bS.cP = 0;
         showNotification("Paused due to 3 consecutive losses, Andrei MM reset to 1 unit", true);
       } else {
         showNotification("Paused due to 3 consecutive losses", true);
       }
-    }
-    if (bettingStrategy === 'mm') {
+    } else if (bettingStrategy === 'mm') {
       if (stage === 1) {
         if (consecutiveLosses >= 3) {
           stage = 2;
@@ -502,13 +511,13 @@ function undo() {
     }
     unlearn(v);
     const p = pH.pop();
-    if (p !== null) {
-      const o = wL.pop();
+    const o = wL.pop();
+    if (p !== null && o !== null) {
       predictionAccuracy.total--;
       if (o === 'win') predictionAccuracy.correct--;
       const u = bB;
       const wU = bS.cBU;
-      if (o === 'win' && !paused) {
+      if (o === 'win') {
         const t = p === 'Banker' ? wU * 0.95 : wU;
         bS.tP -= t;
         bS.cP -= t;
@@ -563,7 +572,7 @@ function undo() {
             bS.cP += t;
           }
         }
-      } else if (o === 'loss' && !paused) {
+      } else if (o === 'loss') {
         bS.tP += wU;
         bS.cP += wU;
         cB += wU * u;
@@ -599,8 +608,8 @@ function undo() {
         } else if (bettingStrategy === 'oscar') {
           bS.cBU = oscarUnits;
         } else if (bettingStrategy === 'andrei') {
-          lastLossBet = Math.max(1, andreiUnits - 1);
           andreiUnits = lastLossBet;
+          lastLossBet = Math.max(1, lastLossBet - 1);
           bS.cBU = andreiUnits;
         }
       } else if (o === 'tie') {
@@ -622,10 +631,6 @@ function undo() {
           bS.cBU = oscarUnits;
         } else if (bettingStrategy === 'andrei') {
           bS.cBU = andreiUnits;
-        }
-      } else if (paused) {
-        if (o === 'win') {
-          paused = true;
         }
       }
     }
@@ -827,7 +832,7 @@ function getPatternVote() {
     let maxScore = -1;
     let prediction = null;
     let patternsUsed = [];
-    const maxPatternLength = Math.min(3, Math.floor(r.length / 2) + 2);
+    const maxPatternLength = Maths.min(3, Math.floor(r.length / 2) + 2);
     const historicalAccuracy = predictionAccuracy.total > 0 ? Math.min(predictionAccuracy.correct / predictionAccuracy.total, 0.9) : 0.5;
     console.log(`getPatternVote: maxPatternLength=${maxPatternLength}, historicalAccuracy=${historicalAccuracy}`);
 
