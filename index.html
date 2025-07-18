@@ -35,6 +35,7 @@ body{font-family:'Segoe UI',sans-serif;background:#f4f6f8;margin:0;padding:20px;
       <option value="mm">3 Stage M.M</option>
       <option value="dlambert">D'Lembert</option>
       <option value="flatbet">Flatbet</option>
+      <option value="oscar">Oscar's Grind (Conservative)</option>
     </select>
     <button onclick="setBankroll()">Set</button>
   </div>
@@ -81,6 +82,7 @@ let bS = { cBU: 1, tP: 0, cP: 0, pL: [] }, sT = null;
 let betLevels = { stage1: [], stage2: [], stage3: [] };
 let dLambertUnits = 1;
 let flatbetUnits = 1;
+let oscarUnits = 1;
 let patternAge = {};
 
 function showNotification(message, isPaused = false) {
@@ -137,8 +139,11 @@ function setBankroll() {
     } else if (bettingStrategy === 'dlambert') {
       dLambertUnits = 1;
       bS = { cBU: 1, tP: 0, cP: 0, pL: [] };
-    } else {
+    } else if (bettingStrategy === 'flatbet') {
       flatbetUnits = 1;
+      bS = { cBU: 1, tP: 0, cP: 0, pL: [] };
+    } else if (bettingStrategy === 'oscar') {
+      oscarUnits = 1;
       bS = { cBU: 1, tP: 0, cP: 0, pL: [] };
     }
     consecutiveWins = 0;
@@ -252,7 +257,7 @@ function handleWin(v) {
     consecutiveLosses = 0;
     paused = false;
     pauseHandCount = 0;
-    let resetCycle = bS.cP > 0;
+    let resetCycle = bS.cP >= 1;
     if (bettingStrategy === 'mm') {
       if (resetCycle) {
         stage = 1;
@@ -291,13 +296,25 @@ function handleWin(v) {
         bS.cBU = dLambertUnits;
         showNotification(`Win! D'Lembert, Bet ${bS.cBU} units`);
       }
-    } else {
+    } else if (bettingStrategy === 'flatbet') {
       bS.cBU = flatbetUnits;
       if (resetCycle) {
         bS.cP = 0;
         showNotification(`Win! Cycle profit achieved, Flatbet remains at ${bS.cBU} unit`);
       } else {
         showNotification(`Win! Flatbet, Bet ${bS.cBU} unit`);
+      }
+    } else if (bettingStrategy === 'oscar') {
+      if (resetCycle) {
+        oscarUnits = 1;
+        bS.cBU = oscarUnits;
+        bS.cP = 0;
+        showNotification(`Win! Cycle profit achieved, reset to Oscar's Grind 1 unit`);
+      } else {
+        const potentialProfit = bS.cP + (v === 'Banker' ? (oscarUnits + 1) * 0.95 : (oscarUnits + 1));
+        oscarUnits = potentialProfit > 1 ? Math.max(1, Math.ceil((1 - bS.cP) / (v === 'Banker' ? 0.95 : 1))) : Math.min(oscarUnits + 1, 3);
+        bS.cBU = oscarUnits;
+        showNotification(`Win! Oscar's Grind, Bet ${bS.cBU} units`);
       }
     }
   } catch (e) {
@@ -322,7 +339,14 @@ function handleLoss() {
     if (consecutiveLosses >= 3) {
       paused = true;
       pauseHandCount = 0;
-      showNotification("Paused due to 3 consecutive losses", true);
+      if (bettingStrategy === 'oscar') {
+        oscarUnits = 1;
+        bS.cBU = oscarUnits;
+        bS.cP = 0;
+        showNotification("Paused due to 3 consecutive losses, Oscar's Grind reset to 1 unit", true);
+      } else {
+        showNotification("Paused due to 3 consecutive losses", true);
+      }
     }
     if (bettingStrategy === 'mm') {
       if (stage === 1) {
@@ -347,9 +371,12 @@ function handleLoss() {
       dLambertUnits++;
       bS.cBU = dLambertUnits;
       showNotification(`Loss! D'Lembert, Bet ${bS.cBU} units`);
-    } else {
+    } else if (bettingStrategy === 'flatbet') {
       bS.cBU = flatbetUnits;
       showNotification(`Loss! Flatbet, Bet ${bS.cBU} unit`);
+    } else if (bettingStrategy === 'oscar') {
+      bS.cBU = oscarUnits;
+      showNotification(`Loss! Oscar's Grind, Bet ${bS.cBU} units`);
     }
   } catch (e) {
     console.error("Error in handleLoss:", e);
@@ -378,9 +405,12 @@ function handleTie() {
     } else if (bettingStrategy === 'dlambert') {
       bS.cBU = dLambertUnits;
       showNotification(`Tie! D'Lembert, Bet ${bS.cBU} units`);
-    } else {
+    } else if (bettingStrategy === 'flatbet') {
       bS.cBU = flatbetUnits;
       showNotification(`Tie! Flatbet, Bet ${bS.cBU} unit`);
+    } else if (bettingStrategy === 'oscar') {
+      bS.cBU = oscarUnits;
+      showNotification(`Tie! Oscar's Grind, Bet ${bS.cBU} units`);
     }
   } catch (e) {
     console.error("Error in handleTie:", e);
@@ -403,10 +433,14 @@ function resetBet() {
         dLambertUnits = 1;
         bS = { cBU: 1, tP: bS.tP, cP: 0, pL: [] };
         showNotification("Bet reset to D'Lembert 1 unit");
-      } else {
+      } else if (bettingStrategy === 'flatbet') {
         flatbetUnits = 1;
         bS = { cBU: 1, tP: bS.tP, cP: 0, pL: [] };
         showNotification("Bet reset to Flatbet 1 unit");
+      } else if (bettingStrategy === 'oscar') {
+        oscarUnits = 1;
+        bS = { cBU: 1, tP: bS.tP, cP: 0, pL: [] };
+        showNotification("Bet reset to Oscar's Grind 1 unit");
       }
       consecutiveWins = 0;
       consecutiveLosses = 0;
@@ -474,8 +508,15 @@ function undo() {
           if (bS.cP >= 0) {
             bS.cP += t;
           }
-        } else {
+        } else if (bettingStrategy === 'flatbet') {
           bS.cBU = flatbetUnits;
+          if (bS.cP >= 0) {
+            bS.cP += t;
+          }
+        } else if (bettingStrategy === 'oscar') {
+          const potentialProfit = bS.cP + t;
+          oscarUnits = bS.cP >= 0 ? 1 : Math.max(1, oscarUnits - 1);
+          bS.cBU = oscarUnits;
           if (bS.cP >= 0) {
             bS.cP += t;
           }
@@ -511,8 +552,10 @@ function undo() {
         } else if (bettingStrategy === 'dlambert') {
           dLambertUnits = Math.max(1, dLambertUnits - 1);
           bS.cBU = dLambertUnits;
-        } else {
+        } else if (bettingStrategy === 'flatbet') {
           bS.cBU = flatbetUnits;
+        } else if (bettingStrategy === 'oscar') {
+          bS.cBU = oscarUnits;
         }
       } else if (o === 'tie') {
         paused = false;
@@ -527,8 +570,10 @@ function undo() {
           }
         } else if (bettingStrategy === 'dlambert') {
           bS.cBU = dLambertUnits;
-        } else {
+        } else if (bettingStrategy === 'flatbet') {
           bS.cBU = flatbetUnits;
+        } else if (bettingStrategy === 'oscar') {
+          bS.cBU = oscarUnits;
         }
       } else if (paused) {
         if (o === 'win') {
@@ -790,8 +835,10 @@ function getWager() {
       wager = bB * bS.cBU;
     } else if (bettingStrategy === 'dlambert') {
       wager = bB * dLambertUnits;
-    } else {
+    } else if (bettingStrategy === 'flatbet') {
       wager = bB * flatbetUnits;
+    } else if (bettingStrategy === 'oscar') {
+      wager = bB * oscarUnits;
     }
     wager = Math.round(wager);
     wager = Math.min(wager, cB);
@@ -814,7 +861,7 @@ function updateDisplay() {
       paused ? `⏸ Paused: Waiting for win or ${3 - pauseHandCount} more hands` : 
       p.predict !== 'None' ? `Bet ${p.predict} (Confidence: ${(p.confidence * 100).toFixed(1)}%)<br><small>Reason: ${p.reason}</small><div class="confidence-bar"><div class="confidence-fill" style="width:${p.confidence * 100}%"></div></div>` : 
       `Waiting... (${p.reason || 'No prediction'})`;
-    document.getElementById("betSuggestion").innerText = sPR ? "" : paused ? "" : p.predict !== 'None' ? `🎯 ${bettingStrategy === 'mm' ? `3 Stage M.M (Stage ${stage}, Level ${level + 1})` : bettingStrategy === 'dlambert' ? `D'Lembert (Bet ${dLambertUnits} units)` : `Flatbet (Bet ${flatbetUnits} unit)`}` : "";
+    document.getElementById("betSuggestion").innerText = sPR ? "" : paused ? "" : p.predict !== 'None' ? `🎯 ${bettingStrategy === 'mm' ? `3 Stage M.M (Stage ${stage}, Level ${level + 1})` : bettingStrategy === 'dlambert' ? `D'Lembert (Bet ${dLambertUnits} units)` : bettingStrategy === 'flatbet' ? `Flatbet (Bet ${flatbetUnits} unit)` : `Oscar's Grind (Bet ${oscarUnits} units)`}` : "";
     const winStreakLength = wL.slice().reverse().findIndex(v => v !== 'win');
     document.getElementById("streakInfo").innerHTML = sPR ? "" : wL.slice(-3).every(v => v === 'loss') ? `🧊 Cold Streak - Losses: ${l - w}` : winStreakLength >= 2 ? `<span class="win-streak">🔥 Win Streak: ${winStreakLength === -1 ? wL.length : winStreakLength} Wins!</span>` : "";
     const wager = getWager();
@@ -868,7 +915,7 @@ async function saveMemory() {
   console.time("saveMemory");
   console.log("saveMemory button clicked");
   try {
-    const data = JSON.stringify({ patterns: pM, stats: { w, l, bB, sB, cB, bS, wL, sPT, sPV, sPE, sPR, stage, level, consecutiveWins, consecutiveLosses, paused, pauseHandCount, predictionAccuracy, volatility, peakBankroll, lowestBankroll, bankrollHistory, bettingStrategy, dLambertUnits, flatbetUnits, patternAge } });
+    const data = JSON.stringify({ patterns: pM, stats: { w, l, bB, sB, cB, bS, wL, sPT, sPV, sPE, sPR, stage, level, consecutiveWins, consecutiveLosses, paused, pauseHandCount, predictionAccuracy, volatility, peakBankroll, lowestBankroll, bankrollHistory, bettingStrategy, dLambertUnits, flatbetUnits, oscarUnits, patternAge } });
     if (data.length > 5 * 1024 * 1024) {
       console.warn("localStorage data too large, clearing old data");
       localStorage.clear();
@@ -876,7 +923,7 @@ async function saveMemory() {
     }
     await new Promise(resolve => setTimeout(resolve, 0));
     localStorage.setItem('baccaratPatterns', JSON.stringify(pM));
-    localStorage.setItem('baccaratStats', JSON.stringify({ w, l, bB, sB, cB, bS, wL, sPT, sPV, sPE, sPR, stage, level, consecutiveWins, consecutiveLosses, paused, pauseHandCount, predictionAccuracy, volatility, peakBankroll, lowestBankroll, bankrollHistory, bettingStrategy, dLambertUnits, flatbetUnits, patternAge }));
+    localStorage.setItem('baccaratStats', JSON.stringify({ w, l, bB, sB, cB, bS, wL, sPT, sPV, sPE, sPR, stage, level, consecutiveWins, consecutiveLosses, paused, pauseHandCount, predictionAccuracy, volatility, peakBankroll, lowestBankroll, bankrollHistory, bettingStrategy, dLambertUnits, flatbetUnits, oscarUnits, patternAge }));
     console.log("Memory saved to localStorage");
   } catch (e) {
     console.error("Error saving to localStorage:", e);
@@ -922,6 +969,7 @@ async function loadMemory() {
       bettingStrategy = s.bettingStrategy || 'mm';
       dLambertUnits = Number(s.dLambertUnits) || 1;
       flatbetUnits = Number(s.flatbetUnits) || 1;
+      oscarUnits = Number(s.oscarUnits) || 1;
       patternAge = s.patternAge || {};
       document.getElementById("stopProfitType").value = sPT;
       document.getElementById("stopProfitInput").value = sPV || '';
@@ -960,6 +1008,7 @@ async function loadMemory() {
     bettingStrategy = 'mm';
     dLambertUnits = 1;
     flatbetUnits = 1;
+    oscarUnits = 1;
     patternAge = {};
     document.getElementById("stopProfitType").value = sPT;
     document.getElementById("stopProfitInput").value = '';
@@ -989,8 +1038,11 @@ function resetStats() {
       } else if (bettingStrategy === 'dlambert') {
         dLambertUnits = 1;
         bS = { cBU: 1, tP: 0, cP: 0, pL: [] };
-      } else {
+      } else if (bettingStrategy === 'flatbet') {
         flatbetUnits = 1;
+        bS = { cBU: 1, tP: 0, cP: 0, pL: [] };
+      } else if (bettingStrategy === 'oscar') {
+        oscarUnits = 1;
         bS = { cBU: 1, tP: 0, cP: 0, pL: [] };
       }
       consecutiveWins = 0;
