@@ -35,7 +35,7 @@ body{font-family:'Segoe UI',sans-serif;background:#f4f6f8;margin:0;padding:20px;
       <option value="mm">3 Stage M.M</option>
       <option value="dlambert">D'Lembert</option>
       <option value="flatbet">Flatbet</option>
-      <option value="oscar">Oscar's Grind (Conservative)</option>
+      <option value="oscar">Oscar's Grind (Uncapped)</option>
       <option value="andrei">Andrei MM</option>
     </select>
     <button onclick="setBankroll()">Set</button>
@@ -203,12 +203,14 @@ function addResult(v) {
       return;
     }
     const p = hybridPrediction();
-    const g = getWager();
-    if (!paused && g > cB) {
-      console.warn("Insufficient balance");
-      showNotification("Insufficient balance");
-      console.timeEnd("addResult");
-      return;
+    if (!paused && p.predict !== 'None' && p.predict !== 'Tie') {
+      const g = getWager();
+      if (g > cB) {
+        console.warn("Insufficient balance");
+        showNotification("Insufficient balance");
+        console.timeEnd("addResult");
+        return;
+      }
     }
     if (r.length >= 2) {
       const recent = r.slice(-5).concat([v]);
@@ -222,23 +224,27 @@ function addResult(v) {
     learn(v);
     if (paused) {
       pauseHandCount++;
+      pH.push(p.predict);
+      wL.push(null);
       if (v !== 'T' && (p.predict[0] === v || pauseHandCount >= 3)) {
         paused = false;
-        consecutiveLosses = 0;
         pauseHandCount = 0;
         if (bettingStrategy === 'andrei') {
           andreiUnits = 1;
           lastLossBet = 1;
           bS.cBU = 1;
           bS.cP = 0;
+        } else if (bettingStrategy === 'oscar') {
+          oscarUnits = 1;
+          bS.cBU = 1;
+          bS.cP = 0;
+          bS.pL = [];
         }
         showNotification("Resuming betting: Win or 3 hands passed");
       } else {
         showNotification(`Paused: Waiting for win or ${3 - pauseHandCount} more hands`, true);
       }
-      pH.push(p.predict);
-      wL.push(null);
-    } else if (p.predict !== 'None') {
+    } else if (p.predict !== 'None' && p.predict !== 'Tie') {
       pH.push(p.predict);
       const correct = p.predict[0] === v;
       predictionAccuracy.total++;
@@ -337,12 +343,17 @@ function handleWin(v) {
     } else if (bettingStrategy === 'oscar') {
       if (resetCycle) {
         oscarUnits = 1;
+        bS.pL = [];
         bS.cBU = oscarUnits;
         bS.cP = 0;
         showNotification(`Win! Cycle profit achieved, reset to Oscar's Grind 1 unit`);
       } else {
-        const potentialProfit = bS.cP + (v === 'Banker' ? (oscarUnits + 1) * 0.95 : (oscarUnits + 1));
-        oscarUnits = potentialProfit > 1 ? Math.max(1, Math.ceil((1 - bS.cP) / (v === 'Banker' ? 0.95 : 1))) : Math.min(oscarUnits + 1, 3);
+        if (bS.pL.length > 0) {
+          oscarUnits = bS.pL[bS.pL.length - 1] / bB + 1;
+          bS.pL.pop();
+        } else {
+          oscarUnits += 1;
+        }
         bS.cBU = oscarUnits;
         showNotification(`Win! Oscar's Grind, Bet ${bS.cBU} units`);
       }
@@ -385,6 +396,7 @@ function handleLoss() {
         oscarUnits = 1;
         bS.cBU = oscarUnits;
         bS.cP = 0;
+        bS.pL = [];
         showNotification("Paused due to 3 consecutive losses, Oscar's Grind reset to 1 unit", true);
       } else if (bettingStrategy === 'andrei') {
         andreiUnits = 1;
@@ -422,6 +434,7 @@ function handleLoss() {
       bS.cBU = flatbetUnits;
       showNotification(`Loss! Flatbet, Bet ${bS.cBU} unit`);
     } else if (bettingStrategy === 'oscar') {
+      bS.pL.push(wU * u);
       bS.cBU = oscarUnits;
       showNotification(`Loss! Oscar's Grind, Bet ${bS.cBU} units`);
     } else if (bettingStrategy === 'andrei') {
@@ -573,11 +586,15 @@ function undo() {
             bS.cP += t;
           }
         } else if (bettingStrategy === 'oscar') {
-          const potentialProfit = bS.cP + t;
-          oscarUnits = bS.cP >= 0 ? 1 : Math.max(1, oscarUnits - 1);
-          bS.cBU = oscarUnits;
           if (bS.cP >= 0) {
+            oscarUnits = 1;
+            bS.pL = [];
+            bS.cBU = oscarUnits;
             bS.cP += t;
+          } else {
+            bS.pL.push(oscarUnits * u);
+            oscarUnits = bS.pL.length > 0 ? bS.pL[bS.pL.length - 1] / u + 1 : oscarUnits - 1;
+            bS.cBU = oscarUnits;
           }
         } else if (bettingStrategy === 'andrei') {
           andreiUnits = lastLossBet;
@@ -620,6 +637,8 @@ function undo() {
         } else if (bettingStrategy === 'flatbet') {
           bS.cBU = flatbetUnits;
         } else if (bettingStrategy === 'oscar') {
+          bS.pL.pop();
+          oscarUnits = bS.pL.length > 0 ? bS.pL[bS.pL.length - 1] / u + 1 : oscarUnits;
           bS.cBU = oscarUnits;
         } else if (bettingStrategy === 'andrei') {
           andreiUnits = lastLossBet;
@@ -970,7 +989,8 @@ function getWager() {
   console.time("getWager");
   try {
     const prediction = hybridPrediction();
-    if (!bB || prediction.predict === 'None' || sPR || paused) {
+    if (!bB || prediction.predict === 'None' || prediction.predict === 'Tie' || sPR || paused) {
+      console.log(`Wager set to 0: bankrollBase=${bB}, prediction=${prediction.predict}, stopProfitReached=${sPR}, paused=${paused}`);
       console.timeEnd("getWager");
       return 0;
     }
@@ -988,7 +1008,7 @@ function getWager() {
     }
     wager = Math.round(wager);
     wager = Math.min(wager, cB);
-    console.log(`Wager calculated: $${wager}`);
+    console.log(`Wager calculated: $${wager} for prediction ${prediction.predict}`);
     console.timeEnd("getWager");
     return wager;
   } catch (e) {
@@ -1007,7 +1027,7 @@ function updateDisplay() {
       paused ? `⏸ Paused: Waiting for win or ${3 - pauseHandCount} more hands` : 
       p.predict !== 'None' ? `Bet ${p.predict} (Confidence: ${(p.confidence * 100).toFixed(1)}%)<br><small>Reason: ${p.reason}</small><div class="confidence-bar"><div class="confidence-fill" style="width:${p.confidence * 100}%"></div></div>` : 
       `Waiting... (${p.reason || 'No prediction'})`;
-    document.getElementById("betSuggestion").innerText = sPR ? "" : paused ? "" : p.predict !== 'None' ? `🎯 ${bettingStrategy === 'mm' ? `3 Stage M.M (Stage ${stage}, Level ${level + 1})` : bettingStrategy === 'dlambert' ? `D'Lembert (Bet ${dLambertUnits} units)` : bettingStrategy === 'flatbet' ? `Flatbet (Bet ${flatbetUnits} unit)` : bettingStrategy === 'oscar' ? `Oscar's Grind (Bet ${oscarUnits} units)` : `Andrei MM (Bet ${andreiUnits} units)`}` : "";
+    document.getElementById("betSuggestion").innerText = sPR ? "" : paused ? "" : p.predict !== 'None' && p.predict !== 'Tie' ? `🎯 ${bettingStrategy === 'mm' ? `3 Stage M.M (Stage ${stage}, Level ${level + 1})` : bettingStrategy === 'dlambert' ? `D'Lembert (Bet ${dLambertUnits} units)` : bettingStrategy === 'flatbet' ? `Flatbet (Bet ${flatbetUnits} unit)` : bettingStrategy === 'oscar' ? `Oscar's Grind (Bet ${oscarUnits} units)` : `Andrei MM (Bet ${andreiUnits} units)`}` : "";
     const winStreakLength = wL.slice().reverse().findIndex(v => v !== 'win');
     document.getElementById("streakInfo").innerHTML = sPR ? "" : wL.slice(-3).every(v => v === 'loss') ? `🧊 Cold Streak - Losses: ${l - w}` : winStreakLength >= 2 ? `<span class="win-streak">🔥 Win Streak: ${winStreakLength === -1 ? wL.length : winStreakLength} Wins!</span>` : "";
     const wager = getWager();
