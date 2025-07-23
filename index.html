@@ -181,11 +181,9 @@ function addResult(v) {
       if (v !== 'T' && (p.predict[0] === v || pauseHandCount >= 3)) {
         paused = false;
         pauseHandCount = 0;
+        // Preserve Andrei MM state
         if (bettingStrategy === 'andrei') {
-          andreiUnits = 1;
-          bS.cBU = 1;
-          bS.cP = 0;
-          bS.previousLosses = [];
+          // No reset; maintain current andreiUnits and bS state
         }
       }
     } else if (p.predict !== 'None' && p.predict !== 'Tie') {
@@ -306,38 +304,65 @@ function handleLoss() {
     if (consecutiveLosses >= 3) {
       paused = true;
       pauseHandCount = 0;
-      if (bettingStrategy === 'andrei') {
-        andreiUnits = 1;
-        bS.cBU = 1;
-        bS.cP = 0;
-        bS.previousLosses = [];
-      }
-    } else if (bettingStrategy === 'mm') {
-      if (stage === 1) {
-        if (consecutiveLosses >= 3) {
-          stage = 2;
-          level = 0;
-          bS.cBU = betLevels.stage2[0] / bB;
-        } else {
-          level = Math.min(level + 1, 2);
-          bS.cBU = betLevels.stage1[level] / bB;
+      // Preserve Andrei MM state
+      if (bettingStrategy !== 'andrei') {
+        if (bettingStrategy === 'mm') {
+          if (stage === 1) {
+            if (consecutiveLosses >= 3) {
+              stage = 2;
+              level = 0;
+              bS.cBU = betLevels.stage2[0] / bB;
+            } else {
+              level = Math.min(level + 1, 2);
+              bS.cBU = betLevels.stage1[level] / bB;
+            }
+          } else if (stage === 2) {
+            level = Math.min(level + 1, 1);
+            bS.cBU = betLevels.stage2[level] / bB;
+          } else if (stage === 3) {
+            stage = 1;
+            level = 1;
+            bS.cBU = betLevels.stage1[1] / bB;
+          }
+        } else if (bettingStrategy === 'dlambert') {
+          dLambertUnits++;
+          bS.cBU = dLambertUnits;
+        } else if (bettingStrategy === 'flatbet') {
+          bS.cBU = flatbetUnits;
         }
-      } else if (stage === 2) {
-        level = Math.min(level + 1, 1);
-        bS.cBU = betLevels.stage2[level] / bB;
-      } else if (stage === 3) {
-        stage = 1;
-        level = 1;
-        bS.cBU = betLevels.stage1[1] / bB;
+      } else {
+        // For Andrei MM, only update losses, don't reset
+        bS.previousLosses.push(wU);
+        bS.cBU = andreiUnits;
       }
-    } else if (bettingStrategy === 'dlambert') {
-      dLambertUnits++;
-      bS.cBU = dLambertUnits;
-    } else if (bettingStrategy === 'flatbet') {
-      bS.cBU = flatbetUnits;
-    } else if (bettingStrategy === 'andrei') {
-      bS.previousLosses.push(wU);
-      bS.cBU = andreiUnits;
+    } else {
+      if (bettingStrategy === 'mm') {
+        if (stage === 1) {
+          if (consecutiveLosses >= 3) {
+            stage = 2;
+            level = 0;
+            bS.cBU = betLevels.stage2[0] / bB;
+          } else {
+            level = Math.min(level + 1, 2);
+            bS.cBU = betLevels.stage1[level] / bB;
+          }
+        } else if (stage === 2) {
+          level = Math.min(level + 1, 1);
+          bS.cBU = betLevels.stage2[level] / bB;
+        } else if (stage === 3) {
+          stage = 1;
+          level = 1;
+          bS.cBU = betLevels.stage1[1] / bB;
+        }
+      } else if (bettingStrategy === 'dlambert') {
+        dLambertUnits++;
+        bS.cBU = dLambertUnits;
+      } else if (bettingStrategy === 'flatbet') {
+        bS.cBU = flatbetUnits;
+      } else if (bettingStrategy === 'andrei') {
+        bS.previousLosses.push(wU);
+        bS.cBU = andreiUnits;
+      }
     }
   } catch (e) {
     return;
