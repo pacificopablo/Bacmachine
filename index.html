@@ -35,6 +35,7 @@ body{font-family:'Segoe UI',sans-serif;background:#f4f6f8;margin:0;padding:20px;
       <option value="dlambert">D'Lembert</option>
       <option value="flatbet">Flatbet</option>
       <option value="andrei">Andrei MM</option>
+      <option value="custom">Custom MM</option>
     </select>
     <button onclick="setBankroll()">Set</button>
   </div>
@@ -86,6 +87,8 @@ let betLevels = { stage1: [], stage2: [], stage3: [] };
 let dLambertUnits = 1;
 let flatbetUnits = 1;
 let andreiUnits = 1;
+let customUnits = 1;
+let customStep = 0;
 let patternAge = {};
 let markovMatrix = {
   P: { P: 0, B: 0, T: 0, total: 0 },
@@ -128,6 +131,10 @@ function setBankroll() {
       bS = { cBU: 1, tP: 0, cP: 0, previousLosses: [] };
     } else if (bettingStrategy === 'andrei') {
       andreiUnits = 1;
+      bS = { cBU: 1, tP: 0, cP: 0, previousLosses: [] };
+    } else if (bettingStrategy === 'custom') {
+      customUnits = 1;
+      customStep = 0;
       bS = { cBU: 1, tP: 0, cP: 0, previousLosses: [] };
     }
     consecutiveWins = 0;
@@ -181,9 +188,8 @@ function addResult(v) {
       if (v !== 'T' && (p.predict[0] === v || pauseHandCount >= 3)) {
         paused = false;
         pauseHandCount = 0;
-        // Preserve Andrei MM state
-        if (bettingStrategy === 'andrei') {
-          // No reset; maintain current andreiUnits and bS state
+        if (bettingStrategy === 'andrei' || bettingStrategy === 'custom') {
+          // Preserve state for Andrei MM and Custom MM
         }
       }
     } else if (p.predict !== 'None' && p.predict !== 'Tie') {
@@ -285,6 +291,20 @@ function handleWin(v) {
         andreiUnits = lastLoss + 1;
         bS.cBU = andreiUnits;
       }
+    } else if (bettingStrategy === 'custom') {
+      if (customStep === 0) {
+        customUnits = 2;
+        customStep = 1;
+      } else if (customStep === 1) {
+        customUnits = 1;
+        customStep = 0;
+        bS.cP = 0;
+      } else if (customStep === 2) {
+        customUnits = 1;
+        customStep = 0;
+        bS.cP = 0;
+      }
+      bS.cBU = customUnits;
     }
   } catch (e) {
     return;
@@ -304,8 +324,7 @@ function handleLoss() {
     if (consecutiveLosses >= 3) {
       paused = true;
       pauseHandCount = 0;
-      // Preserve Andrei MM state
-      if (bettingStrategy !== 'andrei') {
+      if (bettingStrategy !== 'andrei' && bettingStrategy !== 'custom') {
         if (bettingStrategy === 'mm') {
           if (stage === 1) {
             if (consecutiveLosses >= 3) {
@@ -330,10 +349,22 @@ function handleLoss() {
         } else if (bettingStrategy === 'flatbet') {
           bS.cBU = flatbetUnits;
         }
-      } else {
-        // For Andrei MM, only update losses, don't reset
+      } else if (bettingStrategy === 'andrei') {
         bS.previousLosses.push(wU);
         bS.cBU = andreiUnits;
+      } else if (bettingStrategy === 'custom') {
+        if (customStep === 0) {
+          customUnits = 2;
+          customStep = 1;
+        } else if (customStep === 1) {
+          customUnits = 2;
+          customStep = 2;
+        } else if (customStep === 2) {
+          customUnits = 1;
+          customStep = 0;
+          bS.cP = 0;
+        }
+        bS.cBU = customUnits;
       }
     } else {
       if (bettingStrategy === 'mm') {
@@ -362,6 +393,19 @@ function handleLoss() {
       } else if (bettingStrategy === 'andrei') {
         bS.previousLosses.push(wU);
         bS.cBU = andreiUnits;
+      } else if (bettingStrategy === 'custom') {
+        if (customStep === 0) {
+          customUnits = 2;
+          customStep = 1;
+        } else if (customStep === 1) {
+          customUnits = 2;
+          customStep = 2;
+        } else if (customStep === 2) {
+          customUnits = 1;
+          customStep = 0;
+          bS.cP = 0;
+        }
+        bS.cBU = customUnits;
       }
     }
   } catch (e) {
@@ -383,6 +427,11 @@ function handleTie() {
       bS.cBU = flatbetUnits;
     } else if (bettingStrategy === 'andrei') {
       bS.cBU = andreiUnits;
+    } else if (bettingStrategy === 'custom') {
+      customUnits = 1;
+      customStep = 0;
+      bS.cBU = customUnits;
+      bS.cP = 0;
     }
   } catch (e) {
     return;
@@ -406,6 +455,10 @@ function resetBet() {
       bS = { cBU: 1, tP: bS.tP, cP: 0, previousLosses: [] };
     } else if (bettingStrategy === 'andrei') {
       andreiUnits = 1;
+      bS = { cBU: 1, tP: bS.tP, cP: 0, previousLosses: [] };
+    } else if (bettingStrategy === 'custom') {
+      customUnits = 1;
+      customStep = 0;
       bS = { cBU: 1, tP: bS.tP, cP: 0, previousLosses: [] };
     }
     consecutiveWins = 0;
@@ -472,6 +525,19 @@ function undo() {
           const lastLoss = bS.previousLosses.length > 1 ? bS.previousLosses[bS.previousLosses.length - 2] : 1;
           andreiUnits = lastLoss + 1;
           bS.cBU = andreiUnits;
+        } else if (bettingStrategy === 'custom') {
+          if (customStep === 0) {
+            customUnits = 1;
+            customStep = 0;
+          } else if (customStep === 1) {
+            customUnits = 1;
+            customStep = 0;
+            bS.cP = bS.tP;
+          } else if (customStep === 2) {
+            customUnits = 2;
+            customStep = 1;
+          }
+          bS.cBU = customUnits;
         }
       } else if (o === 'loss') {
         bS.tP += wU;
@@ -511,6 +577,19 @@ function undo() {
           const lastLoss = bS.previousLosses.length > 0 ? bS.previousLosses[bS.previousLosses.length - 1] : 1;
           andreiUnits = lastLoss + 1;
           bS.cBU = andreiUnits;
+        } else if (bettingStrategy === 'custom') {
+          if (customStep === 0) {
+            customUnits = 1;
+            customStep = 0;
+          } else if (customStep === 1) {
+            customUnits = 1;
+            customStep = 0;
+            bS.cP = bS.tP;
+          } else if (customStep === 2) {
+            customUnits = 2;
+            customStep = 1;
+          }
+          bS.cBU = customUnits;
         }
       } else if (o === 'tie') {
         consecutiveWins = wL.slice().reverse().findIndex(x => x === 'win') === -1 ? 0 : wL.slice().reverse().findIndex(x => x === 'win');
@@ -525,6 +604,11 @@ function undo() {
           bS.cBU = flatbetUnits;
         } else if (bettingStrategy === 'andrei') {
           bS.cBU = andreiUnits;
+        } else if (bettingStrategy === 'custom') {
+          customUnits = 1;
+          customStep = 0;
+          bS.cBU = customUnits;
+          bS.cP = bS.tP;
         }
       }
     }
@@ -551,7 +635,7 @@ function undo() {
 
 function learn(v) {
   try {
-    const maxPatternLength = Math.min(3, Math.floor(r.length / 2) + 2);
+    const maxPatternLength = Math.min(4, Math.floor(r.length / 2) + 2);
     for (let n = 2; n <= maxPatternLength; n++) {
       if (r.length >= n) {
         const k = r.slice(-n, -1).join('');
@@ -573,7 +657,7 @@ function learn(v) {
 
 function unlearn(v) {
   try {
-    const maxPatternLength = Math.min(3, Math.floor(r.length / 2) + 2);
+    const maxPatternLength = Math.min(4, Math.floor(r.length / 2) + 2);
     for (let n = 2; n <= maxPatternLength; n++) {
       if (r.length >= n - 1) {
         const k = r.slice(-n + 1, -1).join('');
@@ -663,6 +747,23 @@ function getMarkovPrediction() {
   }
 }
 
+function getTrendFactor() {
+  try {
+    if (r.length < 10) return 1;
+    const recent = r.slice(-10).filter(x => x !== 'T');
+    if (recent.length < 5) return 1;
+    let playerCount = recent.filter(x => x === 'P').length;
+    let bankerCount = recent.filter(x => x === 'B').length;
+    let total = playerCount + bankerCount;
+    if (total === 0) return 1;
+    let dominant = playerCount > bankerCount ? 'Player' : 'Banker';
+    let dominanceRatio = Math.max(playerCount, bankerCount) / total;
+    return dominant === 'Player' ? { Player: 1 + dominanceRatio * 0.2, Banker: 1 - dominanceRatio * 0.1 } : { Player: 1 - dominanceRatio * 0.1, Banker: 1 + dominanceRatio * 0.2 };
+  } catch (e) {
+    return { Player: 1, Banker: 1 };
+  }
+}
+
 function hybridPrediction() {
   try {
     const earlyHandLimit = parseInt(document.getElementById("earlyHandLimit").value) || 5;
@@ -674,6 +775,7 @@ function hybridPrediction() {
     const patternVote = getPatternVote();
     const markovVote = getMarkovPrediction();
     const { streakType, streakLength, isChoppy } = getStreakInfo();
+    const trendFactor = getTrendFactor();
     
     let prediction = 'None';
     let confidence = 0;
@@ -682,45 +784,51 @@ function hybridPrediction() {
     let reason = 'No strong patterns or transitions';
     
     if (patternVote.prediction && markovVote.prediction) {
-      const patternWeight = 0.6;
-      const markovWeight = 0.4;
+      const patternWeight = 0.5;
+      const markovWeight = 0.3;
+      const streakWeight = streakType && streakLength >= 3 ? 0.2 : 0;
       const scores = {
-        Player: patternVote.prediction === 'Player' ? patternVote.confidence * patternWeight : 0 + (markovVote.prediction === 'Player' ? markovVote.confidence * markovWeight : 0),
-        Banker: patternVote.prediction === 'Banker' ? patternVote.confidence * patternWeight : 0 + (markovVote.prediction === 'Banker' ? markovVote.confidence * markovWeight : 0),
-        Tie: patternVote.prediction === 'Tie' ? patternVote.confidence * patternWeight : 0 + (markovVote.prediction === 'Tie' ? markovVote.confidence * markovWeight : 0)
+        Player: (patternVote.prediction === 'Player' ? patternVote.confidence * patternWeight : 0) +
+                (markovVote.prediction === 'Player' ? markovVote.confidence * markovWeight : 0) +
+                (streakType === 'Player' && streakLength >= 3 ? 0.3 * streakWeight * streakLength : 0) * trendFactor.Player,
+        Banker: (patternVote.prediction === 'Banker' ? patternVote.confidence * patternWeight : 0) +
+                (markovVote.prediction === 'Banker' ? markovVote.confidence * markovWeight : 0) +
+                (streakType === 'Banker' && streakLength >= 3 ? 0.3 * streakWeight * streakLength : 0) * trendFactor.Banker,
+        Tie: (patternVote.prediction === 'Tie' ? patternVote.confidence * patternWeight : 0) +
+             (markovVote.prediction === 'Tie' ? markovVote.confidence * markovWeight : 0)
       };
       const maxScore = Math.max(scores.Player, scores.Banker, scores.Tie);
       prediction = maxScore === scores.Player ? 'Player' : maxScore === scores.Banker ? 'Banker' : 'Tie';
-      confidence = maxScore;
-      reason = `Combined pattern (${patternVote.confidence.toFixed(2)}) and Markov (${markovVote.confidence.toFixed(2)})`;
+      confidence = maxScore * (1 - volatility * 0.3);
+      reason = `Combined pattern (${patternVote.confidence.toFixed(2)}), Markov (${markovVote.confidence.toFixed(2)}), streak (${streakType ? streakLength : 0})`;
     } else if (patternVote.prediction) {
       prediction = patternVote.prediction;
-      confidence = patternVote.confidence;
+      confidence = patternVote.confidence * (1 - volatility * 0.3);
       reason = 'Pattern-based';
     } else if (markovVote.prediction) {
       prediction = markovVote.prediction;
-      confidence = markovVote.confidence;
+      confidence = markovVote.confidence * (1 - volatility * 0.3);
       reason = 'Markov-based';
     }
 
     if (streakType && streakLength >= 3 && !isChoppy) {
       prediction = streakType;
-      confidence = Math.min(confidence + 0.3, 1);
-      reason = 'Following strong streak';
+      confidence = Math.min(confidence + 0.2 * streakLength, 1) * trendFactor[streakType];
+      reason = `Following strong streak (${streakLength})`;
     } else if (isChoppy && prediction !== 'None') {
-      confidence *= 0.9;
-      reason = 'Choppy pattern, confidence adjusted';
+      confidence *= 0.8;
+      reason = 'Choppy pattern, confidence reduced';
     } else if (prediction === 'None' && r.length >= 2) {
       const recent = r.slice(-2).filter(x => x !== 'T');
       if (recent.length >= 2) {
         prediction = recent[0] === recent[1] ? (recent[1] === 'P' ? 'Player' : 'Banker') : (recent[1] === 'P' ? 'Banker' : 'Player');
-        confidence = 0.15;
+        confidence = 0.15 * trendFactor[recent[1] === 'P' ? 'Player' : 'Banker'];
         patternsUsed = [];
         markovProb = {};
         reason = recent[0] === recent[1] ? 'Following recent repeat' : 'Reversing choppy pattern';
       } else if (recent.length === 1) {
         prediction = recent[0] === 'P' ? 'Player' : 'Banker';
-        confidence = 0.15;
+        confidence = 0.15 * trendFactor[recent[0] === 'P' ? 'Player' : 'Banker'];
         patternsUsed = [];
         markovProb = {};
         reason = 'Following last outcome';
@@ -746,8 +854,9 @@ function getPatternVote() {
     let maxScore = -1;
     let prediction = null;
     let patternsUsed = [];
-    const maxPatternLength = Math.min(3, Math.floor(r.length / 2) + 2);
+    const maxPatternLength = Math.min(4, Math.floor(r.length / 2) + 2);
     const historicalAccuracy = predictionAccuracy.total > 0 ? Math.min(predictionAccuracy.correct / predictionAccuracy.total, 0.9) : 0.5;
+    const trendFactor = getTrendFactor();
 
     if (r.length < 2) {
       return { prediction: null, confidence: 0, patternsUsed: [] };
@@ -761,11 +870,12 @@ function getPatternVote() {
         if (total >= 1) {
           const reliability = Math.min(total / (n * 2), 1);
           const ageFactor = Math.max(0.5, 1 - (r.length - (patternAge[key] || r.length)) / 200);
-          const lengthWeight = 0.2 * n;
+          const lengthWeight = 0.3 * n;
+          const volatilityAdjustment = 1 - volatility * 0.2;
           const scores = {
-            Player: P * reliability * lengthWeight * ageFactor * historicalAccuracy,
-            Banker: B * reliability * lengthWeight * ageFactor * historicalAccuracy,
-            Tie: T * reliability * lengthWeight * ageFactor * historicalAccuracy
+            Player: P * reliability * lengthWeight * ageFactor * historicalAccuracy * trendFactor.Player * volatilityAdjustment,
+            Banker: B * reliability * lengthWeight * ageFactor * historicalAccuracy * trendFactor.Banker * volatilityAdjustment,
+            Tie: T * reliability * lengthWeight * ageFactor * historicalAccuracy * volatilityAdjustment
           };
           const maxOutcome = Math.max(scores.Player, scores.Banker, scores.Tie);
           if (maxOutcome > maxScore) {
@@ -779,7 +889,7 @@ function getPatternVote() {
       }
     }
 
-    const confidence = maxScore > 0 ? Math.min(maxScore / 8, 1) : 0;
+    const confidence = maxScore > 0 ? Math.min(maxScore / 10, 1) : 0;
     return { prediction, confidence, patternsUsed };
   } catch (e) {
     return { prediction: null, confidence: 0, patternsUsed: [] };
@@ -801,6 +911,8 @@ function getWager() {
       wager = bB * flatbetUnits;
     } else if (bettingStrategy === 'andrei') {
       wager = bB * andreiUnits;
+    } else if (bettingStrategy === 'custom') {
+      wager = bB * customUnits;
     }
     wager = Math.round(wager);
     wager = Math.min(wager, cB);
@@ -818,7 +930,24 @@ function updateDisplay() {
       paused ? `⏸ Paused: Waiting for win or ${3 - pauseHandCount} more hands` : 
       p.predict !== 'None' ? `Bet ${p.predict} (Confidence: ${(p.confidence * 100).toFixed(1)}%)<br><small>Reason: ${p.reason}</small><div class="confidence-bar"><div class="confidence-fill" style="width:${p.confidence * 100}%"></div></div>` : 
       `Waiting... (${p.reason || 'No prediction'})`;
-    document.getElementById("betSuggestion").innerText = sPR ? "" : paused ? "" : p.predict !== 'None' && p.predict !== 'Tie' ? `🎯 ${bettingStrategy === 'mm' ? `3 Stage M.M (Stage ${stage}, Level ${level + 1})` : bettingStrategy === 'dlambert' ? `D'Lembert (Bet ${dLambertUnits} units)` : bettingStrategy === 'flatbet' ? `Flatbet (Bet ${flatbetUnits} unit)` : `Andrei MM (Bet ${andreiUnits} units)`}` : "";
+    let strategyDisplay = '';
+    if (bettingStrategy === 'mm') {
+      strategyDisplay = `3 Stage M.M (Stage ${stage}, Level ${level + 1})`;
+    } else if (bettingStrategy === 'dlambert') {
+      strategyDisplay = `D'Lembert (Bet ${dLambertUnits} units)`;
+    } else if (bettingStrategy === 'flatbet') {
+      strategyDisplay = `Flatbet (Bet ${flatbetUnits} unit)`;
+    } else if (bettingStrategy === 'andrei') {
+      strategyDisplay = `Andrei MM (Bet ${andreiUnits} units)`;
+    } else if (bettingStrategy === 'custom') {
+      const stepDescriptions = {
+        0: 'Step 1: 1 unit',
+        1: 'Step 2: 2 units after win or loss',
+        2: 'Step 3: 2 units after win then loss'
+      };
+      strategyDisplay = `Custom MM (${stepDescriptions[customStep]}, Bet ${customUnits} units)`;
+    }
+    document.getElementById("betSuggestion").innerText = sPR ? "" : paused ? "" : p.predict !== 'None' && p.predict !== 'Tie' ? `🎯 ${strategyDisplay}` : "";
     const winStreakLength = wL.slice().reverse().findIndex(v => v !== 'win');
     document.getElementById("streakInfo").innerHTML = sPR ? "" : wL.slice(-3).every(v => v === 'loss') ? `🧊 Cold Streak - Losses: ${l - w}` : winStreakLength >= 2 ? `<span class="win-streak">🔥 Win Streak: ${winStreakLength === -1 ? wL.length : winStreakLength} Wins!</span>` : "";
     const wager = getWager();
@@ -868,13 +997,13 @@ function saveMemoryFast() {
 
 async function saveMemory() {
   try {
-    const data = JSON.stringify({ patterns: pM, stats: { w, l, bB, sB, cB, bS, wL, sPT, sPV, sPE, sPR, stage, level, consecutiveWins, consecutiveLosses, paused, pauseHandCount, predictionAccuracy, volatility, peakBankroll, lowestBankroll, bankrollHistory, bettingStrategy, dLambertUnits, flatbetUnits, andreiUnits, patternAge, markovMatrix } });
+    const data = JSON.stringify({ patterns: pM, stats: { w, l, bB, sB, cB, bS, wL, sPT, sPV, sPE, sPR, stage, level, consecutiveWins, consecutiveLosses, paused, pauseHandCount, predictionAccuracy, volatility, peakBankroll, lowestBankroll, bankrollHistory, bettingStrategy, dLambertUnits, flatbetUnits, andreiUnits, customUnits, customStep, patternAge, markovMatrix } });
     if (data.length > 5 * 1024 * 1024) {
       localStorage.clear();
     }
     await new Promise(resolve => setTimeout(resolve, 0));
     localStorage.setItem('baccaratPatterns', JSON.stringify(pM));
-    localStorage.setItem('baccaratStats', JSON.stringify({ w, l, bB, sB, cB, bS, wL, sPT, sPV, sPE, sPR, stage, level, consecutiveWins, consecutiveLosses, paused, pauseHandCount, predictionAccuracy, volatility, peakBankroll, lowestBankroll, bankrollHistory, bettingStrategy, dLambertUnits, flatbetUnits, andreiUnits, patternAge, markovMatrix }));
+    localStorage.setItem('baccaratStats', JSON.stringify({ w, l, bB, sB, cB, bS, wL, sPT, sPV, sPE, sPR, stage, level, consecutiveWins, consecutiveLosses, paused, pauseHandCount, predictionAccuracy, volatility, peakBankroll, lowestBankroll, bankrollHistory, bettingStrategy, dLambertUnits, flatbetUnits, andreiUnits, customUnits, customStep, patternAge, markovMatrix }));
   } catch (e) {
     return;
   }
@@ -916,6 +1045,8 @@ async function loadMemory() {
       dLambertUnits = Number(s.dLambertUnits) || 1;
       flatbetUnits = Number(s.flatbetUnits) || 1;
       andreiUnits = Number(s.andreiUnits) || 1;
+      customUnits = Number(s.customUnits) || 1;
+      customStep = Number(s.customStep) || 0;
       patternAge = s.patternAge || {};
       markovMatrix = s.markovMatrix || {
         P: { P: 0, B: 0, T: 0, total: 0 },
@@ -957,6 +1088,8 @@ async function loadMemory() {
     dLambertUnits = 1;
     flatbetUnits = 1;
     andreiUnits = 1;
+    customUnits = 1;
+    customStep = 0;
     patternAge = {};
     markovMatrix = {
       P: { P: 0, B: 0, T: 0, total: 0 },
@@ -995,6 +1128,10 @@ function resetStats() {
       bS = { cBU: 1, tP: 0, cP: 0, previousLosses: [] };
     } else if (bettingStrategy === 'andrei') {
       andreiUnits = 1;
+      bS = { cBU: 1, tP: 0, cP: 0, previousLosses: [] };
+    } else if (bettingStrategy === 'custom') {
+      customUnits = 1;
+      customStep = 0;
       bS = { cBU: 1, tP: 0, cP: 0, previousLosses: [] };
     }
     consecutiveWins = 0;
