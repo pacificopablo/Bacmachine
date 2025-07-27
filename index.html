@@ -6,6 +6,10 @@
   <title>💸 BFC v3.5 "Money Machine"</title>
   <style>
 body{font-family:'Segoe UI',sans-serif;background:#f4f6f8;margin:0;padding:20px;color:#222}h1{text-align:center;margin-bottom:20px;font-size:28px;color:#333}.flex-row{display:flex;flex-wrap:wrap;gap:10px;justify-content:center;margin:10px 0}button{padding:10px 20px;border:none;background:#007bff;color:#fff;border-radius:10px;cursor:pointer;font-weight:600;transition:background .3s}button:hover{background:#0056b3}#resetBetBtn{background:#6c757d}input[type=number],select{padding:10px;font-size:16px;border:1px solid #ccc;border-radius:8px;width:150px}label{font-size:16px;display:flex;align-items:center;gap:6px}.section{text-align:center;margin:12px 0;font-size:18px;font-weight:700}.result{display:inline-block;padding:6px 14px;border-radius:8px;margin:2px;font-weight:700}.player{background:#cce4ff;color:#004085}.banker{background:#ffdada;color:#721c24}.tie{background:#fff3cd;color:#856404}.scroll-box{max-height:300px;overflow-y:auto;background:#fff;border:1px solid #ccc;padding:12px;font-size:14px;border-radius:10px;box-shadow:0 2px 5px rgba(0,0,0,.05);margin-top:20px}.stat-box{background:#fff;border-radius:10px;padding:15px;box-shadow:0 2px 8px rgba(0,0,0,.1);display:inline-block;text-align:center;margin-top:10px}.bet-controls{margin-bottom:1rem;display:flex;flex-wrap:wrap;gap:.5rem;justify-content:center;width:100%;max-width:90vw}.cycle-reset{color:#28a745;font-weight:700}.win-streak{color:#28a745;font-weight:700}.confidence-bar{background:#ddd;border-radius:8px;height:10px;margin:5px 0;overflow:hidden}.confidence-fill{background:#28a745;height:100%;transition:width .3s}
+#shoeStats { margin-top: 20px; }
+#shoeSummary { font-size: 14px; line-height: 1.6; }
+.player-prediction { color: #007bff; font-weight: 700; }
+.banker-prediction { color: #dc3545; font-weight: 700; }
   </style>
 </head>
 <body>
@@ -62,6 +66,10 @@ body{font-family:'Segoe UI',sans-serif;background:#f4f6f8;margin:0;padding:20px;
   <div class="stat-box">
     ✅ <span id="wins">0</span> | ❌ <span id="losses">0</span> | 📊 <span id="accuracy">0%</span>
   </div>
+  <div class="stat-box" id="shoeStats">
+    <h3>📈 Shoe Statistics</h3>
+    <div id="shoeSummary">No hands played</div>
+  </div>
   <div class="scroll-box">
     <h3>🧠 Patterns</h3>
     <div id="patternMemoryBox">No patterns</div>
@@ -91,6 +99,14 @@ let markovMatrix = {
   P: { P: 0, B: 0, T: 0, total: 0 },
   B: { P: 0, B: 0, T: 0, total: 0 },
   T: { P: 0, B: 0, T: 0, total: 0 }
+};
+let shoeStats = {
+  playerCount: 0,
+  bankerCount: 0,
+  tieCount: 0,
+  longestPlayerStreak: 0,
+  longestBankerStreak: 0,
+  longestChoppy: 0
 };
 
 function setBankroll() {
@@ -146,6 +162,14 @@ function setBankroll() {
       B: { P: 0, B: 0, T: 0, total: 0 },
       T: { P: 0, B: 0, T: 0, total: 0 }
     };
+    shoeStats = {
+      playerCount: 0,
+      bankerCount: 0,
+      tieCount: 0,
+      longestPlayerStreak: 0,
+      longestBankerStreak: 0,
+      longestChoppy: 0
+    };
     updateDisplay();
   } catch (e) {
     return;
@@ -173,6 +197,10 @@ function addResult(v) {
       volatility = switches / (recent.length - 1);
     }
     r.push(v);
+    if (v === 'P') shoeStats.playerCount++;
+    else if (v === 'B') shoeStats.bankerCount++;
+    else if (v === 'T') shoeStats.tieCount++;
+    updateShoeStats();
     learn(v);
     if (paused) {
       pauseHandCount++;
@@ -181,9 +209,7 @@ function addResult(v) {
       if (v !== 'T' && (p.predict[0] === v || pauseHandCount >= 3)) {
         paused = false;
         pauseHandCount = 0;
-        // Preserve Andrei MM state
         if (bettingStrategy === 'andrei') {
-          // No reset; maintain current andreiUnits and bS state
         }
       }
     } else if (p.predict !== 'None' && p.predict !== 'Tie') {
@@ -213,6 +239,36 @@ function addResult(v) {
     if (sPE > 0 && cB - sB >= sPE) sPR = true;
     saveMemoryFast();
     updateDisplay();
+  } catch (e) {
+    return;
+  }
+}
+
+function updateShoeStats() {
+  try {
+    let longestPlayerStreak = 0, longestBankerStreak = 0, longestChoppy = 0;
+    let currentStreak = 1, currentType = r[0], choppyCount = 0;
+    for (let i = 1; i < r.length; i++) {
+      if (r[i] === currentType && r[i] !== 'T') {
+        currentStreak++;
+      } else if (r[i] !== 'T') {
+        if (currentType === 'P') longestPlayerStreak = Math.max(longestPlayerStreak, currentStreak);
+        else if (currentType === 'B') longestBankerStreak = Math.max(longestBankerStreak, currentStreak);
+        currentType = r[i];
+        currentStreak = 1;
+      }
+      if (i > 0 && r[i] !== 'T' && r[i - 1] !== 'T' && r[i] !== r[i - 1]) {
+        choppyCount++;
+        longestChoppy = Math.max(longestChoppy, choppyCount);
+      } else if (r[i] !== 'T' && r[i - 1] !== 'T') {
+        choppyCount = 0;
+      }
+    }
+    if (currentType === 'P') longestPlayerStreak = Math.max(longestPlayerStreak, currentStreak);
+    else if (currentType === 'B') longestBankerStreak = Math.max(longestBankerStreak, currentStreak);
+    shoeStats.longestPlayerStreak = longestPlayerStreak;
+    shoeStats.longestBankerStreak = longestBankerStreak;
+    shoeStats.longestChoppy = longestChoppy;
   } catch (e) {
     return;
   }
@@ -304,7 +360,6 @@ function handleLoss() {
     if (consecutiveLosses >= 3) {
       paused = true;
       pauseHandCount = 0;
-      // Preserve Andrei MM state
       if (bettingStrategy !== 'andrei') {
         if (bettingStrategy === 'mm') {
           if (stage === 1) {
@@ -331,7 +386,6 @@ function handleLoss() {
           bS.cBU = flatbetUnits;
         }
       } else {
-        // For Andrei MM, only update losses, don't reset
         bS.previousLosses.push(wU);
         bS.cBU = andreiUnits;
       }
@@ -424,6 +478,10 @@ function undo() {
     if (!v) {
       return;
     }
+    if (v === 'P') shoeStats.playerCount--;
+    else if (v === 'B') shoeStats.bankerCount--;
+    else if (v === 'T') shoeStats.tieCount--;
+    updateShoeStats();
     unlearn(v);
     const p = pH.pop();
     const o = wL.pop();
@@ -816,7 +874,7 @@ function updateDisplay() {
     const p = hybridPrediction();
     document.getElementById("prediction").innerHTML = sPR ? "🚨 Stop Profit Reached!" : 
       paused ? `⏸ Paused: Waiting for win or ${3 - pauseHandCount} more hands` : 
-      p.predict !== 'None' ? `Bet ${p.predict} (Confidence: ${(p.confidence * 100).toFixed(1)}%)<br><small>Reason: ${p.reason}</small><div class="confidence-bar"><div class="confidence-fill" style="width:${p.confidence * 100}%"></div></div>` : 
+      p.predict !== 'None' ? `Bet <span class="${p.predict === 'Player' ? 'player-prediction' : p.predict === 'Banker' ? 'banker-prediction' : ''}">${p.predict}</span> (Confidence: ${(p.confidence * 100).toFixed(1)}%)<br><small>Reason: ${p.reason}</small><div class="confidence-bar"><div class="confidence-fill" style="width:${p.confidence * 100}%"></div></div>` : 
       `Waiting... (${p.reason || 'No prediction'})`;
     document.getElementById("betSuggestion").innerText = sPR ? "" : paused ? "" : p.predict !== 'None' && p.predict !== 'Tie' ? `🎯 ${bettingStrategy === 'mm' ? `3 Stage M.M (Stage ${stage}, Level ${level + 1})` : bettingStrategy === 'dlambert' ? `D'Lembert (Bet ${dLambertUnits} units)` : bettingStrategy === 'flatbet' ? `Flatbet (Bet ${flatbetUnits} unit)` : `Andrei MM (Bet ${andreiUnits} units)`}` : "";
     const winStreakLength = wL.slice().reverse().findIndex(v => v !== 'win');
@@ -852,6 +910,30 @@ function updateDisplay() {
       return `From ${from}: P: ${(transitions.P / total * 100).toFixed(1)}%, B: ${(transitions.B / total * 100).toFixed(1)}%, T: ${(transitions.T / total * 100).toFixed(1)}% (Total: ${transitions.total})`;
     }).join('<br>');
     document.getElementById("markovMatrixBox").innerHTML = markovDisplay || "No transitions recorded";
+
+    let shoeSummary = '';
+    if (r.length > 0) {
+      const totalHands = r.length;
+      const playerPct = (shoeStats.playerCount / totalHands * 100).toFixed(1);
+      const bankerPct = (shoeStats.bankerCount / totalHands * 100).toFixed(1);
+      const tiePct = (shoeStats.tieCount / totalHands * 100).toFixed(1);
+      shoeSummary += `Hands Played: ${totalHands}<br>`;
+      shoeSummary += `Player: ${shoeStats.playerCount} (${playerPct}%) | Banker: ${shoeStats.bankerCount} (${bankerPct}%) | Tie: ${shoeStats.tieCount} (${tiePct}%)<br>`;
+      const expectedPlayer = (totalHands * 0.4462).toFixed(1);
+      const expectedBanker = (totalHands * 0.4586).toFixed(1);
+      const expectedTie = (totalHands * 0.0952).toFixed(1);
+      shoeSummary += `Expected: Player: ${expectedPlayer}, Banker: ${expectedBanker}, Tie: ${expectedTie}<br>`;
+      shoeSummary += `Longest Streaks: Player: ${shoeStats.longestPlayerStreak}, Banker: ${shoeStats.longestBankerStreak}, Choppy: ${shoeStats.longestChoppy}<br>`;
+      const bankerBias = bankerPct - 45.86;
+      const playerBias = playerPct - 44.62;
+      const bias = Math.abs(bankerBias) > Math.abs(playerBias) ? 
+        (bankerBias > 0 ? `Banker (+${bankerBias.toFixed(1)}%)` : `Banker (${bankerBias.toFixed(1)}%)`) :
+        (playerBias > 0 ? `Player (+${playerBias.toFixed(1)}%)` : `Player (${playerBias.toFixed(1)}%)`);
+      shoeSummary += `Shoe Bias: ${Math.abs(bankerBias) > Math.abs(playerBias) && Math.abs(bankerBias) > 5 ? bias : 'Balanced'}`;
+    } else {
+      shoeSummary = 'No hands played';
+    }
+    document.getElementById("shoeSummary").innerHTML = shoeSummary;
   } catch (e) {
     return;
   }
@@ -868,13 +950,28 @@ function saveMemoryFast() {
 
 async function saveMemory() {
   try {
-    const data = JSON.stringify({ patterns: pM, stats: { w, l, bB, sB, cB, bS, wL, sPT, sPV, sPE, sPR, stage, level, consecutiveWins, consecutiveLosses, paused, pauseHandCount, predictionAccuracy, volatility, peakBankroll, lowestBankroll, bankrollHistory, bettingStrategy, dLambertUnits, flatbetUnits, andreiUnits, patternAge, markovMatrix } });
+    const data = JSON.stringify({ 
+      patterns: pM, 
+      stats: { 
+        w, l, bB, sB, cB, bS, wL, sPT, sPV, sPE, sPR, stage, level, 
+        consecutiveWins, consecutiveLosses, paused, pauseHandCount, 
+        predictionAccuracy, volatility, peakBankroll, lowestBankroll, 
+        bankrollHistory, bettingStrategy, dLambertUnits, flatbetUnits, 
+        andreiUnits, patternAge, markovMatrix, shoeStats 
+      }
+    });
     if (data.length > 5 * 1024 * 1024) {
       localStorage.clear();
     }
     await new Promise(resolve => setTimeout(resolve, 0));
     localStorage.setItem('baccaratPatterns', JSON.stringify(pM));
-    localStorage.setItem('baccaratStats', JSON.stringify({ w, l, bB, sB, cB, bS, wL, sPT, sPV, sPE, sPR, stage, level, consecutiveWins, consecutiveLosses, paused, pauseHandCount, predictionAccuracy, volatility, peakBankroll, lowestBankroll, bankrollHistory, bettingStrategy, dLambertUnits, flatbetUnits, andreiUnits, patternAge, markovMatrix }));
+    localStorage.setItem('baccaratStats', JSON.stringify({ 
+      w, l, bB, sB, cB, bS, wL, sPT, sPV, sPE, sPR, stage, level, 
+      consecutiveWins, consecutiveLosses, paused, pauseHandCount, 
+      predictionAccuracy, volatility, peakBankroll, lowestBankroll, 
+      bankrollHistory, bettingStrategy, dLambertUnits, flatbetUnits, 
+      andreiUnits, patternAge, markovMatrix, shoeStats 
+    }));
   } catch (e) {
     return;
   }
@@ -922,6 +1019,14 @@ async function loadMemory() {
         B: { P: 0, B: 0, T: 0, total: 0 },
         T: { P: 0, B: 0, T: 0, total: 0 }
       };
+      shoeStats = s.shoeStats || {
+        playerCount: 0,
+        bankerCount: 0,
+        tieCount: 0,
+        longestPlayerStreak: 0,
+        longestBankerStreak: 0,
+        longestChoppy: 0
+      };
       document.getElementById("stopProfitType").value = sPT;
       document.getElementById("stopProfitInput").value = sPV || '';
       document.getElementById("bettingStrategy").value = bettingStrategy;
@@ -962,6 +1067,14 @@ async function loadMemory() {
       P: { P: 0, B: 0, T: 0, total: 0 },
       B: { P: 0, B: 0, T: 0, total: 0 },
       T: { P: 0, B: 0, T: 0, total: 0 }
+    };
+    shoeStats = {
+      playerCount: 0,
+      bankerCount: 0,
+      tieCount: 0,
+      longestPlayerStreak: 0,
+      longestBankerStreak: 0,
+      longestChoppy: 0
     };
     document.getElementById("stopProfitType").value = sPT;
     document.getElementById("stopProfitInput").value = '';
@@ -1012,6 +1125,14 @@ function resetStats() {
       B: { P: 0, B: 0, T: 0, total: 0 },
       T: { P: 0, B: 0, T: 0, total: 0 }
     };
+    shoeStats = {
+      playerCount: 0,
+      bankerCount: 0,
+      tieCount: 0,
+      longestPlayerStreak: 0,
+      longestBankerStreak: 0,
+      longestChoppy: 0
+    };
     document.getElementById("stopProfitType").value = sPT;
     document.getElementById("stopProfitInput").value = '';
     document.getElementById("bettingStrategy").value = bettingStrategy;
@@ -1033,6 +1154,14 @@ function resetMemory() {
       B: { P: 0, B: 0, T: 0, total: 0 },
       T: { P: 0, B: 0, T: 0, total: 0 }
     };
+    shoeStats = {
+      playerCount: 0,
+      bankerCount: 0,
+      tieCount: 0,
+      longestPlayerStreak: 0,
+      longestBankerStreak: 0,
+      longestChoppy: 0
+    };
     updateDisplay();
     saveMemoryFast();
   } catch (e) {
@@ -1053,6 +1182,14 @@ function startNewShoe() {
     wL.length = 0;
     paused = false;
     pauseHandCount = 0;
+    shoeStats = {
+      playerCount: 0,
+      bankerCount: 0,
+      tieCount: 0,
+      longestPlayerStreak: 0,
+      longestBankerStreak: 0,
+      longestChoppy: 0
+    };
     updateDisplay();
   } catch (e) {
     return;
