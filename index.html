@@ -225,7 +225,6 @@
     <div id="markovMatrixBox">No transitions recorded</div>
   </div>
   <script>
-    // [Original JavaScript code unchanged]
     const r = [], pM = {}, pH = [], wL = [], bankrollHistory = [];
     let w = 0, l = 0, bB = 0, sB = 0, cB = 0, sPT = 'percentage', sPV = 0, sPE = 0, sPR = false;
     let predictionAccuracy = { correct: 0, total: 0 }, volatility = 0;
@@ -251,6 +250,7 @@
       longestBankerStreak: 0,
       longestChoppy: 0
     };
+    let lastPredictionCorrect = false;
 
     function setBankroll() {
       try {
@@ -313,6 +313,7 @@
           longestBankerStreak: 0,
           longestChoppy: 0
         };
+        lastPredictionCorrect = false;
         updateDisplay();
       } catch (e) {
         return;
@@ -358,6 +359,7 @@
         } else if (p.predict !== 'None' && p.predict !== 'Tie') {
           pH.push(p.predict);
           const correct = p.predict[0] === v;
+          lastPredictionCorrect = correct;
           predictionAccuracy.total++;
           if (correct) predictionAccuracy.correct++;
           if (v === 'T') {
@@ -466,10 +468,14 @@
             bS.cBU = dLambertUnits;
           }
         } else if (bettingStrategy === 'flatbet') {
-          bS.cBU = flatbetUnits;
           if (resetCycle) {
             bS.cP = 0;
           }
+          const p = hybridPrediction();
+          if (p.confidence >= 0.6 && lastPredictionCorrect) {
+            flatbetUnits = Math.min(flatbetUnits + 0.5, 2);
+          }
+          bS.cBU = flatbetUnits;
         } else if (bettingStrategy === 'andrei') {
           if (resetCycle) {
             andreiUnits = 1;
@@ -526,6 +532,7 @@
               dLambertUnits++;
               bS.cBU = dLambertUnits;
             } else if (bettingStrategy === 'flatbet') {
+              flatbetUnits = Math.max(1, flatbetUnits - 0.5);
               bS.cBU = flatbetUnits;
             }
           } else {
@@ -555,6 +562,7 @@
             dLambertUnits++;
             bS.cBU = dLambertUnits;
           } else if (bettingStrategy === 'flatbet') {
+            flatbetUnits = Math.max(1, flatbetUnits - 0.5);
             bS.cBU = flatbetUnits;
           } else if (bettingStrategy === 'andrei') {
             bS.previousLosses.push(wU);
@@ -609,6 +617,7 @@
         consecutiveLosses = 0;
         paused = false;
         pauseHandCount = 0;
+        lastPredictionCorrect = false;
         updateDisplay();
       } catch (e) {
         return;
@@ -641,6 +650,7 @@
             w--;
             consecutiveWins--;
             consecutiveLosses = wL.slice().reverse().findIndex(x => x === 'loss') === -1 ? 0 : wL.slice().reverse().findIndex(x => x === 'loss');
+            lastPredictionCorrect = wL.length > 0 && wL[wL.length - 1] === 'win';
             if (bettingStrategy === 'mm') {
               if (stage === 1 && level === 0 && bS.cP < 0) {
                 stage = bS.previousLosses.length >= 3 ? 2 : 1;
@@ -667,6 +677,7 @@
               dLambertUnits = Math.min(dLambertUnits + 1, cB / u);
               bS.cBU = dLambertUnits;
             } else if (bettingStrategy === 'flatbet') {
+              flatbetUnits = Math.max(1, flatbetUnits - 0.5);
               bS.cBU = flatbetUnits;
             } else if (bettingStrategy === 'andrei') {
               bS.previousLosses.push(wU);
@@ -684,6 +695,7 @@
               paused = false;
               pauseHandCount = 0;
             }
+            lastPredictionCorrect = false;
             if (bettingStrategy === 'mm') {
               if (stage === 1) {
                 if (consecutiveLosses >= 2) {
@@ -706,6 +718,7 @@
               dLambertUnits = Math.max(1, dLambertUnits - 1);
               bS.cBU = dLambertUnits;
             } else if (bettingStrategy === 'flatbet') {
+              flatbetUnits = Math.min(flatbetUnits + 0.5, 2);
               bS.cBU = flatbetUnits;
             } else if (bettingStrategy === 'andrei') {
               bS.previousLosses.pop();
@@ -718,6 +731,7 @@
             consecutiveLosses = wL.slice().reverse().findIndex(x => x === 'loss') === -1 ? 0 : wL.slice().reverse().findIndex(x => x === 'loss');
             paused = false;
             pauseHandCount = 0;
+            lastPredictionCorrect = false;
             if (bettingStrategy === 'mm') {
               bS.cBU = betLevels.stage1[level] / bB;
             } else if (bettingStrategy === 'dlambert') {
@@ -864,53 +878,98 @@
       }
     }
 
+    function getSecondToLastPrediction() {
+      try {
+        if (r.length < 2) {
+          return { prediction: null, confidence: 0, source: 'Second-to-Last' };
+        }
+        const nonTieHistory = r.slice().reverse().filter(x => x !== 'T');
+        if (nonTieHistory.length < 2) {
+          return { prediction: null, confidence: 0, source: 'Second-to-Last' };
+        }
+        const secondToLast = nonTieHistory[1];
+        const prediction = secondToLast === 'P' ? 'Player' : 'Banker';
+        const historicalAccuracy = predictionAccuracy.total > 0 ? Math.min(predictionAccuracy.correct / predictionAccuracy.total, 0.9) : 0.5;
+        const confidence = 0.5 * historicalAccuracy;
+        return { prediction, confidence, source: 'Second-to-Last' };
+      } catch (e) {
+        return { prediction: null, confidence: 0, source: 'Second-to-Last' };
+      }
+    }
+
     function hybridPrediction() {
       try {
         const earlyHandLimit = parseInt(document.getElementById("earlyHandLimit").value) || 5;
         let confidenceThreshold = parseFloat(document.getElementById("confidenceThreshold").value) / 100 || 0.1;
         if (r.length >= 20) confidenceThreshold = Math.max(0.05, confidenceThreshold * 0.5);
         if (r.length < earlyHandLimit) {
-          return { predict: 'None', confidence: 0, patternsUsed: [], reason: `Need ${earlyHandLimit - r.length} more hands`, markovProb: {} };
+          return { predict: 'None', confidence: 0, patternsUsed: [], reason: `Need ${earlyHandLimit - r.length} more hands`, markovProb: {}, sources: [] };
         }
         const patternVote = getPatternVote();
         const markovVote = getMarkovPrediction();
+        const secondToLastVote = getSecondToLastPrediction();
         const { streakType, streakLength, isChoppy } = getStreakInfo();
-        
+
         let prediction = 'None';
         let confidence = 0;
         let patternsUsed = patternVote.patternsUsed || [];
         let markovProb = markovVote.probabilities || {};
-        let reason = 'No strong patterns or transitions';
-        
-        if (patternVote.prediction && markovVote.prediction) {
-          const patternWeight = 0.6;
-          const markovWeight = 0.4;
-          const scores = {
-            Player: patternVote.prediction === 'Player' ? patternVote.confidence * patternWeight : 0 + (markovVote.prediction === 'Player' ? markovVote.confidence * markovWeight : 0),
-            Banker: patternVote.prediction === 'Banker' ? patternVote.confidence * patternWeight : 0 + (markovVote.prediction === 'Banker' ? markovVote.confidence * markovWeight : 0),
-            Tie: patternVote.prediction === 'Tie' ? patternVote.confidence * patternWeight : 0 + (markovVote.prediction === 'Tie' ? markovVote.confidence * markovWeight : 0)
-          };
-          const maxScore = Math.max(scores.Player, scores.Banker, scores.Tie);
-          prediction = maxScore === scores.Player ? 'Player' : maxScore === scores.Banker ? 'Banker' : 'Tie';
+        let reason = 'No strong patterns, transitions, or second-to-last outcome';
+        let sources = [];
+
+        const patternWeight = 0.4;
+        const markovWeight = 0.3;
+        const secondToLastWeight = 0.3;
+
+        const scores = {
+          Player: 0,
+          Banker: 0,
+          Tie: 0
+        };
+
+        if (patternVote.prediction) {
+          scores[patternVote.prediction] += patternVote.confidence * patternWeight;
+          sources.push(`Pattern (${(patternVote.confidence * 100).toFixed(1)}%)`);
+        }
+        if (markovVote.prediction) {
+          scores[markovVote.prediction] += markovVote.confidence * markovWeight;
+          sources.push(`Markov (${(markovVote.confidence * 100).toFixed(1)}%)`);
+        }
+        if (secondToLastVote.prediction) {
+          scores[secondToLastVote.prediction] += secondToLastVote.confidence * secondToLastWeight;
+          sources.push(`Second-to-Last (${(secondToLastVote.confidence * 100).toFixed(1)}%)`);
+        }
+
+        const maxScore = Math.max(scores.Player, scores.Banker, scores.Tie);
+        if (maxScore > 0) {
+          prediction = scores.Player === maxScore ? 'Player' : scores.Banker === maxScore ? 'Banker' : 'Tie';
           confidence = maxScore;
-          reason = `Combined pattern (${patternVote.confidence.toFixed(2)}) and Markov (${markovVote.confidence.toFixed(2)})`;
+          reason = `Combined: ${sources.join(', ')}`;
         } else if (patternVote.prediction) {
           prediction = patternVote.prediction;
           confidence = patternVote.confidence;
           reason = 'Pattern-based';
+          sources = ['Pattern'];
         } else if (markovVote.prediction) {
           prediction = markovVote.prediction;
           confidence = markovVote.confidence;
           reason = 'Markov-based';
+          sources = ['Markov'];
+        } else if (secondToLastVote.prediction) {
+          prediction = secondToLastVote.prediction;
+          confidence = secondToLastVote.confidence;
+          reason = 'Second-to-Last outcome';
+          sources = ['Second-to-Last'];
         }
 
         if (streakType && streakLength >= 3 && !isChoppy) {
           prediction = streakType;
           confidence = Math.min(confidence + 0.3, 1);
-          reason = 'Following strong streak';
+          reason = `Following strong streak (${streakType}, ${streakLength})`;
+          sources.push('Streak');
         } else if (isChoppy && prediction !== 'None') {
           confidence *= 0.9;
-          reason = 'Choppy pattern, confidence adjusted';
+          reason = `Choppy pattern, confidence adjusted (${sources.join(', ')})`;
         } else if (prediction === 'None' && r.length >= 2) {
           const recent = r.slice(-2).filter(x => x !== 'T');
           if (recent.length >= 2) {
@@ -919,12 +978,14 @@
             patternsUsed = [];
             markovProb = {};
             reason = recent[0] === recent[1] ? 'Following recent repeat' : 'Reversing choppy pattern';
+            sources = ['Recent'];
           } else if (recent.length === 1) {
             prediction = recent[0] === 'P' ? 'Player' : 'Banker';
             confidence = 0.15;
             patternsUsed = [];
             markovProb = {};
             reason = 'Following last outcome';
+            sources = ['Recent'];
           }
         }
 
@@ -934,11 +995,12 @@
           patternsUsed = [];
           markovProb = {};
           reason = `Confidence ${(confidence * 100).toFixed(1)}% below threshold`;
+          sources = [];
         }
 
-        return { predict: prediction, confidence, patternsUsed, reason, markovProb };
+        return { predict: prediction, confidence, patternsUsed, reason, markovProb, sources };
       } catch (e) {
-        return { predict: 'None', confidence: 0, patternsUsed: [], reason: 'Error', markovProb: {} };
+        return { predict: 'None', confidence: 0, patternsUsed: [], reason: 'Error', markovProb: {}, sources: [] };
       }
     }
 
@@ -1016,12 +1078,16 @@
         document.getElementById("history").innerHTML = r.slice(-10).map(v => `<span class="result ${v === 'P' ? 'player' : v === 'B' ? 'banker' : 'tie'}">${v === 'P' ? 'Player' : v === 'B' ? 'Banker' : 'Tie'}</span>`).join('');
         const p = hybridPrediction();
         document.getElementById("prediction").innerHTML = sPR ? "Stop Profit Reached!" : 
-          paused ? `Paused: Waiting for win or ${3 - pauseHandCount} more hands` : 
+          paused ? `` : 
           p.predict !== 'None' ? `Bet <span class="${p.predict === 'Player' ? 'player-prediction' : p.predict === 'Banker' ? 'banker-prediction' : ''}">${p.predict}</span> (Confidence: ${(p.confidence * 100).toFixed(1)}%)<br><small>Reason: ${p.reason}</small><div class="confidence-bar"><div class="confidence-fill" style="width:${p.confidence * 100}%"></div></div>` : 
           `Waiting... (${p.reason || 'No prediction'})`;
-        document.getElementById("betSuggestion").innerText = sPR ? "" : paused ? "" : p.predict !== 'None' && p.predict !== 'Tie' ? `${bettingStrategy === 'mm' ? `3 Stage M.M (Stage ${stage}, Level ${level + 1})` : bettingStrategy === 'dlambert' ? `D'Lembert (Bet ${dLambertUnits} units)` : bettingStrategy === 'flatbet' ? `Flatbet (Bet ${flatbetUnits} unit)` : `Andrei MM (Bet ${andreiUnits} units)`}` : "";
+        document.getElementById("betSuggestion").innerText = sPR ? "" : paused ? "" : p.predict !== 'None' && p.predict !== 'Tie' ? 
+          `${bettingStrategy === 'mm' ? `3 Stage M.M (Stage ${stage}, Level ${level + 1})` : 
+             bettingStrategy === 'dlambert' ? `D'Lembert (Bet ${dLambertUnits} units)` : 
+             bettingStrategy === 'flatbet' ? `Flatbet (Bet ${flatbetUnits.toFixed(1)} units)` : 
+             `Andrei MM (Bet ${andreiUnits} units)`}` : "";
         const wager = getWager();
-        const wagerUnits = bB > 0 ? Math.round(wager / bB) : 0;
+        const wagerUnits = bB > 0 ? (wager / bB).toFixed(1) : 0;
         document.getElementById("currentWager").innerText = `Wager: $${wager.toFixed(0)} (${wagerUnits} units)`;
         document.getElementById("wins").innerText = w;
         document.getElementById("losses").innerText = l;
@@ -1030,20 +1096,27 @@
         const sPD = sPV > 0 ? sPT === 'percentage' ? `${sPV}% ($${sPE.toFixed(2)})` : `$${sPV.toFixed(2)}` : 'Not Set';
         const absDrawdown = sB ? (sB - lowestBankroll).toFixed(2) : 0;
         const maxDrawdown = peakBankroll && peakBankroll > 0 ? ((peakBankroll - lowestBankroll) / peakBankroll * 100).toFixed(1) : 0;
-        document.getElementById("bankrollDisplay").innerHTML = sB ? `Balance: ${cB.toFixed(2)} | Profit: ${(cB - sB).toFixed(2)}<br>Bet: $${(bS.cBU * bB).toFixed(2)} (${bS.cBU} units)<br><span class="${bS.cP >= 0 ? 'cycle-reset' : ''}">Cycle Profit: $${(bS.cP * bB).toFixed(2)}</span><br>Total: $${(bS.tP * bB).toFixed(2)}<br>Stop: ${sPD} | ${sPR ? 'Reached' : 'Active'}<br>Abs Drawdown: $${absDrawdown} | Max Drawdown: ${maxDrawdown}%` : 'Balance: - | Profit: -';
+        document.getElementById("bankrollDisplay").innerHTML = sB ? `Balance: ${cB.toFixed(2)} | Profit: ${(cB - sB).toFixed(2)}<br>Bet: $${(bS.cBU * bB).toFixed(2)} (${bS.cBU.toFixed(1)} units)<br><span class="${bS.cP >= 0 ? 'cycle-reset' : ''}">Cycle Profit: $${(bS.cP * bB).toFixed(2)}</span><br>Total: $${(bS.tP * bB).toFixed(2)}<br>Stop: ${sPD} | ${sPR ? 'Reached' : 'Active'}<br>Abs Drawdown: $${absDrawdown} | Max Drawdown: ${maxDrawdown}%` : 'Balance: - | Profit: -';
         document.getElementById("patternMemoryBox").innerHTML = Object.entries(pM).map(([k, v]) => {
           const t = (v.P || 0) + (v.B || 0) + (v.T || 0);
           const f = v.P > v.B && v.P > v.T ? 'Player' : v.B > v.P && v.B > v.T ? 'Banker' : v.T > v.P && v.T > v.B ? 'Tie' : 'Even';
           const successRate = t > 0 ? Math.max(v.P, v.B, v.T) / t * 100 : 0;
           const age = r.length - (patternAge[k] || 0);
-          return `${k}→P:${v.P || 0},B:${v.B || 0},T:${v.T || 0}→<b>${f}</b> (${t}, ${successRate.toFixed(1)}%, Age: ${age})<br>`;
-        }).join('') || "No patterns";
+          return `${k}→P:${v.P || 0},B:${v.B || 0},T:${v.T || 0}→<b>${f}</b> (${t}, ${successRate.toFixed(1)}%, Age: ${age})`;
+        }).join('<br>') || "No patterns";
         let predictionPatterns = "No patterns influencing prediction";
         if (p.predict !== 'None') {
           predictionPatterns = p.patternsUsed.map(pat => {
             const successRate = pat.total > 0 ? Math.max(pat.P, pat.B, pat.T) / pat.total * 100 : 0;
             return `${pat.key}→P:${pat.P || 0},B:${pat.B || 0},T:${pat.T || 0}→<b>${p.predict}</b> (${pat.total}, Reliability: ${(pat.reliability * 100).toFixed(1)}%, Score: ${pat.score.toFixed(2)})`;
           }).join('<br>');
+          if (p.sources.includes('Second-to-Last')) {
+            const nonTieHistory = r.slice().reverse().filter(x => x !== 'T');
+            if (nonTieHistory.length >= 2) {
+              predictionPatterns += predictionPatterns ? '<br>' : '';
+              predictionPatterns += `Second-to-Last: ${nonTieHistory[1] === 'P' ? 'Player' : 'Banker'}`;
+            }
+          }
         }
         document.getElementById("predictionPatternsBox").innerHTML = predictionPatterns;
         const markovDisplay = Object.entries(markovMatrix).map(([from, transitions]) => {
@@ -1094,7 +1167,7 @@
             consecutiveWins, consecutiveLosses, paused, pauseHandCount, 
             predictionAccuracy, volatility, peakBankroll, lowestBankroll, 
             bankrollHistory, bettingStrategy, dLambertUnits, flatbetUnits, 
-            andreiUnits, patternAge, markovMatrix, shoeStats 
+            andreiUnits, patternAge, markovMatrix, shoeStats, lastPredictionCorrect 
           }
         });
         if (data.length > 5 * 1024 * 1024) {
@@ -1107,7 +1180,7 @@
           consecutiveWins, consecutiveLosses, paused, pauseHandCount, 
           predictionAccuracy, volatility, peakBankroll, lowestBankroll, 
           bankrollHistory, bettingStrategy, dLambertUnits, flatbetUnits, 
-          andreiUnits, patternAge, markovMatrix, shoeStats 
+          andreiUnits, patternAge, markovMatrix, shoeStats, lastPredictionCorrect 
         }));
       } catch (e) {
         return;
@@ -1164,6 +1237,7 @@
             longestBankerStreak: 0,
             longestChoppy: 0
           };
+          lastPredictionCorrect = s.lastPredictionCorrect || false;
           document.getElementById("stopProfitType").value = sPT;
           document.getElementById("stopProfitInput").value = sPV || '';
           document.getElementById("bettingStrategy").value = bettingStrategy;
@@ -1213,6 +1287,7 @@
           longestBankerStreak: 0,
           longestChoppy: 0
         };
+        lastPredictionCorrect = false;
         document.getElementById("stopProfitType").value = sPT;
         document.getElementById("stopProfitInput").value = '';
         document.getElementById("bettingStrategy").value = bettingStrategy;
@@ -1270,6 +1345,7 @@
           longestBankerStreak: 0,
           longestChoppy: 0
         };
+        lastPredictionCorrect = false;
         document.getElementById("stopProfitType").value = sPT;
         document.getElementById("stopProfitInput").value = '';
         document.getElementById("bettingStrategy").value = bettingStrategy;
@@ -1319,6 +1395,7 @@
         wL.length = 0;
         paused = false;
         pauseHandCount = 0;
+        lastPredictionCorrect = false;
         shoeStats = {
           playerCount: 0,
           bankerCount: 0,
