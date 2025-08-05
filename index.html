@@ -1,1049 +1,154 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>BFC VIP</title>
-  <!-- Google Fonts -->
-  <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@600;700&family=Open+Sans:wght@400;500&display=swap" rel="stylesheet">
-  <!-- Firebase SDK (Modular) -->
+  <meta charset="UTF-8">
+  <title>BFC-VIP</title>
   <script type="module">
-    import { initializeApp } from 'https://www.gstatic.com/firebasejs/9.23.0/firebase-app.js';
-    import { getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged, createUserWithEmailAndPassword } from 'https://www.gstatic.com/firebasejs/9.23.0/firebase-auth.js';
-    import { getFirestore, collection, doc, getDoc, setDoc, getDocs } from 'https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore.js';
+    // Firebase setup
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+    import { getAuth, onAuthStateChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+    import { getFirestore, doc, setDoc, getDoc, collection, getDocs, updateDoc } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
-    // Firebase Configuration
     const firebaseConfig = {
       apiKey: "AIzaSyBs3LHGZA_8spAwQ5kgULiqcZmKqcIvZiI",
       authDomain: "bfc-vip.firebaseapp.com",
       projectId: "bfc-vip",
-      storageBucket: "bfc-vip.firebasestorage.app",
+      storageBucket: "bfc-vip.appspot.com",
       messagingSenderId: "92211995630",
       appId: "1:92211995630:web:186a26085329fc607724ff",
       measurementId: "G-1EBPP36F59"
     };
 
-    // Initialize Firebase
     const app = initializeApp(firebaseConfig);
     const auth = getAuth(app);
     const db = getFirestore(app);
 
-    // State Management
-    let state = {
-      history: [],
-      outcomes: [],
-      wins: 0,
-      losses: 0,
-      baseUnit: 0,
-      startBankroll: 0,
-      currentBankroll: 0,
-      betState: { currentBetUnits: 1, totalProfit: 0, cycleProfit: 0, previousLosses: [] },
-      stopProfitType: 'percentage',
-      stopProfitValue: 0,
-      stopProfitEffective: 0,
-      stopProfitReached: false
-    };
-    let snapshots = [];
-    let saveTimeout = null;
     let currentUser = null;
-    let timerInterval = null;
 
-    // User database with subscription info
-    const ADMIN_USERNAME = 'admin';
+    // Check auth state
+    onAuthStateChanged(auth, async (user) => {
+      if (user) {
+        currentUser = user;
+        const token = await user.getIdTokenResult();
+        const isAdmin = token.claims.admin === true;
 
-    async function getUserData(username) {
-      const docRef = doc(db, 'users', username);
-      const docSnap = await getDoc(docRef);
-      return docSnap.exists() ? docSnap.data() : null;
-    }
+        document.getElementById("loginSection").style.display = "none";
+        document.getElementById("mainApp").style.display = "block";
+        document.getElementById("adminTools").style.display = isAdmin ? "block" : "none";
 
-    async function saveUserData(username, data) {
-      await setDoc(doc(db, 'users', username), data);
-    }
+        const docRef = doc(db, "subscriptions", user.uid);
+        const docSnap = await getDoc(docRef);
 
-    function formatTimeRemaining(ms) {
-      if (!ms || ms <= 0) return 'Expired';
-      const days = Math.floor(ms / (1000 * 60 * 60 * 24));
-      const hours = Math.floor((ms % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
-      const minutes = Math.floor((ms % (1000 * 60 * 60)) / (1000 * 60));
-      return `${days}d ${hours}h ${minutes}m`;
-    }
+        if (docSnap.exists()) {
+          const data = docSnap.data();
+          const now = new Date();
+          const expiry = new Date(data.expires);
 
-    function updateTimer() {
-      if (!currentUser) return;
-      getUserData(currentUser).then(userData => {
-        if (!userData?.accessExpires) return;
-        const now = Date.now();
-        const timeLeft = userData.accessExpires - now;
-        document.getElementById('timerDisplay').innerText = `Access expires: ${formatTimeRemaining(timeLeft)}`;
-        if (timeLeft <= 0) {
-          clearInterval(timerInterval);
-          logout();
-          alert('Your subscription has expired. Contact an admin to renew.');
-        }
-      });
-    }
-
-    async function login() {
-      const username = document.getElementById('username').value.trim();
-      const password = document.getElementById('password').value;
-      const errorDiv = document.getElementById('loginError');
-
-      if (!username || !password) {
-        errorDiv.innerText = 'Please enter both username and password';
-        return;
-      }
-
-      try {
-        const email = `${username}@bfcvip.com`;
-        const userCredential = await signInWithEmailAndPassword(auth, email, password);
-        currentUser = username;
-
-        let userData = await getUserData(username);
-        if (!userData) {
-          userData = {
-            state: JSON.parse(JSON.stringify(state)),
-            accessExpires: null,
-            isAdmin: username === ADMIN_USERNAME
-          };
-          await saveUserData(username, userData);
-        }
-
-        if (userData.isAdmin) {
-          document.getElementById('loginContainer').style.display = 'none';
-          document.getElementById('adminContainer').style.display = 'block';
-          document.getElementById('appContainer').style.display = 'none';
-          updateAdminUserList();
-        } else {
-          if (!userData.accessExpires || userData.accessExpires < Date.now()) {
-            errorDiv.innerText = 'Your subscription has expired or is not set. Contact an admin.';
-            await signOut(auth);
-            return;
-          }
-          state = userData.state;
-          document.getElementById('loginContainer').style.display = 'none';
-          document.getElementById('appContainer').style.display = 'block';
-          document.getElementById('adminContainer').style.display = 'none';
-          updateDisplay();
-          updateTimer();
-          timerInterval = setInterval(updateTimer, 60000);
-        }
-      } catch (error) {
-        console.error('Login error:', error);
-        if (error.code === 'auth/user-not-found') {
-          errorDiv.innerText = 'User does not exist. Contact admin to create an account.';
-        } else if (error.code === 'auth/wrong-password') {
-          errorDiv.innerText = 'Incorrect password';
-        } else {
-          errorDiv.innerText = 'Login failed: ' + error.message;
-        }
-      }
-    }
-
-    async function logout() {
-      try {
-        await signOut(auth);
-      } catch (error) {
-        console.error('Logout error:', error);
-      }
-      await saveMemory();
-      clearInterval(timerInterval);
-      currentUser = null;
-      state = {
-        history: [],
-        outcomes: [],
-        wins: 0,
-        losses: 0,
-        baseUnit: 0,
-        startBankroll: 0,
-        currentBankroll: 0,
-        betState: { currentBetUnits: 1, totalProfit: 0, cycleProfit: 0, previousLosses: [] },
-        stopProfitType: 'percentage',
-        stopProfitValue: 0,
-        stopProfitEffective: 0,
-        stopProfitReached: false
-      };
-      snapshots = [];
-      document.getElementById('loginContainer').style.display = 'block';
-      document.getElementById('appContainer').style.display = 'none';
-      document.getElementById('adminContainer').style.display = 'none';
-      document.getElementById('username').value = '';
-      document.getElementById('password').value = '';
-      document.getElementById('loginError').innerText = '';
-      document.getElementById('timerDisplay').innerText = 'Access expires: -';
-    }
-
-    async function createUser() {
-      if (currentUser !== ADMIN_USERNAME) {
-        alert('Only admin can create users');
-        return;
-      }
-      const username = document.getElementById('newUsername').value.trim();
-      const password = document.getElementById('newPassword').value;
-      const durationDays = parseInt(document.getElementById('newUserSubscriptionDuration').value);
-      const errorDiv = document.getElementById('createUserError');
-
-      if (!username || !password) {
-        errorDiv.innerText = 'Please enter both username and password';
-        return;
-      }
-      if ((await getUserData(username)) || username === ADMIN_USERNAME) {
-        errorDiv.innerText = username === ADMIN_USERNAME ? 'Cannot create user with admin username' : 'Username already exists';
-        return;
-      }
-
-      try {
-        const email = `${username}@bfcvip.com`;
-        await createUserWithEmailAndPassword(auth, email, password);
-        const userData = {
-          state: JSON.parse(JSON.stringify(state)),
-          accessExpires: Date.now() + durationDays * 24 * 60 * 60 * 1000,
-          isAdmin: false
-        };
-        await saveUserData(username, userData);
-        errorDiv.innerText = `User ${username} created with ${durationDays}-day subscription`;
-        document.getElementById('newUsername').value = '';
-        document.getElementById('newPassword').value = '';
-        updateAdminUserList();
-      } catch (error) {
-        errorDiv.innerText = 'Error creating user: ' + error.message;
-      }
-    }
-
-    async function toggleAdminStatus(username) {
-      if (currentUser !== ADMIN_USERNAME) {
-        alert('Only admin can modify admin status');
-        return;
-      }
-      const userData = await getUserData(username);
-      if (!userData) {
-        document.getElementById('adminError').innerText = 'User does not exist';
-        return;
-      }
-      if (username === ADMIN_USERNAME) {
-        document.getElementById('adminError').innerText = 'Cannot modify admin status for primary admin';
-        return;
-      }
-
-      userData.isAdmin = !userData.isAdmin;
-      userData.accessExpires = userData.isAdmin ? null : 0;
-      await saveUserData(username, userData);
-      document.getElementById('adminError').innerText = `${username} ${userData.isAdmin ? 'promoted to admin' : 'demoted to user'}`;
-      updateAdminUserList();
-    }
-
-    async function updateAdminUserList() {
-      const userListDiv = document.getElementById('userList');
-      userListDiv.innerHTML = '';
-      const snapshot = await getDocs(collection(db, 'users'));
-      snapshot.forEach(doc => {
-        const username = doc.id;
-        if (username === ADMIN_USERNAME) return;
-        const userData = doc.data();
-        const userDiv = document.createElement('div');
-        const expires = userData.accessExpires;
-        const isAdmin = userData.isAdmin;
-        userDiv.innerHTML = `${username} - Access: ${isAdmin ? 'Admin (No Expiration)' : expires ? formatTimeRemaining(expires - Date.now()) : 'Not Set'}`;
-        const adminButton = document.createElement('button');
-        adminButton.innerText = isAdmin ? 'Demote' : 'Make Admin';
-        adminButton.className = isAdmin ? 'demote' : '';
-        adminButton.onclick = () => toggleAdminStatus(username);
-        userDiv.appendChild(adminButton);
-        userListDiv.appendChild(userDiv);
-      });
-    }
-
-    async function setSubscription() {
-      if (currentUser !== ADMIN_USERNAME) {
-        alert('Only admin can set subscriptions');
-        return;
-      }
-      const username = document.getElementById('adminUsername').value.trim();
-      const durationDays = parseInt(document.getElementById('subscriptionDuration').value);
-      const errorDiv = document.getElementById('adminError');
-
-      if (!username) {
-        errorDiv.innerText = 'Please enter a username';
-        return;
-      }
-      const userData = await getUserData(username);
-      if (!userData) {
-        errorDiv.innerText = 'User does not exist';
-        return;
-      }
-      if (userData.isAdmin) {
-        errorDiv.innerText = 'Cannot set subscription for admin users';
-        return;
-      }
-
-      userData.accessExpires = Date.now() + durationDays * 24 * 60 * 60 * 1000;
-      await saveUserData(username, userData);
-      errorDiv.innerText = `Subscription set for ${username} to ${durationDays} days`;
-      updateAdminUserList();
-    }
-
-    function getCurrentPrediction() {
-      if (state.history.length < 5) return null;
-
-      const last5 = state.history.slice(-5);
-      const countB = last5.filter(x => x === 'B').length;
-      const countP = last5.filter(x => x === 'P').length;
-
-      if (last5.every((v, i, a) => i === 0 || v !== a[i - 1])) {
-        return last5.at(-1) === 'B' ? 'P' : 'B';
-      } else if (last5.slice(-3).every(v => v === last5.at(-1))) {
-        return last5.at(-1);
-      } else if (countB === 4 || countP === 4) {
-        return countB > countP ? 'P' : 'B';
-      } else {
-        return state.history.slice(-3).filter(x => x === 'B').length < 2 ? 'B' : 'P';
-      }
-    }
-
-    async function recordResult(result) {
-      if (!currentUser) {
-        alert('Please login first');
-        return;
-      }
-      const userData = await getUserData(currentUser);
-      if (!userData.isAdmin && (!userData.accessExpires || userData.accessExpires < Date.now())) {
-        alert('Your subscription has expired. Contact an admin to renew.');
-        logout();
-        return;
-      }
-      if (!state.baseUnit || !state.startBankroll) {
-        alert('Set bankroll/unit first');
-        return;
-      }
-
-      const prediction = getCurrentPrediction();
-      snapshots.push(JSON.parse(JSON.stringify(state)));
-
-      if (!prediction) {
-        state.history.push(result);
-        alert('No prediction available yet (need 5 hands). No wager placed.');
-        await saveMemoryFast();
-        updateDisplay();
-        return;
-      }
-
-      if (state.stopProfitReached) {
-        alert('Stop profit reached');
-        return;
-      }
-      const wager = getWager();
-      if (wager > state.currentBankroll) {
-        alert('Insufficient balance');
-        return;
-      }
-
-      state.history.push(result);
-      const outcome = result === prediction ? 'win' : 'loss';
-      state.outcomes.push(outcome === 'win' ? 'W' : 'L');
-      if (outcome === 'win') {
-        handleWin();
-        state.wins++;
-      } else {
-        handleLoss();
-        state.losses++;
-      }
-      if (state.stopProfitEffective > 0 && state.currentBankroll - state.startBankroll >= state.stopProfitEffective) {
-        state.stopProfitReached = true;
-      }
-      await saveMemoryFast();
-      updateDisplay();
-    }
-
-    async function undo() {
-      if (!currentUser) {
-        alert('Please login first');
-        return;
-      }
-      const userData = await getUserData(currentUser);
-      if (!userData.isAdmin && (!userData.accessExpires || userData.accessExpires < Date.now())) {
-        alert('Your subscription has expired. Contact an admin to renew.');
-        logout();
-        return;
-      }
-      if (snapshots.length) {
-        state = snapshots.pop();
-        await saveMemoryFast();
-        updateDisplay();
-      }
-    }
-
-    async function clearAll() {
-      if (!currentUser) {
-        alert('Please login first');
-        return;
-      }
-      const userData = await getUserData(currentUser);
-      if (!userData.isAdmin && (!userData.accessExpires || userData.accessExpires < Date.now())) {
-        alert('Your subscription has expired. Contact an admin to renew.');
-        logout();
-        return;
-      }
-      if (confirm('Reset all data?')) {
-        snapshots.push(JSON.parse(JSON.stringify(state)));
-        state.history = [];
-        state.outcomes = [];
-        state.wins = 0;
-        state.losses = 0;
-        await saveMemoryFast();
-        document.getElementById('prediction').innerText = 'Waiting for input...';
-        document.getElementById('shoeType').innerText = 'Detected Pattern: N/A';
-        document.getElementById('historyDisplay').innerHTML = '';
-        updateMMDisplay();
-      }
-    }
-
-    async function setBankroll() {
-      if (!currentUser) {
-        alert('Please login first');
-        return;
-      }
-      const userData = await getUserData(currentUser);
-      if (!userData.isAdmin && (!userData.accessExpires || userData.accessExpires < Date.now())) {
-        alert('Your subscription has expired. Contact an admin to renew.');
-        logout();
-        return;
-      }
-      const bankroll = parseFloat(document.getElementById('bankrollInput').value);
-      const unit = parseFloat(document.getElementById('basebetInput').value);
-      const stopProfit = parseFloat(document.getElementById('stopProfitInput').value) || 0;
-      state.stopProfitType = document.getElementById('stopProfitType').value;
-
-      if (isNaN(bankroll) || bankroll <= 0 || isNaN(unit) || unit <= 0) {
-        alert('Invalid bankroll or unit value');
-        return;
-      }
-      if (stopProfit < 0) {
-        alert('Invalid stop profit');
-        return;
-      }
-
-      snapshots.push(JSON.parse(JSON.stringify(state)));
-      state.startBankroll = bankroll;
-      state.baseUnit = unit;
-      state.currentBankroll = bankroll;
-      state.stopProfitValue = stopProfit;
-      state.stopProfitEffective = state.stopProfitType === 'percentage' ? stopProfit / 100 * bankroll : stopProfit;
-      state.stopProfitReached = false;
-      state.betState = { currentBetUnits: 1, totalProfit: 0, cycleProfit: 0, previousLosses: [] };
-      state.wins = 0;
-      state.losses = 0;
-      state.outcomes = [];
-      await saveMemoryFast();
-      updateMMDisplay();
-    }
-
-    function handleWin() {
-      const wager = state.baseUnit * state.betState.currentBetUnits;
-      state.betState.totalProfit += state.betState.currentBetUnits;
-      state.betState.cycleProfit += state.betState.currentBetUnits;
-      state.currentBankroll += wager;
-      if (state.betState.cycleProfit >= 1) {
-        state.betState.currentBetUnits = 1;
-        state.betState.cycleProfit = 0;
-        state.betState.previousLosses = [];
-      } else {
-        if (state.betState.previousLosses.length > 0) {
-          state.betState.previousLosses.pop();
-        }
-        const lastLoss = state.betState.previousLosses.length > 0 ? state.betState.previousLosses[state.betState.previousLosses.length - 1] : 1;
-        state.betState.currentBetUnits = lastLoss + 1;
-      }
-    }
-
-    function handleLoss() {
-      const wager = state.baseUnit * state.betState.currentBetUnits;
-      state.betState.totalProfit -= state.betState.currentBetUnits;
-      state.betState.cycleProfit -= state.betState.currentBetUnits;
-      state.betState.previousLosses.push(state.betState.currentBetUnits);
-      state.currentBankroll -= wager;
-    }
-
-    async function resetBet() {
-      if (!currentUser) {
-        alert('Please login first');
-        return;
-      }
-      const userData = await getUserData(currentUser);
-      if (!userData.isAdmin && (!userData.accessExpires || userData.accessExpires < Date.now())) {
-        alert('Your subscription has expired. Contact an admin to renew.');
-        logout();
-        return;
-      }
-      if (confirm('Reset bet?')) {
-        snapshots.push(JSON.parse(JSON.stringify(state)));
-        state.betState = { currentBetUnits: 1, totalProfit: 0, cycleProfit: 0, previousLosses: [] };
-        await saveMemoryFast();
-        updateMMDisplay();
-      }
-    }
-
-    function getWager() {
-      if (!state.baseUnit || state.stopProfitReached) return 0;
-      return Math.min(state.betState.currentBetUnits * state.baseUnit, state.currentBankroll);
-    }
-
-    function updateDisplay() {
-      updatePrediction();
-      updateMMDisplay();
-    }
-
-    function updatePrediction() {
-      const predDiv = document.getElementById('prediction');
-      const shoeDiv = document.getElementById('shoeType');
-      const historyDiv = document.getElementById('historyDisplay');
-
-      historyDiv.innerHTML = '';
-      state.history.forEach((item, index) => {
-        const cell = document.createElement('div');
-        cell.innerText = item;
-        cell.className = item;
-        if (state.outcomes[index]) {
-          cell.classList.add(state.outcomes[index]);
-          cell.setAttribute('data-outcome', state.outcomes[index]);
-        }
-        historyDiv.appendChild(cell);
-      });
-
-      const prediction = getCurrentPrediction();
-      if (!prediction) {
-        predDiv.innerText = 'Waiting for more hands...';
-        shoeDiv.innerText = 'Detected Pattern: N/A';
-        return;
-      }
-
-      const last5 = state.history.slice(-5);
-      const countB = last5.filter(x => x === 'B').length;
-      const countP = last5.filter(x => x === 'P').length;
-
-      let explanation = '';
-      if (last5.every((v, i, a) => i === 0 || v !== a[i - 1])) {
-        explanation = 'Zigzag breaker detected.';
-      } else if (last5.slice(-3).every(v => v === last5.at(-1))) {
-        explanation = 'Streak detected.';
-      } else if (countB === 4 || countP === 4) {
-        explanation = 'Dominance detected in last 5.';
-      } else {
-        explanation = 'Underdog fallback.';
-      }
-
-      predDiv.innerText = `Prediction: ${prediction} (${explanation})`;
-
-      let streaks = 0;
-      for (let i = 1; i < state.history.length; i++) {
-        if (state.history[i] === state.history[i - 1]) streaks++;
-      }
-      const chopScore = state.history.length > 1 ? state.history.length - 1 - streaks : 0;
-      const chopRatio = state.history.length > 1 ? chopScore / (state.history.length - 1) : 0;
-
-      let pattern = 'Balanced';
-      if (chopRatio > 0.7) pattern = 'Chop';
-      else if (chopRatio < 0.3) pattern = 'Streak';
-
-      shoeDiv.innerText = `Detected Pattern: ${pattern}`;
-    }
-
-    function updateMMDisplay() {
-      document.getElementById('streakInfo').innerText = state.stopProfitReached ? '' : 
-        state.outcomes.slice(-3).every(v => v === 'L') ? `🧊 Cold Streak - Losses: ${state.betState.previousLosses.length}` :
-        state.outcomes.slice(-3).every(v => v === 'W') ? `🔥 Hot Streak` : '';
-      document.getElementById('currentWager').innerText = `💵 Current Bet: ${getWager().toFixed(2)}`;
-      document.getElementById('wins').innerText = state.wins;
-      document.getElementById('losses').innerText = state.losses;
-      document.getElementById('accuracy').innerText = state.wins + state.losses ? ((state.wins / (state.wins + state.losses)) * 100).toFixed(1) + '%' : '0%';
-      const previousLosses = state.betState.previousLosses.length > 0 ? state.betState.previousLosses.join(', ') : 'None';
-      const stopProfitDisplay = state.stopProfitValue > 0 ? 
-        state.stopProfitType === 'percentage' ? `${state.stopProfitValue}% ($${state.stopProfitEffective.toFixed(2)})` : 
-        `$${state.stopProfitValue.toFixed(2)}` : 'Not Set';
-      document.getElementById('bankrollDisplay').innerHTML = state.startBankroll ? 
-        `💼 Balance: ${state.currentBankroll.toFixed(2)} | Profit: ${(state.currentBankroll - state.startBankroll).toFixed(2)}<br>` +
-        `Bet: $${(state.betState.currentBetUnits * state.baseUnit).toFixed(2)} (${state.betState.currentBetUnits} units)<br>` +
-        `Losses: ${previousLosses}<br>` +
-        `<span class="${state.betState.cycleProfit >= 1 ? 'cycle-reset' : ''}">Cycle: $${(state.betState.cycleProfit * state.baseUnit).toFixed(2)}</span><br>` +
-        `Total: $${(state.betState.totalProfit * state.baseUnit).toFixed(2)}<br>` +
-        `Stop: ${stopProfitDisplay} | ${state.stopProfitReached ? '🚨 Reached' : 'Active'}` : 
-        '💼 Balance: - | Profit: -';
-      document.getElementById('bankrollInput').value = state.startBankroll || '';
-      document.getElementById('basebetInput').value = state.baseUnit || '';
-      document.getElementById('stopProfitType').value = state.stopProfitType;
-      document.getElementById('stopProfitInput').value = state.stopProfitValue || '';
-    }
-
-    async function saveMemoryFast() {
-      clearTimeout(saveTimeout);
-      saveTimeout = setTimeout(saveMemory, 300);
-    }
-
-    async function saveMemory() {
-      if (!currentUser || (await getUserData(currentUser)).isAdmin) return;
-      try {
-        const userData = await getUserData(currentUser);
-        userData.state = state;
-        await saveUserData(currentUser, userData);
-      } catch (e) {
-        alert('Error saving to cloud');
-      }
-    }
-
-    async function loadMemory() {
-      if (!currentUser) {
-        alert('Please login first');
-        return;
-      }
-      const userData = await getUserData(currentUser);
-      if (!userData.isAdmin && (!userData.accessExpires || userData.accessExpires < Date.now())) {
-        alert('Your subscription has expired. Contact an admin to renew.');
-        logout();
-        return;
-      }
-      try {
-        state = userData.state;
-        updateDisplay();
-      } catch (e) {
-        alert('Error loading from cloud');
-      }
-    }
-
-    function toggleAdvanced() {
-      const section = document.getElementById('advancedControls');
-      const button = document.querySelector('.toggle-section');
-      section.classList.toggle('show');
-      button.innerText = section.classList.contains('show') ? 'Hide Advanced' : 'Show Advanced';
-    }
-
-    // Initialize
-    window.onload = () => {
-      document.getElementById('loginContainer').style.display = 'block';
-      document.getElementById('appContainer').style.display = 'none';
-      document.getElementById('adminContainer').style.display = 'none';
-      onAuthStateChanged(auth, async user => {
-        if (user) {
-          const username = user.email.split('@')[0];
-          currentUser = username;
-          let userData = await getUserData(username);
-          if (!userData) {
-            userData = {
-              state: JSON.parse(JSON.stringify(state)),
-              accessExpires: null,
-              isAdmin: username === ADMIN_USERNAME
-            };
-            await saveUserData(username, userData);
-          }
-          if (userData.isAdmin) {
-            document.getElementById('loginContainer').style.display = 'none';
-            document.getElementById('adminContainer').style.display = 'block';
-            updateAdminUserList();
-          } else if (userData.accessExpires > Date.now()) {
-            state = userData.state;
-            document.getElementById('loginContainer').style.display = 'none';
-            document.getElementById('appContainer').style.display = 'block';
-            updateDisplay();
-            updateTimer();
-            timerInterval = setInterval(updateTimer, 60000);
+          if (expiry > now) {
+            document.getElementById("status").innerText = `✅ Subscription active until ${expiry.toDateString()}`;
           } else {
-            await signOut(auth);
-            document.getElementById('loginError').innerText = 'Your subscription has expired or is not set. Contact an admin.';
+            document.getElementById("status").innerText = "❌ Subscription expired";
           }
+        } else {
+          document.getElementById("status").innerText = "⚠️ No subscription data found.";
         }
-      });
+      } else {
+        currentUser = null;
+        document.getElementById("loginSection").style.display = "block";
+        document.getElementById("mainApp").style.display = "none";
+      }
+    });
+
+    // Login
+    document.getElementById("loginBtn").onclick = async () => {
+      const email = document.getElementById("email").value;
+      const password = document.getElementById("password").value;
+      try {
+        await signInWithEmailAndPassword(auth, email, password);
+      } catch (e) {
+        alert("Login failed: " + e.message);
+      }
     };
 
-    // Expose functions to global scope for HTML event handlers
-    window.login = login;
-    window.logout = logout;
-    window.createUser = createUser;
-    window.toggleAdminStatus = toggleAdminStatus;
-    window.setSubscription = setSubscription;
-    window.recordResult = recordResult;
-    window.undo = undo;
-    window.clearAll = clearAll;
-    window.setBankroll = setBankroll;
-    window.resetBet = resetBet;
-    window.saveMemory = saveMemory;
-    window.loadMemory = loadMemory;
-    window.toggleAdvanced = toggleAdvanced;
+    // Logout
+    document.getElementById("logoutBtn").onclick = () => {
+      signOut(auth);
+    };
+
+    // Admin - create user
+    document.getElementById("createUserBtn").onclick = async () => {
+      const email = prompt("Enter new user's email:");
+      const password = prompt("Enter password:");
+      const expiryDays = parseInt(prompt("Enter subscription days (e.g. 30):"));
+
+      if (!email || !password || isNaN(expiryDays)) return alert("Invalid input.");
+
+      try {
+        const cred = await createUserWithEmailAndPassword(auth, email, password);
+        const newUid = cred.user.uid;
+        const expiry = new Date();
+        expiry.setDate(expiry.getDate() + expiryDays);
+
+        await setDoc(doc(db, "subscriptions", newUid), {
+          expires: expiry.toISOString()
+        });
+
+        alert("✅ User created and subscription set.");
+      } catch (err) {
+        alert("❌ Error: " + err.message);
+      }
+    };
+
+    // Admin - view all users
+    document.getElementById("viewUsersBtn").onclick = async () => {
+      const querySnapshot = await getDocs(collection(db, "subscriptions"));
+      let output = "👥 Users:\n";
+      querySnapshot.forEach(doc => {
+        const data = doc.data();
+        output += `• UID: ${doc.id}, Expiry: ${new Date(data.expires).toDateString()}\n`;
+      });
+      alert(output);
+    };
+
+    // Admin - update user expiry
+    document.getElementById("updateUserBtn").onclick = async () => {
+      const uid = prompt("Enter user UID:");
+      const extraDays = parseInt(prompt("Add how many days?"));
+
+      const ref = doc(db, "subscriptions", uid);
+      const snap = await getDoc(ref);
+      if (!snap.exists()) return alert("User not found");
+
+      const data = snap.data();
+      const newExpiry = new Date(data.expires);
+      newExpiry.setDate(newExpiry.getDate() + extraDays);
+
+      await updateDoc(ref, { expires: newExpiry.toISOString() });
+      alert("✅ Subscription updated");
+    };
+
   </script>
-  <style>
-    body {
-      font-family: 'Open Sans', sans-serif;
-      padding: 0;
-      margin: 0;
-      background: linear-gradient(145deg, #1a1a1a 0%, #2c3e50 100%);
-      color: #e2e8f0;
-      min-height: 100vh;
-      display: flex;
-      justify-content: center;
-      align-items: center;
-    }
-    h1, h2 {
-      font-family: 'Montserrat', sans-serif;
-      text-align: center;
-      font-weight: 700;
-      color: #facc15;
-    }
-    h1 {
-      font-size: 2.5rem;
-      margin-bottom: 2rem;
-    }
-    h2 {
-      font-size: 1.75rem;
-      margin: 1.5rem 0;
-    }
-    .container, .admin-container, .login-container {
-      max-width: 700px;
-      width: 95%;
-      margin: 3rem auto;
-      background: rgba(255, 255, 255, 0.1);
-      backdrop-filter: blur(10px);
-      padding: 2.5rem;
-      border-radius: 16px;
-      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
-      border: 1px solid rgba(255, 255, 255, 0.2);
-      color: #e2e8f0;
-      transition: transform 0.3s ease, opacity 0.3s ease;
-    }
-    .login-container {
-      max-width: 450px;
-      margin: 6rem auto;
-    }
-    input, select {
-      width: 100%;
-      padding: 14px;
-      margin: 0.75rem 0;
-      border: 1px solid rgba(255, 255, 255, 0.3);
-      border-radius: 10px;
-      background: rgba(255, 255, 255, 0.05);
-      color: #fff;
-      font-size: 1rem;
-      transition: border-color 0.3s, box-shadow 0.3s;
-    }
-    input:focus, select:focus {
-      outline: none;
-      border-color: #facc15;
-      box-shadow: 0 0 8px rgba(250, 204, 21, 0.5);
-    }
-    input::placeholder {
-      color: #94a3b8;
-    }
-    button {
-      width: 100%;
-      padding: 14px;
-      margin: 0.75rem 0;
-      border: none;
-      border-radius: 10px;
-      font-size: 1rem;
-      font-weight: 500;
-      cursor: pointer;
-      transition: background-color 0.3s, transform 0.2s, box-shadow 0.3s;
-    }
-    button:hover {
-      transform: translateY(-3px);
-      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
-    }
-    .login-container button {
-      background: linear-gradient(90deg, #facc15, #eab308);
-      color: #1a1a1a;
-    }
-    .login-container button:hover {
-      background: linear-gradient(90deg, #eab308, #ca8a04);
-    }
-    .error {
-      color: #f87171;
-      font-size: 0.9rem;
-      text-align: center;
-      margin-top: 1rem;
-    }
-    .timer {
-      text-align: center;
-      font-size: 1.1rem;
-      color: #94a3b8;
-      margin-bottom: 1.5rem;
-    }
-    .flex-row {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 1rem;
-      justify-content: center;
-      margin: 1.5rem 0;
-    }
-    .admin-container button {
-      background: #10b981;
-      color: #fff;
-    }
-    .admin-container button:hover {
-      background: #059669;
-    }
-    .admin-user-list div {
-      padding: 1rem;
-      border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      font-size: 1rem;
-    }
-    .admin-user-list button {
-      width: auto;
-      padding: 8px 20px;
-      font-size: 0.9rem;
-    }
-    .admin-user-list button.demote {
-      background: #f87171;
-    }
-    .admin-user-list button.demote:hover {
-      background: #dc2626;
-    }
-    .player {
-      background: linear-gradient(90deg, #3b82f6, #1e40af);
-      color: #fff;
-    }
-    .player:hover {
-      background: linear-gradient(90deg, #2563eb, #1e3a8a);
-    }
-    .banker {
-      background: linear-gradient(90deg, #e11d48, #9f1239);
-      color: #fff;
-    }
-    .banker:hover {
-      background: linear-gradient(90deg, #be123c, #881337);
-    }
-    .clear-all {
-      background: #f87171;
-      color: #fff;
-    }
-    .clear-all:hover {
-      background: #dc2626;
-    }
-    .undo {
-      background: #6b7280;
-      color: #fff;
-    }
-    .undo:hover {
-      background: #4b5563;
-    }
-    .set-bet, .reset-bet, .mm-action {
-      background: #6b7280;
-      color: #fff;
-    }
-    .set-bet:hover, .reset-bet:hover, .mm-action:hover {
-      background: #4b5563;
-    }
-    .toggle-section {
-      background: linear-gradient(90deg, #6b7280, #4b5563);
-      color: #fff;
-      padding: 12px;
-      width: 100%;
-      text-align: center;
-      font-weight: 500;
-    }
-    .toggle-section:hover {
-      background: linear-gradient(90deg, #4b5563, #374151);
-    }
-    .collapsible {
-      display: none;
-      opacity: 0;
-      transition: opacity 0.3s ease;
-    }
-    .collapsible.show {
-      display: flex;
-      opacity: 1;
-    }
-    .prediction {
-      font-weight: 500;
-      font-size: 1.5rem;
-      text-align: center;
-      margin: 1.5rem 0;
-      color: #facc15;
-    }
-    .shoe-type {
-      text-align: center;
-      font-size: 1rem;
-      color: #94a3b8;
-      margin: 0.75rem 0;
-    }
-    .history {
-      margin-top: 1.5rem;
-      display: flex;
-      flex-wrap: wrap;
-      justify-content: center;
-      gap: 0.75rem;
-    }
-    .history div {
-      width: 48px;
-      height: 48px;
-      line-height: 48px;
-      text-align: center;
-      color: #fff;
-      font-weight: 500;
-      border-radius: 12px;
-      position: relative;
-      transition: transform 0.3s ease, box-shadow 0.3s ease;
-    }
-    .history div:hover {
-      transform: scale(1.15);
-      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
-    }
-    .P {
-      background: #3b82f6;
-    }
-    .B {
-      background: #e11d48;
-    }
-    .W::after, .L::after {
-      content: attr(data-outcome);
-      position: absolute;
-      top: -10px;
-      right: -10px;
-      font-size: 0.85rem;
-      color: #fff;
-      background: #10b981;
-      border-radius: 50%;
-      width: 24px;
-      height: 24px;
-      line-height: 24px;
-      text-align: center;
-    }
-    .L::after {
-      background: #f87171;
-    }
-    .stats {
-      padding: 1.5rem;
-      text-align: center;
-      background: rgba(255, 255, 255, 0.05);
-      border-radius: 12px;
-      margin-top: 1.5rem;
-    }
-    .section {
-      font-size: 1.2rem;
-      font-weight: 500;
-      margin: 1rem 0;
-      color: #e2e8f0;
-    }
-    .bet-controls {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 1rem;
-      justify-content: center;
-      margin-bottom: 1.5rem;
-    }
-    label {
-      font-size: 1rem;
-      display: flex;
-      align-items: center;
-      gap: 0.75rem;
-      color: #e2e8f0;
-    }
-    .cycle-reset {
-      color: #10b981;
-      font-weight: 500;
-    }
-    @media (max-width: 600px) {
-      .container, .admin-container, .login-container {
-        width: 92%;
-        padding: 2rem;
-      }
-      .flex-row, .bet-controls {
-        flex-direction: column;
-        align-items: stretch;
-      }
-      input, select, button {
-        width: 100%;
-        font-size: 0.95rem;
-      }
-      h1 {
-        font-size: 2rem;
-      }
-      h2 {
-        font-size: 1.5rem;
-      }
-      .history div {
-        width: 40px;
-        height: 40px;
-        line-height: 40px;
-      }
-    }
-  </style>
 </head>
 <body>
-  <div class="login-container" id="loginContainer">
-    <h1>BFC VIP Login</h1>
-    <input type="text" id="username" placeholder="Enter Username" aria-label="Username">
-    <input type="password" id="password" placeholder="Enter Password" aria-label="Password">
-    <button onclick="login()" aria-label="Login">Sign In</button>
-    <div class="error" id="loginError"></div>
+  <h1>BFC-VIP</h1>
+
+  <div id="loginSection">
+    <h2>Login</h2>
+    <input type="email" id="email" placeholder="Email"><br>
+    <input type="password" id="password" placeholder="Password"><br>
+    <button id="loginBtn">Login</button>
   </div>
 
-  <div class="admin-container" id="adminContainer" style="display: none;">
-    <h1>BFC VIP Admin Panel</h1>
-    <div class="flex-row">
-      <button onclick="logout()" aria-label="Logout">Sign Out</button>
-    </div>
-    <h2>Create New User</h2>
-    <input type="text" id="newUsername" placeholder="New Username" aria-label="New Username">
-    <input type="password" id="newPassword" placeholder="New Password" aria-label="New Password">
-    <select id="newUserSubscriptionDuration" aria-label="Select subscription duration for new user">
-      <option value="1">1 Day</option>
-      <option value="7">7 Days</option>
-      <option value="30">30 Days</option>
-    </select>
-    <button onclick="createUser()" aria-label="Create user">Create User</button>
-    <div class="error" id="createUserError"></div>
-    <h2>Manage User Subscriptions</h2>
-    <div class="admin-user-list" id="userList"></div>
-    <h2>Set Subscription</h2>
-    <input type="text" id="adminUsername" placeholder="Username" aria-label="Username to manage">
-    <select id="subscriptionDuration" aria-label="Select subscription duration">
-      <option value="1">1 Day</option>
-      <option value="7">7 Days</option>
-      <option value="30">30 Days</option>
-    </select>
-    <button onclick="setSubscription()" aria-label="Set subscription">Set Subscription</button>
-    <div class="error" id="adminError"></div>
-  </div>
+  <div id="mainApp" style="display:none;">
+    <h2>Welcome</h2>
+    <p id="status"></p>
+    <button id="logoutBtn">Logout</button>
 
-  <div class="container" id="appContainer" style="display: none;">
-    <h1>BFC VIP Dashboard</h1>
-    <div class="timer" id="timerDisplay">Access expires: -</div>
-    <div class="flex-row">
-      <button onclick="logout()" aria-label="Logout">Sign Out</button>
-    </div>
-    <div class="flex-row">
-      <button class="player" onclick="recordResult('P')" aria-label="Record Player result">Player</button>
-      <button class="banker" onclick="recordResult('B')" aria-label="Record Banker result">Banker</button>
-      <button class="clear-all" onclick="clearAll()" aria-label="Clear all data">Clear All</button>
-      <button class="undo" onclick="undo()" aria-label="Undo last action">Undo</button>
-    </div>
-    <div class="prediction" id="prediction">Waiting for input...</div>
-    <div class="shoe-type" id="shoeType">Detected Pattern: N/A</div>
-    <div class="history" id="historyDisplay"></div>
-    <div class="stats">
-      <div class="section" id="currentWager">💵 Current Bet: 0</div>
-      <div class="section" id="bankrollDisplay">💼 Balance: - | Profit: -</div>
-      <div class="section" id="streakInfo"></div>
-      <div class="section">
-        ✅ <span id="wins">0</span> | ❌ <span id="losses">0</span> | 📊 <span id="accuracy">0%</span>
-      </div>
-      <div class="bet-controls">
-        <label><span>Bankroll</span><input type="number" id="bankrollInput" placeholder="Enter Bankroll" min="0.01" step="0.01" aria-label="Set bankroll"></label>
-        <label><span>Unit Value</span><input type="number" id="basebetInput" placeholder="Unit Value ($)" min="0.01" step="0.01" aria-label="Set base unit"></label>
-        <label>
-          <select id="stopProfitType" aria-label="Select stop profit type">
-            <option value="currency">$</option>
-            <option value="percentage">%</option>
-          </select>
-          <input type="number" id="stopProfitInput" placeholder="Stop Profit" min="0" step="0.01" aria-label="Set stop profit">
-        </label>
-        <button class="set-bet" onclick="setBankroll()" aria-label="Set bankroll and bet">Set</button>
-      </div>
-      <button class="toggle-section" onclick="toggleAdvanced()" aria-label="Toggle advanced controls">Show Advanced</button>
-      <div class="flex-row collapsible" id="advancedControls">
-        <button class="reset-bet" onclick="resetBet()" aria-label="Reset bet">Reset Bet</button>
-        <button class="mm-action" onclick="saveMemory()" aria-label="Save state">💾 Save</button>
-        <button class="mm-action" onclick="loadMemory()" aria-label="Load state">📥 Load</button>
-      </div>
+    <div id="adminTools" style="display:none; margin-top:2rem;">
+      <h3>🔧 Admin Tools</h3>
+      <button id="createUserBtn">Create New User</button><br><br>
+      <button id="viewUsersBtn">View All Users</button><br><br>
+      <button id="updateUserBtn">Update User Expiry</button>
     </div>
   </div>
 </body>
