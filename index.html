@@ -4,226 +4,324 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>BFC VIP</title>
+  <!-- Google Fonts -->
+  <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@600;700&family=Open+Sans:wght@400;500&display=swap" rel="stylesheet">
+  <!-- Firebase SDK -->
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth.js"></script>
   <style>
     body {
-      font-family: 'Segoe UI', Arial, sans-serif;
-      padding: 20px;
+      font-family: 'Open Sans', sans-serif;
+      padding: 0;
       margin: 0;
-      background-color: #f4f6f8;
-      color: #222;
+      background: linear-gradient(145deg, #1a1a1a 0%, #2c3e50 100%);
+      color: #e2e8f0;
+      min-height: 100vh;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+    }
+    h1, h2 {
+      font-family: 'Montserrat', sans-serif;
+      text-align: center;
+      font-weight: 700;
+      color: #facc15;
     }
     h1 {
-      text-align: center;
-      margin-bottom: 20px;
-      font-size: 28px;
-      color: #333;
+      font-size: 2.5rem;
+      margin-bottom: 2rem;
     }
-    .container, .admin-container {
-      max-width: 600px;
-      margin: auto;
-      background: white;
-      padding: 1rem;
-      border-radius: 10px;
-      box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    h2 {
+      font-size: 1.75rem;
+      margin: 1.5rem 0;
+    }
+    .container, .admin-container, .login-container {
+      max-width: 700px;
+      width: 95%;
+      margin: 3rem auto;
+      background: rgba(255, 255, 255, 0.1);
+      backdrop-filter: blur(10px);
+      padding: 2.5rem;
+      border-radius: 16px;
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      color: #e2e8f0;
+      transition: transform 0.3s ease, opacity 0.3s ease;
     }
     .login-container {
-      max-width: 400px;
-      margin: 50px auto;
-      background: white;
-      padding: 2rem;
+      max-width: 450px;
+      margin: 6rem auto;
+    }
+    input, select {
+      width: 100%;
+      padding: 14px;
+      margin: 0.75rem 0;
+      border: 1px solid rgba(255, 255, 255, 0.3);
       border-radius: 10px;
-      box-shadow: 0 2px 8px rgba(0,0,0,0.1);
-      text-align: center;
+      background: rgba(255, 255, 255, 0.05);
+      color: #fff;
+      font-size: 1rem;
+      transition: border-color 0.3s, box-shadow 0.3s;
     }
-    .login-container input, .admin-container input, .admin-container select {
-      width: 100%;
-      padding: 10px;
-      margin: 10px 0;
-      border: 1px solid #ccc;
-      border-radius: 8px;
-      font-size: 16px;
+    input:focus, select:focus {
+      outline: none;
+      border-color: #facc15;
+      box-shadow: 0 0 8px rgba(250, 204, 21, 0.5);
     }
-    .login-container button, .admin-container button {
+    input::placeholder {
+      color: #94a3b8;
+    }
+    button {
       width: 100%;
-      padding: 10px;
-      background-color: #2196F3;
-      color: white;
+      padding: 14px;
+      margin: 0.75rem 0;
       border: none;
-      border-radius: 8px;
+      border-radius: 10px;
+      font-size: 1rem;
+      font-weight: 500;
       cursor: pointer;
-      font-weight: 600;
+      transition: background-color 0.3s, transform 0.2s, box-shadow 0.3s;
     }
-    .login-container button:hover, .admin-container button:hover {
-      filter: brightness(85%);
+    button:hover {
+      transform: translateY(-3px);
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+    }
+    .login-container button {
+      background: linear-gradient(90deg, #facc15, #eab308);
+      color: #1a1a1a;
+    }
+    .login-container button:hover {
+      background: linear-gradient(90deg, #eab308, #ca8a04);
     }
     .error {
-      color: #dc3545;
-      font-size: 14px;
-      margin-top: 10px;
+      color: #f87171;
+      font-size: 0.9rem;
+      text-align: center;
+      margin-top: 1rem;
     }
     .timer {
       text-align: center;
-      font-size: 16px;
-      color: #555;
-      margin-bottom: 10px;
-    }
-    .admin-user-list div {
-      padding: 10px;
-      border-bottom: 1px solid #eee;
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-    }
-    .admin-user-list button {
-      width: auto;
-      padding: 5px 10px;
-      font-size: 14px;
-      background-color: #28a745;
-    }
-    .admin-user-list button.demote {
-      background-color: #dc3545;
+      font-size: 1.1rem;
+      color: #94a3b8;
+      margin-bottom: 1.5rem;
     }
     .flex-row {
       display: flex;
       flex-wrap: wrap;
-      gap: 10px;
+      gap: 1rem;
       justify-content: center;
-      margin: 10px 0;
+      margin: 1.5rem 0;
     }
-    button {
-      padding: 8px 16px;
-      border: none;
-      border-radius: 8px;
-      cursor: pointer;
-      font-weight: 600;
+    .admin-container button {
+      background: #10b981;
       color: #fff;
-      transition: background 0.3s;
     }
-    button:hover {
-      filter: brightness(85%);
+    .admin-container button:hover {
+      background: #059669;
     }
-    .player { background-color: #2196F3; }
-    .banker { background-color: #E91E63; }
-    .clear-all { background-color: #dc3545; }
+    .admin-user-list div {
+      padding: 1rem;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 1rem;
+    }
+    .admin-user-list button {
+      width: auto;
+      padding: 8px 20px;
+      font-size: 0.9rem;
+    }
+    .admin-user-list button.demote {
+      background: #f87171;
+    }
+    .admin-user-list button.demote:hover {
+      background: #dc2626;
+    }
+    .player {
+      background: linear-gradient(90deg, #3b82f6, #1e40af);
+      color: #fff;
+    }
+    .player:hover {
+      background: linear-gradient(90deg, #2563eb, #1e3a8a);
+    }
+    .banker {
+      background: linear-gradient(90deg, #e11d48, #9f1239);
+      color: #fff;
+    }
+    .banker:hover {
+      background: linear-gradient(90deg, #be123c, #881337);
+    }
+    .clear-all {
+      background: #f87171;
+      color: #fff;
+    }
+    .clear-all:hover {
+      background: #dc2626;
+    }
+    .undo {
+      background: #6b7280;
+      color: #fff;
+    }
+    .undo:hover {
+      background: #4b5563;
+    }
     .set-bet, .reset-bet, .mm-action {
-      background-color: #6c757d;
+      background: #6b7280;
+      color: #fff;
+    }
+    .set-bet:hover, .reset-bet:hover, .mm-action:hover {
+      background: #4b5563;
     }
     .toggle-section {
-      background-color: #6c757d;
-      padding: 8px;
+      background: linear-gradient(90deg, #6b7280, #4b5563);
+      color: #fff;
+      padding: 12px;
       width: 100%;
       text-align: center;
+      font-weight: 500;
+    }
+    .toggle-section:hover {
+      background: linear-gradient(90deg, #4b5563, #374151);
     }
     .collapsible {
       display: none;
+      opacity: 0;
+      transition: opacity 0.3s ease;
     }
     .collapsible.show {
       display: flex;
+      opacity: 1;
     }
     .prediction {
-      font-weight: bold;
-      font-size: 1.2rem;
+      font-weight: 500;
+      font-size: 1.5rem;
       text-align: center;
-      margin-top: 1rem;
+      margin: 1.5rem 0;
+      color: #facc15;
     }
     .shoe-type {
       text-align: center;
       font-size: 1rem;
-      margin-top: 0.5rem;
-      color: #555;
+      color: #94a3b8;
+      margin: 0.75rem 0;
     }
     .history {
-      margin-top: 1rem;
+      margin-top: 1.5rem;
       display: flex;
       flex-wrap: wrap;
       justify-content: center;
+      gap: 0.75rem;
     }
     .history div {
-      width: 40px;
-      height: 30px;
-      margin: 3px;
-      line-height: 30px;
+      width: 48px;
+      height: 48px;
+      line-height: 48px;
       text-align: center;
-      color: white;
-      font-weight: bold;
-      border-radius: 5px;
+      color: #fff;
+      font-weight: 500;
+      border-radius: 12px;
       position: relative;
+      transition: transform 0.3s ease, box-shadow 0.3s ease;
     }
-    .P { background-color: #2196F3; }
-    .B { background-color: #E91E63; }
+    .history div:hover {
+      transform: scale(1.15);
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+    }
+    .P {
+      background: #3b82f6;
+    }
+    .B {
+      background: #e11d48;
+    }
     .W::after, .L::after {
       content: attr(data-outcome);
       position: absolute;
       top: -10px;
-      right: -5px;
-      font-size: 12px;
+      right: -10px;
+      font-size: 0.85rem;
       color: #fff;
-      background: #28a745;
+      background: #10b981;
       border-radius: 50%;
-      width: 16px;
-      height: 16px;
-      line-height: 16px;
+      width: 24px;
+      height: 24px;
+      line-height: 24px;
       text-align: center;
     }
     .L::after {
-      background: #dc3545;
+      background: #f87171;
     }
     .stats {
-      padding: 15px;
+      padding: 1.5rem;
       text-align: center;
+      background: rgba(255, 255, 255, 0.05);
+      border-radius: 12px;
+      margin-top: 1.5rem;
     }
     .section {
-      text-align: center;
-      margin: 12px 0;
-      font-size: 18px;
-      font-weight: 700;
+      font-size: 1.2rem;
+      font-weight: 500;
+      margin: 1rem 0;
+      color: #e2e8f0;
     }
     .bet-controls {
       display: flex;
       flex-wrap: wrap;
-      gap: 0.5rem;
+      gap: 1rem;
       justify-content: center;
-      margin-bottom: 1rem;
-      width: 100%;
-      max-width: 90vw;
-    }
-    input[type=number], select {
-      padding: 10px;
-      font-size: 16px;
-      border: 1px solid #ccc;
-      border-radius: 8px;
-      width: 150px;
+      margin-bottom: 1.5rem;
     }
     label {
-      font-size: 16px;
+      font-size: 1rem;
       display: flex;
       align-items: center;
-      gap: 6px;
+      gap: 0.75rem;
+      color: #e2e8f0;
     }
     .cycle-reset {
-      color: #28a745;
-      font-weight: 700;
+      color: #10b981;
+      font-weight: 500;
     }
-    @media (max-width: 500px) {
-      .flex-row { flex-direction: column; align-items: stretch; }
-      .bet-controls { flex-direction: column; align-items: stretch; }
-      input[type=number], select { width: 100%; }
+    @media (max-width: 600px) {
+      .container, .admin-container, .login-container {
+        width: 92%;
+        padding: 2rem;
+      }
+      .flex-row, .bet-controls {
+        flex-direction: column;
+        align-items: stretch;
+      }
+      input, select, button {
+        width: 100%;
+        font-size: 0.95rem;
+      }
+      h1 {
+        font-size: 2rem;
+      }
+      h2 {
+        font-size: 1.5rem;
+      }
+      .history div {
+        width: 40px;
+        height: 40px;
+        line-height: 40px;
+      }
     }
   </style>
 </head>
 <body>
   <div class="login-container" id="loginContainer">
     <h1>BFC VIP Login</h1>
-    <input type="text" id="username" placeholder="Username" aria-label="Username">
-    <input type="password" id="password" placeholder="Password" aria-label="Password">
-    <button onclick="login()" aria-label="Login">Login</button>
+    <input type="text" id="username" placeholder="Enter Username" aria-label="Username">
+    <input type="password" id="password" placeholder="Enter Password" aria-label="Password">
+    <button onclick="login()" aria-label="Login">Sign In</button>
     <div class="error" id="loginError"></div>
   </div>
 
   <div class="admin-container" id="adminContainer" style="display: none;">
-    <h1>BFC VIP Admin</h1>
+    <h1>BFC VIP Admin Panel</h1>
     <div class="flex-row">
-      <button onclick="logout()" aria-label="Logout">Logout</button>
+      <button onclick="logout()" aria-label="Logout">Sign Out</button>
     </div>
     <h2>Create New User</h2>
     <input type="text" id="newUsername" placeholder="New Username" aria-label="New Username">
@@ -249,10 +347,10 @@
   </div>
 
   <div class="container" id="appContainer" style="display: none;">
-    <h1>BFC VIP</h1>
+    <h1>BFC VIP Dashboard</h1>
     <div class="timer" id="timerDisplay">Access expires: -</div>
     <div class="flex-row">
-      <button onclick="logout()" aria-label="Logout">Logout</button>
+      <button onclick="logout()" aria-label="Logout">Sign Out</button>
     </div>
     <div class="flex-row">
       <button class="player" onclick="recordResult('P')" aria-label="Record Player result">Player</button>
@@ -260,11 +358,9 @@
       <button class="clear-all" onclick="clearAll()" aria-label="Clear all data">Clear All</button>
       <button class="undo" onclick="undo()" aria-label="Undo last action">Undo</button>
     </div>
-
     <div class="prediction" id="prediction">Waiting for input...</div>
     <div class="shoe-type" id="shoeType">Detected Pattern: N/A</div>
     <div class="history" id="historyDisplay"></div>
-
     <div class="stats">
       <div class="section" id="currentWager">💵 Current Bet: 0</div>
       <div class="section" id="bankrollDisplay">💼 Balance: - | Profit: -</div>
@@ -273,7 +369,7 @@
         ✅ <span id="wins">0</span> | ❌ <span id="losses">0</span> | 📊 <span id="accuracy">0%</span>
       </div>
       <div class="bet-controls">
-        <label><span>Bankroll</span><input type="number" id="bankrollInput" placeholder="Bankroll" min="0.01" step="0.01" aria-label="Set bankroll"></label>
+        <label><span>Bankroll</span><input type="number" id="bankrollInput" placeholder="Enter Bankroll" min="0.01" step="0.01" aria-label="Set bankroll"></label>
         <label><span>Unit Value</span><input type="number" id="basebetInput" placeholder="Unit Value ($)" min="0.01" step="0.01" aria-label="Set base unit"></label>
         <label>
           <select id="stopProfitType" aria-label="Select stop profit type">
@@ -287,14 +383,28 @@
       <button class="toggle-section" onclick="toggleAdvanced()" aria-label="Toggle advanced controls">Show Advanced</button>
       <div class="flex-row collapsible" id="advancedControls">
         <button class="reset-bet" onclick="resetBet()" aria-label="Reset bet">Reset Bet</button>
-        <button class="mm-action" onclick="saveMemory()" aria-label="Save state">💾</button>
-        <button class="mm-action" onclick="loadMemory()" aria-label="Load state">📥</button>
+        <button class="mm-action" onclick="saveMemory()" aria-label="Save state">💾 Save</button>
+        <button class="mm-action" onclick="loadMemory()" aria-label="Load state">📥 Load</button>
       </div>
     </div>
   </div>
 
   <script>
-    // ---- State Management ----
+    // Firebase Configuration (replace with your actual config)
+    const firebaseConfig = {
+      apiKey: "YOUR_API_KEY",
+      authDomain: "YOUR_AUTH_DOMAIN",
+      projectId: "YOUR_PROJECT_ID",
+      storageBucket: "YOUR_STORAGE_BUCKET",
+      messagingSenderId: "YOUR_MESSAGING_SENDER_ID",
+      appId: "YOUR_APP_ID"
+    };
+
+    // Initialize Firebase
+    firebase.initializeApp(firebaseConfig);
+    const auth = firebase.auth();
+
+    // State Management
     let state = {
       history: [],
       outcomes: [],
@@ -316,7 +426,7 @@
 
     // User database with subscription info
     const userDatabase = JSON.parse(localStorage.getItem('bfcUsers')) || {};
-    const ADMIN_USERNAME = 'admin'; // Hardcoded admin username
+    const ADMIN_USERNAME = 'admin';
 
     function formatTimeRemaining(ms) {
       if (!ms || ms <= 0) return 'Expired';
@@ -327,7 +437,7 @@
     }
 
     function updateTimer() {
-      if (!currentUser || !userDatabase[currentUser].accessExpires) return;
+      if (!currentUser || !userDatabase[currentUser]?.accessExpires) return;
       const now = Date.now();
       const timeLeft = userDatabase[currentUser].accessExpires - now;
       document.getElementById('timerDisplay').innerText = `Access expires: ${formatTimeRemaining(timeLeft)}`;
@@ -336,6 +446,94 @@
         logout();
         alert('Your subscription has expired. Contact an admin to renew.');
       }
+    }
+
+    async function login() {
+      const username = document.getElementById('username').value.trim();
+      const password = document.getElementById('password').value;
+      const errorDiv = document.getElementById('loginError');
+
+      if (!username || !password) {
+        errorDiv.innerText = 'Please enter both username and password';
+        return;
+      }
+
+      try {
+        const email = `${username}@bfcvip.com`;
+        const userCredential = await auth.signInWithEmailAndPassword(email, password);
+        currentUser = username;
+
+        if (!userDatabase[username]) {
+          userDatabase[username] = {
+            state: JSON.parse(JSON.stringify(state)),
+            accessExpires: null,
+            isAdmin: username === ADMIN_USERNAME
+          };
+          localStorage.setItem('bfcUsers', JSON.stringify(userDatabase));
+        }
+
+        if (userDatabase[username].isAdmin) {
+          document.getElementById('loginContainer').style.display = 'none';
+          document.getElementById('adminContainer').style.display = 'block';
+          document.getElementById('appContainer').style.display = 'none';
+          updateAdminUserList();
+        } else {
+          if (!userDatabase[username].accessExpires || userDatabase[username].accessExpires < Date.now()) {
+            errorDiv.innerText = 'Your subscription has expired or is not set. Contact an admin.';
+            await auth.signOut();
+            return;
+          }
+          state = userDatabase[username].state;
+          document.getElementById('loginContainer').style.display = 'none';
+          document.getElementById('appContainer').style.display = 'block';
+          document.getElementById('adminContainer').style.display = 'none';
+          updateDisplay();
+          updateTimer();
+          timerInterval = setInterval(updateTimer, 60000);
+        }
+      } catch (error) {
+        console.error('Login error:', error);
+        if (error.code === 'auth/user-not-found') {
+          errorDiv.innerText = 'User does not exist. Contact admin to create an account.';
+        } else if (error.code === 'auth/wrong-password') {
+          errorDiv.innerText = 'Incorrect password';
+        } else {
+          errorDiv.innerText = 'Login failed: ' + error.message;
+        }
+      }
+    }
+
+    async function logout() {
+      try {
+        await auth.signOut();
+      } catch (error) {
+        console.error('Logout error:', error);
+      }
+      saveMemory();
+      clearInterval(timerInterval);
+      currentUser = null;
+      state = {
+        history: [],
+        outcomes: [],
+        wins: 0,
+        losses: 0,
+        baseUnit: 0,
+        startBankroll: 0,
+        currentBankroll: 0,
+        betState: { currentBetUnits: 1, totalProfit: 0, cycleProfit: 0, previousLosses: [] },
+        stopProfitType: 'percentage',
+        stopProfitValue: 0,
+        stopProfitEffective: 0,
+        stopProfitReached: false
+      };
+      snapshots = [];
+      document.getElementById('loginContainer').style.display = 'block';
+      document.getElementById('appContainer').style.display = 'none';
+      document.getElementById('adminContainer').style.display = 'none';
+      document.getElementById('username').value = '';
+      document.getElementById('password').value = '';
+      document.getElementById('loginError').innerText = '';
+      document.getElementById('timerDisplay').innerText = 'Access expires: -';
     }
 
     function createUser() {
@@ -362,7 +560,6 @@
       }
 
       userDatabase[username] = {
-        password: password,
         state: JSON.parse(JSON.stringify(state)),
         accessExpires: Date.now() + durationDays * 24 * 60 * 60 * 1000,
         isAdmin: false
@@ -393,75 +590,6 @@
       localStorage.setItem('bfcUsers', JSON.stringify(userDatabase));
       document.getElementById('adminError').innerText = `${username} ${userDatabase[username].isAdmin ? 'promoted to admin' : 'demoted to user'}`;
       updateAdminUserList();
-    }
-
-    function login() {
-      const username = document.getElementById('username').value.trim();
-      const password = document.getElementById('password').value;
-      const errorDiv = document.getElementById('loginError');
-
-      if (!username || !password) {
-        errorDiv.innerText = 'Please enter both username and password';
-        return;
-      }
-
-      // Check user
-      if (!userDatabase[username]) {
-        errorDiv.innerText = 'User does not exist. Contact admin to create an account.';
-        return;
-      }
-      if (userDatabase[username].password !== password) {
-        errorDiv.innerText = 'Incorrect password';
-        return;
-      }
-
-      currentUser = username;
-      if (userDatabase[username].isAdmin) {
-        document.getElementById('loginContainer').style.display = 'none';
-        document.getElementById('adminContainer').style.display = 'block';
-        document.getElementById('appContainer').style.display = 'none';
-        updateAdminUserList();
-      } else {
-        if (!userDatabase[username].accessExpires || userDatabase[username].accessExpires < Date.now()) {
-          errorDiv.innerText = 'Your subscription has expired or is not set. Contact an admin.';
-          return;
-        }
-        state = userDatabase[username].state;
-        document.getElementById('loginContainer').style.display = 'none';
-        document.getElementById('appContainer').style.display = 'block';
-        document.getElementById('adminContainer').style.display = 'none';
-        updateDisplay();
-        updateTimer();
-        timerInterval = setInterval(updateTimer, 60000);
-      }
-    }
-
-    function logout() {
-      saveMemory();
-      clearInterval(timerInterval);
-      currentUser = null;
-      state = {
-        history: [],
-        outcomes: [],
-        wins: 0,
-        losses: 0,
-        baseUnit: 0,
-        startBankroll: 0,
-        currentBankroll: 0,
-        betState: { currentBetUnits: 1, totalProfit: 0, cycleProfit: 0, previousLosses: [] },
-        stopProfitType: 'percentage',
-        stopProfitValue: 0,
-        stopProfitEffective: 0,
-        stopProfitReached: false
-      };
-      snapshots = [];
-      document.getElementById('loginContainer').style.display = 'block';
-      document.getElementById('appContainer').style.display = 'none';
-      document.getElementById('adminContainer').style.display = 'none';
-      document.getElementById('username').value = '';
-      document.getElementById('password').value = '';
-      document.getElementById('loginError').innerText = '';
-      document.getElementById('timerDisplay').innerText = 'Access expires: -';
     }
 
     function updateAdminUserList() {
@@ -841,18 +969,35 @@
       document.getElementById('loginContainer').style.display = 'block';
       document.getElementById('appContainer').style.display = 'none';
       document.getElementById('adminContainer').style.display = 'none';
-      if (currentUser && userDatabase[currentUser]?.accessExpires > Date.now() && !userDatabase[currentUser].isAdmin) {
-        state = userDatabase[currentUser].state;
-        document.getElementById('loginContainer').style.display = 'none';
-        document.getElementById('appContainer').style.display = 'block';
-        updateDisplay();
-        updateTimer();
-        timerInterval = setInterval(updateTimer, 60000);
-      } else if (currentUser && userDatabase[currentUser]?.isAdmin) {
-        document.getElementById('loginContainer').style.display = 'none';
-        document.getElementById('adminContainer').style.display = 'block';
-        updateAdminUserList();
-      }
+      auth.onAuthStateChanged(user => {
+        if (user) {
+          const username = user.email.split('@')[0];
+          currentUser = username;
+          if (!userDatabase[username]) {
+            userDatabase[username] = {
+              state: JSON.parse(JSON.stringify(state)),
+              accessExpires: null,
+              isAdmin: username === ADMIN_USERNAME
+            };
+            localStorage.setItem('bfcUsers', JSON.stringify(userDatabase));
+          }
+          if (userDatabase[username].isAdmin) {
+            document.getElementById('loginContainer').style.display = 'none';
+            document.getElementById('adminContainer').style.display = 'block';
+            updateAdminUserList();
+          } else if (userDatabase[username].accessExpires > Date.now()) {
+            state = userDatabase[username].state;
+            document.getElementById('loginContainer').style.display = 'none';
+            document.getElementById('appContainer').style.display = 'block';
+            updateDisplay();
+            updateTimer();
+            timerInterval = setInterval(updateTimer, 60000);
+          } else {
+            auth.signOut();
+            document.getElementById('loginError').innerText = 'Your subscription has expired or is not set. Contact an admin.';
+          }
+        }
+      });
     };
   </script>
 </body>
