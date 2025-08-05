@@ -55,6 +55,7 @@
     .set-bet, .reset-bet, .mm-action, .admin-action {
       background-color: #6c757d;
     }
+    .fix-subscription { background-color: #28a745; }
     .toggle-section {
       background-color: #6c757d;
       padding: 8px;
@@ -134,7 +135,7 @@
       width: 100%;
       max-width: 90vw;
     }
-    input[type=number], select, input[type=date], input[type=email], input[type=password], input[type=checkbox] {
+    input[type=number], select, input[type=datetime-local], input[type=email], input[type=password], input[type=checkbox] {
       padding: 10px;
       font-size: 16px;
       border: 1px solid #ccc;
@@ -177,7 +178,7 @@
     @media (max-width: 500px) {
       .flex-row { flex-direction: column; align-items: stretch; }
       .bet-controls { flex-direction: column; align-items: stretch; }
-      input[type=number], input[type=date], select, input[type=email], input[type=password] { width: 100%; }
+      input[type=number], input[type=datetime-local], select, input[type=email], input[type=password] { width: 100%; }
     }
   </style>
 </head>
@@ -347,8 +348,13 @@
     }
 
     async function updateUserSubscription(uid) {
-      const subscriptionEnd = DateTime.fromISO(document.getElementById(`subscriptionEnd_${uid}`).value, { zone: 'Asia/Manila' }).toMillis();
+      const subscriptionEndInput = document.getElementById(`subscriptionEnd_${uid}`).value;
       const errorMessage = document.getElementById('errorMessage');
+      if (!subscriptionEndInput) {
+        errorMessage.innerText = 'Please select a valid subscription date';
+        return;
+      }
+      const subscriptionEnd = DateTime.fromISO(subscriptionEndInput, { zone: 'Asia/Manila' }).toMillis();
       if (isNaN(subscriptionEnd)) {
         errorMessage.innerText = 'Invalid subscription date';
         return;
@@ -360,6 +366,18 @@
         loadUsers();
       } catch (error) {
         errorMessage.innerText = 'Error updating subscription: ' + error.message;
+      }
+    }
+
+    async function fixUserSubscription(uid) {
+      try {
+        const subscriptionEnd = DateTime.now().setZone('Asia/Manila').plus({ days: 60 }).toMillis();
+        await setDoc(doc(db, 'users', uid), { subscriptionEnd }, { merge: true });
+        alert('Subscription fixed to 60 days from now');
+        logEvent(analytics, 'fix_subscription', { uid });
+        loadUsers();
+      } catch (error) {
+        document.getElementById('errorMessage').innerText = 'Error fixing subscription: ' + error.message;
       }
     }
 
@@ -388,7 +406,7 @@
         }
         const userDoc = querySnapshot.docs[0];
         const uid = userDoc.id;
-        const currentSubscriptionEnd = userDoc.data().subscriptionEnd || DateTime.now().setZone('Asia/Manila').toMillis();
+        const currentSubscriptionEnd = Number.isInteger(userDoc.data().subscriptionEnd) ? userDoc.data().subscriptionEnd : DateTime.now().setZone('Asia/Manila').toMillis();
         const currentTime = DateTime.now().setZone('Asia/Manila').toMillis();
         const effectiveStart = Math.max(currentSubscriptionEnd, currentTime);
         let additionalTime;
@@ -436,13 +454,15 @@
           const user = doc.data();
           if (user.deleted) return;
           const row = document.createElement('tr');
+          const subscriptionEnd = Number.isInteger(user.subscriptionEnd) ? user.subscriptionEnd : null;
+          const dateValue = subscriptionEnd ? DateTime.fromMillis(subscriptionEnd, { zone: 'Asia/Manila' }).toFormat('yyyy-MM-dd\'T\'HH:mm') : '';
           row.innerHTML = `
             <td>${user.email}</td>
-            <td><input type="datetime-local" id="subscriptionEnd_${doc.id}" value="${DateTime.fromMillis(user.subscriptionEnd, { zone: 'Asia/Manila' }).toFormat('yyyy-MM-dd\'T\'HH:mm')}" aria-label="Subscription end date for ${user.email}"></td>
+            <td>${subscriptionEnd ? `<input type="datetime-local" id="subscriptionEnd_${doc.id}" value="${dateValue}" aria-label="Subscription end date for ${user.email}">` : 'Not Set'}</td>
             <td>${user.isAdmin ? 'Yes' : 'No'}</td>
             <td><button class="admin-action" onclick="extendSubscriptionFor('${doc.id}', '${user.email}')">Add Time</button></td>
             <td>
-              <button class="admin-action" onclick="updateUserSubscription('${doc.id}')">Update</button>
+              ${subscriptionEnd ? `<button class="admin-action" onclick="updateUserSubscription('${doc.id}')">Update</button>` : `<button class="fix-subscription" onclick="fixUserSubscription('${doc.id}')">Fix</button>`}
               <button class="admin-action" onclick="deleteUser('${doc.id}')">Delete</button>
             </td>
           `;
@@ -471,7 +491,7 @@
           if (userDoc.exists()) {
             const userData = userDoc.data();
             isAdmin = userData.isAdmin || false;
-            const subscriptionEnd = userData.subscriptionEnd;
+            const subscriptionEnd = Number.isInteger(userData.subscriptionEnd) ? userData.subscriptionEnd : null;
             const currentTime = DateTime.now().setZone('Asia/Manila').toMillis();
             console.log('Subscription End:', subscriptionEnd, 'Current Time:', currentTime);
             if (subscriptionEnd && currentTime < subscriptionEnd) {
@@ -481,7 +501,7 @@
               if (isAdmin) loadUsers();
               loadMemory();
             } else {
-              errorMessage.innerText = 'Your subscription has expired. Contact admin to renew.';
+              errorMessage.innerText = 'Your subscription has expired or is invalid. Contact admin to renew.';
               signOut(auth);
             }
           } else {
@@ -781,7 +801,10 @@
             state.betState = saved.betState || { currentBetUnits: 1, totalProfit: 0, cycleProfit: 0, previousLosses: [] };
             state.history = Array.isArray(saved.history) ? saved.history : [];
             state.outcomes = Array.isArray(saved.outcomes) ? saved.outcomes : [];
-            document.getElementById('subscriptionStatus').innerText = `Subscription: Active until ${DateTime.fromMillis(userDoc.data().subscriptionEnd, { zone: 'Asia/Manila' }).toLocaleString(DateTime.DATETIME_FULL)}`;
+            const subscriptionEnd = Number.isInteger(userDoc.data().subscriptionEnd) ? userDoc.data().subscriptionEnd : null;
+            document.getElementById('subscriptionStatus').innerText = subscriptionEnd ? 
+              `Subscription: Active until ${DateTime.fromMillis(subscriptionEnd, { zone: 'Asia/Manila' }).toLocaleString(DateTime.DATETIME_FULL)}` : 
+              'Subscription: Invalid or not set';
             updateDisplay();
           }
         }
@@ -800,6 +823,7 @@
     window.signOutUser = signOutUser;
     window.createUser = createUser;
     window.updateUserSubscription = updateUserSubscription;
+    window.fixUserSubscription = fixUserSubscription;
     window.extendSubscription = extendSubscription;
     window.extendSubscriptionFor = extendSubscriptionFor;
     window.deleteUser = deleteUser;
