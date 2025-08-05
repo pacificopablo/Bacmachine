@@ -133,7 +133,7 @@
       width: 100%;
       max-width: 90vw;
     }
-    input[type=number], select, input[type=date] {
+    input[type=number], select, input[type=date], input[type=email], input[type=password], input[type=checkbox] {
       padding: 10px;
       font-size: 16px;
       border: 1px solid #ccc;
@@ -176,7 +176,7 @@
     @media (max-width: 500px) {
       .flex-row { flex-direction: column; align-items: stretch; }
       .bet-controls { flex-direction: column; align-items: stretch; }
-      input[type=number], input[type=date], select { width: 100%; }
+      input[type=number], input[type=date], select, input[type=email], input[type=password] { width: 100%; }
     }
   </style>
 </head>
@@ -229,6 +229,15 @@
     <div class="admin-panel hidden" id="adminPanel">
       <h2>Admin Panel</h2>
       <div class="section">
+        <h3>Create User</h3>
+        <div class="flex-row">
+          <label><span>Email</span><input type="email" id="newUserEmail" placeholder="Email" aria-label="New user email"></label>
+          <label><span>Password</span><input type="password" id="newUserPassword" placeholder="Password" aria-label="New user password"></label>
+          <label><span>Admin</span><input type="checkbox" id="newUserIsAdmin" aria-label="New user admin status"></label>
+          <button class="admin-action" onclick="createUser()">Create User</button>
+        </div>
+      </div>
+      <div class="section">
         <h3>Manage Users</h3>
         <table id="userTable">
           <thead>
@@ -247,7 +256,7 @@
 
   <script type="module">
     import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js';
-    import { getAuth, signOut, onAuthStateChanged } from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js';
+    import { getAuth, signOut, onAuthStateChanged, createUserWithEmailAndPassword } from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js';
     import { getAnalytics, logEvent } from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-analytics.js';
     import { getFirestore, doc, getDoc, setDoc, collection, getDocs } from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js';
 
@@ -270,6 +279,52 @@
       signOut(auth).then(() => {
         window.location.href = 'login.html';
       });
+    }
+
+    async function createUser() {
+      const email = document.getElementById('newUserEmail').value;
+      const password = document.getElementById('newUserPassword').value;
+      const isAdmin = document.getElementById('newUserIsAdmin').checked;
+      const errorMessage = document.getElementById('errorMessage');
+      errorMessage.innerText = '';
+
+      if (!email || !password) {
+        errorMessage.innerText = 'Please fill in email and password';
+        return;
+      }
+
+      try {
+        const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+        const subscriptionEnd = new Date().getTime() + 60 * 24 * 60 * 60 * 1000; // 60 days
+        await setDoc(doc(db, 'users', userCredential.user.uid), {
+          email: userCredential.user.email,
+          subscriptionEnd,
+          isAdmin,
+          state: {
+            history: [],
+            outcomes: [],
+            wins: 0,
+            losses: 0,
+            baseUnit: 0,
+            startBankroll: 0,
+            currentBankroll: 0,
+            betState: { currentBetUnits: 1, totalProfit: 0, cycleProfit: 0, previousLosses: [] },
+            stopProfitType: 'percentage',
+            stopProfitValue: 0,
+            stopProfitEffective: 0,
+            stopProfitReached: false
+          }
+        });
+        alert('User created successfully');
+        logEvent(analytics, 'create_user', { email, isAdmin });
+        document.getElementById('newUserEmail').value = '';
+        document.getElementById('newUserPassword').value = '';
+        document.getElementById('newUserIsAdmin').checked = false;
+        loadUsers();
+      } catch (error) {
+        errorMessage.innerText = error.message;
+        logEvent(analytics, 'create_user', { email, success: false, error: error.code });
+      }
     }
 
     async function updateUserSubscription(uid) {
@@ -664,6 +719,7 @@
     }
 
     window.signOutUser = signOutUser;
+    window.createUser = createUser;
     window.updateUserSubscription = updateUserSubscription;
     window.deleteUser = deleteUser;
     window.recordResult = recordResult;
