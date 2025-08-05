@@ -1,155 +1,614 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <title>BFC-VIP</title>
-  <script type="module">
-    // Firebase setup
-    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
-    import { getAuth, onAuthStateChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
-    import { getFirestore, doc, setDoc, getDoc, collection, getDocs, updateDoc } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>BFC VIP</title>
+  <style>
+    body {
+      font-family: 'Segoe UI', Arial, sans-serif;
+      padding: 20px;
+      margin: 0;
+      background-color: #f4f6f8;
+      color: #222;
+    }
+    h1 {
+      text-align: center;
+      margin-bottom: 20px;
+      font-size: 28px;
+      color: #333;
+    }
+    .container {
+      max-width: 600px;
+      margin: auto;
+      background: white;
+      padding: 1rem;
+      border-radius: 10px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    }
+    .flex-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      justify-content: center;
+      margin: 10px 0;
+    }
+    button {
+      padding: 8px 16px;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+      font-weight: 600;
+      color: #fff;
+      transition: background 0.3s;
+    }
+    button:hover {
+      filter: brightness(85%);
+    }
+    .player { background-color: #2196F3; }
+    .banker { background-color: #E91E63; }
+    .clear-all { background-color: #dc3545; }
+    .set-bet, .reset-bet, .mm-action {
+      background-color: #6c757d;
+    }
+    .toggle-section {
+      background-color: #6c757d;
+      padding: 8px;
+      width: 100%;
+      text-align: center;
+    }
+    .collapsible {
+      display: none;
+    }
+    .collapsible.show {
+      display: flex;
+    }
+    .prediction {
+      font-weight: bold;
+      font-size: 1.2rem;
+      text-align: center;
+      margin-top: 1rem;
+    }
+    .shoe-type {
+      text-align: center;
+      font-size: 1rem;
+      margin-top: 0.5rem;
+      color: #555;
+    }
+    .history {
+      margin-top: 1rem;
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: center;
+    }
+    .history div {
+      width: 40px;
+      height: 30px;
+      margin: 3px;
+      line-height: 30px;
+      text-align: center;
+      color: white;
+      font-weight: bold;
+      border-radius: 5px;
+      position: relative;
+    }
+    .P { background-color: #2196F3; }
+    .B { background-color: #E91E63; }
+    .W::after, .L::after {
+      content: attr(data-outcome);
+      position: absolute;
+      top: -10px;
+      right: -5px;
+      font-size: 12px;
+      color: #fff;
+      background: #28a745;
+      border-radius: 50%;
+      width: 16px;
+      height: 16px;
+      line-height: 16px;
+      text-align: center;
+    }
+    .L::after {
+      background: #dc3545;
+    }
+    .stats {
+      padding: 15px;
+      text-align: center;
+    }
+    .section {
+      text-align: center;
+      margin: 12px 0;
+      font-size: 18px;
+      font-weight: 700;
+    }
+    .bet-controls {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+      justify-content: center;
+      margin-bottom: 1rem;
+      width: 100%;
+      max-width: 90vw;
+    }
+    input[type=number], select, input[type=email], input[type=password] {
+      padding: 10px;
+      font-size: 16px;
+      border: 1px solid #ccc;
+      border-radius: 8px;
+      width: 150px;
+    }
+    label {
+      font-size: 16px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .cycle-reset {
+      color: #28a745;
+      font-weight: 700;
+    }
+    .login-container {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 10px;
+    }
+    .login-container button {
+      background-color: #28a745;
+    }
+    .error {
+      color: #dc3545;
+      text-align: center;
+    }
+    .hidden {
+      display: none;
+    }
+    @media (max-width: 500px) {
+      .flex-row { flex-direction: column; align-items: stretch; }
+      .bet-controls { flex-direction: column; align-items: stretch; }
+      input[type=number], input[type=email], input[type=password], select { width: 100%; }
+    }
+  </style>
+</head>
+<body>
+  <div class="container" id="loginContainer">
+    <h1>BFC VIP Login</h1>
+    <div class="login-container">
+      <label><span>Email</span><input type="email" id="emailInput" placeholder="Email" aria-label="Enter email"></label>
+      <label><span>Password</span><input type="password" id="passwordInput" placeholder="Password" aria-label="Enter password"></label>
+      <button onclick="signIn()">Sign In</button>
+      <div class="error" id="errorMessage"></div>
+    </div>
+  </div>
+  <div class="container hidden" id="appContainer">
+    <h1>BFC VIP</h1>
+    <div class="flex-row">
+      <button onclick="signOut()" aria-label="Sign out">Sign Out</button>
+    </div>
+    <div class="flex-row">
+      <button class="player" onclick="recordResult('P')" aria-label="Record Player result">Player</button>
+      <button class="banker" onclick="recordResult('B')" aria-label="Record Banker result">Banker</button>
+      <button class="clear-all" onclick="clearAll()" aria-label="Clear all data">Clear All</button>
+      <button class="undo" onclick="undo()" aria-label="Undo last action">Undo</button>
+    </div>
 
+    <div class="prediction" id="prediction">Waiting for input...</div>
+    <div class="shoe-type" id="shoeType">Detected Pattern: N/A</div>
+    <div class="history" id="historyDisplay"></div>
+
+    <div class="stats">
+      <div class="section" id="currentWager">💵 Current Bet: 0</div>
+      <div class="section" id="bankrollDisplay">💼 Balance: - | Profit: -</div>
+      <div class="section" id="streakInfo"></div>
+      <div class="section">
+        ✅ <span id="wins">0</span> | ❌ <span id="losses">0</span> | 📊 <span id="accuracy">0%</span>
+      </div>
+      <div class="bet-controls">
+        <label><span>Bankroll</span><input type="number" id="bankrollInput" placeholder="Bankroll" min="0.01" step="0.01" aria-label="Set bankroll"></label>
+        <label><span>Unit Value</span><input type="number" id="basebetInput" placeholder="Unit Value ($)" min="0.01" step="0.01" aria-label="Set base unit"></label>
+        <label>
+          <select id="stopProfitType" aria-label="Select stop profit type">
+            <option value="currency">$</option>
+            <option value="percentage">%</option>
+          </select>
+          <input type="number" id="stopProfitInput" placeholder="Stop Profit" min="0" step="0.01" aria-label="Set stop profit">
+        </label>
+        <button class="set-bet" onclick="setBankroll()" aria-label="Set bankroll and bet">Set</button>
+      </div>
+      <button class="toggle-section" onclick="toggleAdvanced()" aria-label="Toggle advanced controls">Show Advanced</button>
+      <div class="flex-row collapsible" id="advancedControls">
+        <button class="reset-bet" onclick="resetBet()" aria-label="Reset bet">Reset Bet</button>
+        <button class="mm-action" onclick="saveMemory()" aria-label="Save state">💾</button>
+        <button class="mm-action" onclick="loadMemory()" aria-label="Load state">📥</button>
+      </div>
+    </div>
+  </div>
+
+  <script type="module">
+    // Import Firebase SDK
+    import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js';
+    import { getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged } from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js';
+    import { getAnalytics } from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-analytics.js';
+
+    // Firebase configuration
     const firebaseConfig = {
       apiKey: "AIzaSyBs3LHGZA_8spAwQ5kgULiqcZmKqcIvZiI",
       authDomain: "bfc-vip.firebaseapp.com",
       projectId: "bfc-vip",
-      storageBucket: "bfc-vip.appspot.com",
+      storageBucket: "bfc-vip.firebasestorage.app",
       messagingSenderId: "92211995630",
       appId: "1:92211995630:web:186a26085329fc607724ff",
       measurementId: "G-1EBPP36F59"
     };
 
+    // Initialize Firebase
     const app = initializeApp(firebaseConfig);
     const auth = getAuth(app);
-    const db = getFirestore(app);
+    getAnalytics(app);
 
-    let currentUser = null;
+    // Authentication functions
+    function signIn() {
+      const email = document.getElementById('emailInput').value;
+      const password = document.getElementById('passwordInput').value;
+      const errorMessage = document.getElementById('errorMessage');
+      errorMessage.innerText = '';
 
-    // Check auth state
-    onAuthStateChanged(auth, async (user) => {
+      signInWithEmailAndPassword(auth, email, password)
+        .then(() => {
+          // Subscription check handled in auth state listener
+        })
+        .catch(error => {
+          errorMessage.innerText = error.message;
+        });
+    }
+
+    function signOutUser() {
+      signOut(auth).then(() => {
+        document.getElementById('loginContainer').classList.remove('hidden');
+        document.getElementById('appContainer').classList.add('hidden');
+        document.getElementById('emailInput').value = '';
+        document.getElementById('passwordInput').value = '';
+        document.getElementById('errorMessage').innerText = '';
+      });
+    }
+
+    // Auth state listener with subscription check
+    onAuthStateChanged(auth, user => {
+      const errorMessage = document.getElementById('errorMessage');
       if (user) {
-        currentUser = user;
-        const token = await user.getIdTokenResult();
-        const isAdmin = token.claims.admin === true;
-
-        document.getElementById("loginSection").style.display = "none";
-        document.getElementById("mainApp").style.display = "block";
-        document.getElementById("adminTools").style.display = isAdmin ? "block" : "none";
-
-        const docRef = doc(db, "subscriptions", user.uid);
-        const docSnap = await getDoc(docRef);
-
-        if (docSnap.exists()) {
-          const data = docSnap.data();
-          const now = new Date();
-          const expiry = new Date(data.expires);
-
-          if (expiry > now) {
-            document.getElementById("status").innerText = `✅ Subscription active until ${expiry.toDateString()}`;
-          } else {
-            document.getElementById("status").innerText = "❌ Subscription expired";
-          }
+        const subscriptionEnd = localStorage.getItem(`subscriptionEnd_${user.uid}`);
+        const currentTime = new Date().getTime();
+        if (subscriptionEnd && currentTime < parseInt(subscriptionEnd)) {
+          document.getElementById('loginContainer').classList.add('hidden');
+          document.getElementById('appContainer').classList.remove('hidden');
+          loadMemory();
         } else {
-          document.getElementById("status").innerText = "⚠️ No subscription data found.";
+          errorMessage.innerText = 'Your subscription has expired. Contact admin to renew.';
+          signOut(auth);
         }
       } else {
-        currentUser = null;
-        document.getElementById("loginSection").style.display = "block";
-        document.getElementById("mainApp").style.display = "none";
+        document.getElementById('loginContainer').classList.remove('hidden');
+        document.getElementById('appContainer').classList.add('hidden');
       }
     });
 
-    // Login
-    document.getElementById("loginBtn").onclick = async () => {
-      const email = document.getElementById("email").value;
-      const password = document.getElementById("password").value;
-      try {
-        await signInWithEmailAndPassword(auth, email, password);
-      } catch (e) {
-        alert("Login failed: " + e.message);
+    // ---- State Management ----
+    let state = {
+      history: [],
+      outcomes: [],
+      wins: 0,
+      losses: 0,
+      baseUnit: 0,
+      startBankroll: 0,
+      currentBankroll: 0,
+      betState: { currentBetUnits: 1, totalProfit: 0, cycleProfit: 0, previousLosses: [] },
+      stopProfitType: 'percentage',
+      stopProfitValue: 0,
+      stopProfitEffective: 0,
+      stopProfitReached: false
+    };
+    let snapshots = [];
+    let saveTimeout = null;
+
+    function getCurrentPrediction() {
+      if (state.history.length < 5) return null;
+
+      const last5 = state.history.slice(-5);
+      const countB = last5.filter(x => x === 'B').length;
+      const countP = last5.filter(x => x === 'P').length;
+
+      if (last5.every((v, i, a) => i === 0 || v !== a[i - 1])) {
+        return last5.at(-1) === 'B' ? 'P' : 'B';
+      } else if (last5.slice(-3).every(v => v === last5.at(-1))) {
+        return last5.at(-1);
+      } else if (countB === 4 || countP === 4) {
+        return countB > countP ? 'P' : 'B';
+      } else {
+        return state.history.slice(-3).filter(x => x === 'B').length < 2 ? 'B' : 'P';
       }
-    };
+    }
 
-    // Logout
-    document.getElementById("logoutBtn").onclick = () => {
-      signOut(auth);
-    };
-
-    // Admin - create user
-    document.getElementById("createUserBtn").onclick = async () => {
-      const email = prompt("Enter new user's email:");
-      const password = prompt("Enter password:");
-      const expiryDays = parseInt(prompt("Enter subscription days (e.g. 30):"));
-
-      if (!email || !password || isNaN(expiryDays)) return alert("Invalid input.");
-
-      try {
-        const cred = await createUserWithEmailAndPassword(auth, email, password);
-        const newUid = cred.user.uid;
-        const expiry = new Date();
-        expiry.setDate(expiry.getDate() + expiryDays);
-
-        await setDoc(doc(db, "subscriptions", newUid), {
-          expires: expiry.toISOString()
-        });
-
-        alert("✅ User created and subscription set.");
-      } catch (err) {
-        alert("❌ Error: " + err.message);
+    function recordResult(result) {
+      if (!state.baseUnit || !state.startBankroll) {
+        alert('Set bankroll/unit first');
+        return;
       }
-    };
 
-    // Admin - view all users
-    document.getElementById("viewUsersBtn").onclick = async () => {
-      const querySnapshot = await getDocs(collection(db, "subscriptions"));
-      let output = "👥 Users:\n";
-      querySnapshot.forEach(doc => {
-        const data = doc.data();
-        output += `• UID: ${doc.id}, Expiry: ${new Date(data.expires).toDateString()}\n`;
+      const prediction = getCurrentPrediction();
+      snapshots.push(JSON.parse(JSON.stringify(state)));
+
+      if (!prediction) {
+        state.history.push(result);
+        alert('No prediction available yet (need 5 hands). No wager placed.');
+        saveMemoryFast();
+        updateDisplay();
+        return;
+      }
+
+      if (state.stopProfitReached) {
+        alert('Stop profit reached');
+        return;
+      }
+      const wager = getWager();
+      if (wager > state.currentBankroll) {
+        alert('Insufficient balance');
+        return;
+      }
+
+      state.history.push(result);
+      const outcome = result === prediction ? 'win' : 'loss';
+      state.outcomes.push(outcome === 'win' ? 'W' : 'L');
+      if (outcome === 'win') {
+        handleWin();
+        state.wins++;
+      } else {
+        handleLoss();
+        state.losses++;
+      }
+      if (state.stopProfitEffective > 0 && state.currentBankroll - state.startBankroll >= state.stopProfitEffective) {
+        state.stopProfitReached = true;
+      }
+      saveMemoryFast();
+      updateDisplay();
+    }
+
+    function undo() {
+      if (snapshots.length) {
+        state = snapshots.pop();
+        saveMemoryFast();
+        updateDisplay();
+      }
+    }
+
+    function clearAll() {
+      if (confirm('Reset all data?')) {
+        snapshots.push(JSON.parse(JSON.stringify(state)));
+        state.history = [];
+        state.outcomes = [];
+        state.wins = 0;
+        state.losses = 0;
+        saveMemoryFast();
+        document.getElementById('prediction').innerText = 'Waiting for input...';
+        document.getElementById('shoeType').innerText = 'Detected Pattern: N/A';
+        document.getElementById('historyDisplay').innerHTML = '';
+        updateMMDisplay();
+      }
+    }
+
+    function setBankroll() {
+      const bankroll = parseFloat(document.getElementById('bankrollInput').value);
+      const unit = parseFloat(document.getElementById('basebetInput').value);
+      const stopProfit = parseFloat(document.getElementById('stopProfitInput').value) || 0;
+      state.stopProfitType = document.getElementById('stopProfitType').value;
+
+      if (isNaN(bankroll) || bankroll <= 0 || isNaN(unit) || unit <= 0) {
+        alert('Invalid bankroll or unit value');
+        return;
+      }
+      if (stopProfit < 0) {
+        alert('Invalid stop profit');
+        return;
+      }
+
+      snapshots.push(JSON.parse(JSON.stringify(state)));
+      state.startBankroll = bankroll;
+      state.baseUnit = unit;
+      state.currentBankroll = bankroll;
+      state.stopProfitValue = stopProfit;
+      state.stopProfitEffective = state.stopProfitType === 'percentage' ? stopProfit / 100 * bankroll : stopProfit;
+      state.stopProfitReached = false;
+      state.betState = { currentBetUnits: 1, totalProfit: 0, cycleProfit: 0, previousLosses: [] };
+      state.wins = 0;
+      state.losses = 0;
+      state.outcomes = [];
+      saveMemoryFast();
+      updateMMDisplay();
+    }
+
+    function handleWin() {
+      const wager = state.baseUnit * state.betState.currentBetUnits;
+      state.betState.totalProfit += state.betState.currentBetUnits;
+      state.betState.cycleProfit += state.betState.currentBetUnits;
+      state.currentBankroll += wager;
+      if (state.betState.cycleProfit >= 1) {
+        state.betState.currentBetUnits = 1;
+        state.betState.cycleProfit = 0;
+        state.betState.previousLosses = [];
+      } else {
+        if (state.betState.previousLosses.length > 0) {
+          state.betState.previousLosses.pop();
+        }
+        const lastLoss = state.betState.previousLosses.length > 0 ? state.betState.previousLosses[state.betState.previousLosses.length - 1] : 1;
+        state.betState.currentBetUnits = lastLoss + 1;
+      }
+    }
+
+    function handleLoss() {
+      const wager = state.baseUnit * state.betState.currentBetUnits;
+      state.betState.totalProfit -= state.betState.currentBetUnits;
+      state.betState.cycleProfit -= state.betState.currentBetUnits;
+      state.betState.previousLosses.push(state.betState.currentBetUnits);
+      state.currentBankroll -= wager;
+    }
+
+    function resetBet() {
+      if (confirm('Reset bet?')) {
+        snapshots.push(JSON.parse(JSON.stringify(state)));
+        state.betState = { currentBetUnits: 1, totalProfit: 0, cycleProfit: 0, previousLosses: [] };
+        saveMemoryFast();
+        updateMMDisplay();
+      }
+    }
+
+    function getWager() {
+      if (!state.baseUnit || state.stopProfitReached) return 0;
+      return Math.min(state.betState.currentBetUnits * state.baseUnit, state.currentBankroll);
+    }
+
+    function updateDisplay() {
+      updatePrediction();
+      updateMMDisplay();
+    }
+
+    function updatePrediction() {
+      const predDiv = document.getElementById('prediction');
+      const shoeDiv = document.getElementById('shoeType');
+      const historyDiv = document.getElementById('historyDisplay');
+
+      historyDiv.innerHTML = '';
+      state.history.forEach((item, index) => {
+        const cell = document.createElement('div');
+        cell.innerText = item;
+        cell.className = item;
+        if (state.outcomes[index]) {
+          cell.classList.add(state.outcomes[index]);
+          cell.setAttribute('data-outcome', state.outcomes[index]);
+        }
+        historyDiv.appendChild(cell);
       });
-      alert(output);
-    };
 
-    // Admin - update user expiry
-    document.getElementById("updateUserBtn").onclick = async () => {
-      const uid = prompt("Enter user UID:");
-      const extraDays = parseInt(prompt("Add how many days?"));
+      const prediction = getCurrentPrediction();
+      if (!prediction) {
+        predDiv.innerText = 'Waiting for more hands...';
+        shoeDiv.innerText = 'Detected Pattern: N/A';
+        return;
+      }
 
-      const ref = doc(db, "subscriptions", uid);
-      const snap = await getDoc(ref);
-      if (!snap.exists()) return alert("User not found");
+      const last5 = state.history.slice(-5);
+      const countB = last5.filter(x => x === 'B').length;
+      const countP = last5.filter(x => x === 'P').length;
 
-      const data = snap.data();
-      const newExpiry = new Date(data.expires);
-      newExpiry.setDate(newExpiry.getDate() + extraDays);
+      let explanation = '';
+      if (last5.every((v, i, a) => i === 0 || v !== a[i - 1])) {
+        explanation = 'Zigzag breaker detected.';
+      } else if (last5.slice(-3).every(v => v === last5.at(-1))) {
+        explanation = 'Streak detected.';
+      } else if (countB === 4 || countP === 4) {
+        explanation = 'Dominance detected in last 5.';
+      } else {
+        explanation = 'Underdog fallback.';
+      }
 
-      await updateDoc(ref, { expires: newExpiry.toISOString() });
-      alert("✅ Subscription updated");
-    };
+      predDiv.innerText = `Prediction: ${prediction} (${explanation})`;
 
+      let streaks = 0;
+      for (let i = 1; i < state.history.length; i++) {
+        if (state.history[i] === state.history[i - 1]) streaks++;
+      }
+      const chopScore = state.history.length > 1 ? state.history.length - 1 - streaks : 0;
+      const chopRatio = state.history.length > 1 ? chopScore / (state.history.length - 1) : 0;
+
+      let pattern = 'Balanced';
+      if (chopRatio > 0.7) pattern = 'Chop';
+      else if (chopRatio < 0.3) pattern = 'Streak';
+
+      shoeDiv.innerText = `Detected Pattern: ${pattern}`;
+    }
+
+    function updateMMDisplay() {
+      document.getElementById('streakInfo').innerText = state.stopProfitReached ? '' : 
+        state.outcomes.slice(-3).every(v => v === 'L') ? `🧊 Cold Streak - Losses: ${state.betState.previousLosses.length}` :
+        state.outcomes.slice(-3).every(v => v === 'W') ? `🔥 Hot Streak` : '';
+      document.getElementById('currentWager').innerText = `💵 Current Bet: ${getWager().toFixed(2)}`;
+      document.getElementById('wins').innerText = state.wins;
+      document.getElementById('losses').innerText = state.losses;
+      document.getElementById('accuracy').innerText = state.wins + state.losses ? ((state.wins / (state.wins + state.losses)) * 100).toFixed(1) + '%' : '0%';
+      const previousLosses = state.betState.previousLosses.length > 0 ? state.betState.previousLosses.join(', ') : 'None';
+      const stopProfitDisplay = state.stopProfitValue > 0 ? 
+        state.stopProfitType === 'percentage' ? `${state.stopProfitValue}% ($${state.stopProfitEffective.toFixed(2)})` : 
+        `$${state.stopProfitValue.toFixed(2)}` : 'Not Set';
+      document.getElementById('bankrollDisplay').innerHTML = state.startBankroll ? 
+        `💼 Balance: ${state.currentBankroll.toFixed(2)} | Profit: ${(state.currentBankroll - state.startBankroll).toFixed(2)}<br>` +
+        `Bet: $${(state.betState.currentBetUnits * state.baseUnit).toFixed(2)} (${state.betState.currentBetUnits} units)<br>` +
+        `Losses: ${previousLosses}<br>` +
+        `<span class="${state.betState.cycleProfit >= 1 ? 'cycle-reset' : ''}">Cycle: $${(state.betState.cycleProfit * state.baseUnit).toFixed(2)}</span><br>` +
+        `Total: $${(state.betState.totalProfit * state.baseUnit).toFixed(2)}<br>` +
+        `Stop: ${stopProfitDisplay} | ${state.stopProfitReached ? '🚨 Reached' : 'Active'}` : 
+        '💼 Balance: - | Profit: -';
+      document.getElementById('bankrollInput').value = state.startBankroll || '';
+      document.getElementById('basebetInput').value = state.baseUnit || '';
+      document.getElementById('stopProfitType').value = state.stopProfitType;
+      document.getElementById('stopProfitInput').value = state.stopProfitValue || '';
+    }
+
+    function saveMemoryFast() {
+      clearTimeout(saveTimeout);
+      saveTimeout = setTimeout(saveMemory, 300);
+    }
+
+    async function saveMemory() {
+      try {
+        const user = auth.currentUser;
+        if (user) {
+          localStorage.setItem(`baccaratStats_${user.uid}`, JSON.stringify(state));
+        }
+      } catch (e) {
+        alert('Error saving to cloud');
+      }
+    }
+
+    async function loadMemory() {
+      try {
+        const user = auth.currentUser;
+        if (user) {
+          const saved = JSON.parse(localStorage.getItem(`baccaratStats_${user.uid}`) || '{}');
+          state.wins = Number(saved.wins) || 0;
+          state.losses = Number(saved.losses) || 0;
+          state.baseUnit = Number(saved.baseUnit) || 0;
+          state.startBankroll = Number(saved.startBankroll) || 0;
+          state.currentBankroll = Number(saved.currentBankroll) || 0;
+          state.stopProfitType = saved.stopProfitType || 'percentage';
+          state.stopProfitValue = Number(saved.stopProfitValue) || 0;
+          state.stopProfitEffective = Number(saved.stopProfitEffective) || 0;
+          state.stopProfitReached = saved.stopProfitReached || false;
+          state.betState = saved.betState || { currentBetUnits: 1, totalProfit: 0, cycleProfit: 0, previousLosses: [] };
+          state.history = Array.isArray(saved.history) ? saved.history : [];
+          state.outcomes = Array.isArray(saved.outcomes) ? saved.outcomes : [];
+          updateDisplay();
+        }
+      } catch (e) {
+        alert('Error loading from cloud');
+      }
+    }
+
+    function toggleAdvanced() {
+      const section = document.getElementById('advancedControls');
+      const button = document.querySelector('.toggle-section');
+      section.classList.toggle('show');
+      button.innerText = section.classList.contains('show') ? 'Hide Advanced' : 'Show Advanced';
+    }
+
+    // Bind functions to global scope for HTML event handlers
+    window.signIn = signIn;
+    window.signOut = signOutUser;
+    window.recordResult = recordResult;
+    window.undo = undo;
+    window.clearAll = clearAll;
+    window.setBankroll = setBankroll;
+    window.resetBet = resetBet;
+    window.saveMemory = saveMemory;
+    window.loadMemory = loadMemory;
+    window.toggleAdvanced = toggleAdvanced;
   </script>
-</head>
-<body>
-  <h1>BFC-VIP</h1>
-
-  <div id="loginSection">
-    <h2>Login</h2>
-    <input type="email" id="email" placeholder="Email"><br>
-    <input type="password" id="password" placeholder="Password"><br>
-    <button id="loginBtn">Login</button>
-  </div>
-
-  <div id="mainApp" style="display:none;">
-    <h2>Welcome</h2>
-    <p id="status"></p>
-    <button id="logoutBtn">Logout</button>
-
-    <div id="adminTools" style="display:none; margin-top:2rem;">
-      <h3>🔧 Admin Tools</h3>
-      <button id="createUserBtn">Create New User</button><br><br>
-      <button id="viewUsersBtn">View All Users</button><br><br>
-      <button id="updateUserBtn">Update User Expiry</button>
-    </div>
-  </div>
 </body>
 </html>
