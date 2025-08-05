@@ -133,7 +133,7 @@
       width: 100%;
       max-width: 90vw;
     }
-    input[type=number], select, input[type=email], input[type=password], input[type=date] {
+    input[type=number], select, input[type=date] {
       padding: 10px;
       font-size: 16px;
       border: 1px solid #ccc;
@@ -149,15 +149,6 @@
     .cycle-reset {
       color: #28a745;
       font-weight: 700;
-    }
-    .login-container {
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      gap: 10px;
-    }
-    .login-container button {
-      background-color: #28a745;
     }
     .error {
       color: #dc3545;
@@ -185,24 +176,15 @@
     @media (max-width: 500px) {
       .flex-row { flex-direction: column; align-items: stretch; }
       .bet-controls { flex-direction: column; align-items: stretch; }
-      input[type=number], input[type=email], input[type=password], input[type=date], select { width: 100%; }
+      input[type=number], input[type=date], select { width: 100%; }
     }
   </style>
 </head>
 <body>
-  <div class="container" id="loginContainer">
-    <h1>BFC VIP Login</h1>
-    <div class="login-container">
-      <label><span>Email</span><input type="email" id="emailInput" placeholder="Email" aria-label="Enter email"></label>
-      <label><span>Password</span><input type="password" id="passwordInput" placeholder="Password" aria-label="Enter password"></label>
-      <button onclick="signIn()">Sign In</button>
-      <button onclick="resetPassword()">Forgot Password?</button>
-      <div class="error" id="errorMessage"></div>
-    </div>
-  </div>
-  <div class="container hidden" id="appContainer">
+  <div class="container" id="appContainer">
     <h1>BFC VIP</h1>
     <div class="section" id="subscriptionStatus">Subscription: -</div>
+    <div class="error" id="errorMessage"></div>
     <div class="flex-row">
       <button onclick="signOut()" aria-label="Sign out">Sign Out</button>
     </div>
@@ -247,14 +229,6 @@
     <div class="admin-panel hidden" id="adminPanel">
       <h2>Admin Panel</h2>
       <div class="section">
-        <h3>Create New User</h3>
-        <label><span>Email</span><input type="email" id="newUserEmail" placeholder="New User Email" aria-label="New user email"></label>
-        <label><span>Password</span><input type="password" id="newUserPassword" placeholder="New User Password" aria-label="New user password"></label>
-        <label><span>Subscription End</span><input type="date" id="newUserSubscriptionEnd" aria-label="New user subscription end date"></label>
-        <label><span>Is Admin</span><input type="checkbox" id="newUserIsAdmin" aria-label="New user admin status"></label>
-        <button class="admin-action" onclick="createUser()">Create User</button>
-      </div>
-      <div class="section">
         <h3>Manage Users</h3>
         <table id="userTable">
           <thead>
@@ -272,13 +246,11 @@
   </div>
 
   <script type="module">
-    // Import Firebase SDK
     import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js';
-    import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword, sendPasswordResetEmail, signOut, onAuthStateChanged } from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js';
-    import { getAnalytics } from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-analytics.js';
+    import { getAuth, signOut, onAuthStateChanged } from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js';
+    import { getAnalytics, logEvent } from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-analytics.js';
     import { getFirestore, doc, getDoc, setDoc, collection, getDocs } from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js';
 
-    // Firebase configuration
     const firebaseConfig = {
       apiKey: "AIzaSyBs3LHGZA_8spAwQ5kgULiqcZmKqcIvZiI",
       authDomain: "bfc-vip.firebaseapp.com",
@@ -289,91 +261,15 @@
       measurementId: "G-1EBPP36F59"
     };
 
-    // Initialize Firebase
     const app = initializeApp(firebaseConfig);
     const auth = getAuth(app);
     const db = getFirestore(app);
-    getAnalytics(app);
-
-    // Authentication functions
-    function signIn() {
-      const email = document.getElementById('emailInput').value;
-      const password = document.getElementById('passwordInput').value;
-      const errorMessage = document.getElementById('errorMessage');
-      errorMessage.innerText = '';
-
-      signInWithEmailAndPassword(auth, email, password)
-        .then(() => {
-          // Subscription check handled in auth state listener
-        })
-        .catch(error => {
-          errorMessage.innerText = error.message;
-        });
-    }
-
-    function resetPassword() {
-      const email = document.getElementById('emailInput').value;
-      const errorMessage = document.getElementById('errorMessage');
-      if (!email) {
-        errorMessage.innerText = 'Enter your email first';
-        return;
-      }
-      sendPasswordResetEmail(auth, email)
-        .then(() => alert('Password reset email sent'))
-        .catch(error => errorMessage.innerText = error.message);
-    }
+    const analytics = getAnalytics(app);
 
     function signOutUser() {
       signOut(auth).then(() => {
-        document.getElementById('loginContainer').classList.remove('hidden');
-        document.getElementById('appContainer').classList.add('hidden');
-        document.getElementById('adminPanel').classList.add('hidden');
-        document.getElementById('emailInput').value = '';
-        document.getElementById('passwordInput').value = '';
-        document.getElementById('errorMessage').innerText = '';
+        window.location.href = 'login.html';
       });
-    }
-
-    // Admin functions
-    async function createUser() {
-      const email = document.getElementById('newUserEmail').value;
-      const password = document.getElementById('newUserPassword').value;
-      const subscriptionEnd = new Date(document.getElementById('newUserSubscriptionEnd').value).getTime();
-      const isAdmin = document.getElementById('newUserIsAdmin').checked;
-      const errorMessage = document.getElementById('errorMessage');
-
-      if (!email || !password || isNaN(subscriptionEnd)) {
-        errorMessage.innerText = 'Please fill in all fields';
-        return;
-      }
-
-      try {
-        const userCredential = await createUserWithEmailAndPassword(auth, email, password);
-        const user = userCredential.user;
-        await setDoc(doc(db, 'users', user.uid), {
-          email: user.email,
-          subscriptionEnd: subscriptionEnd,
-          isAdmin: isAdmin,
-          state: {
-            history: [],
-            outcomes: [],
-            wins: 0,
-            losses: 0,
-            baseUnit: 0,
-            startBankroll: 0,
-            currentBankroll: 0,
-            betState: { currentBetUnits: 1, totalProfit: 0, cycleProfit: 0, previousLosses: [] },
-            stopProfitType: 'percentage',
-            stopProfitValue: 0,
-            stopProfitEffective: 0,
-            stopProfitReached: false
-          }
-        });
-        alert('User created successfully');
-        loadUsers(); // Refresh user list
-      } catch (error) {
-        errorMessage.innerText = 'Error creating user: ' + error.message;
-      }
     }
 
     async function updateUserSubscription(uid) {
@@ -386,6 +282,7 @@
       try {
         await setDoc(doc(db, 'users', uid), { subscriptionEnd }, { merge: true });
         alert('Subscription updated');
+        logEvent(analytics, 'update_subscription', { uid });
         loadUsers();
       } catch (error) {
         errorMessage.innerText = 'Error updating subscription: ' + error.message;
@@ -395,9 +292,9 @@
     async function deleteUser(uid) {
       if (!confirm('Are you sure you want to delete this user?')) return;
       try {
-        // Note: Client-side user deletion is not directly supported; use Admin SDK server-side
         await setDoc(doc(db, 'users', uid), { deleted: true }, { merge: true });
         alert('User marked as deleted (use Admin SDK for full deletion)');
+        logEvent(analytics, 'delete_user', { uid });
         loadUsers();
       } catch (error) {
         document.getElementById('errorMessage').innerText = 'Error deleting user: ' + error.message;
@@ -411,7 +308,7 @@
         const querySnapshot = await getDocs(collection(db, 'users'));
         querySnapshot.forEach(doc => {
           const user = doc.data();
-          if (user.deleted) return; // Skip deleted users
+          if (user.deleted) return;
           const row = document.createElement('tr');
           row.innerHTML = `
             <td>${user.email}</td>
@@ -429,10 +326,10 @@
       }
     }
 
-    // Auth state listener with subscription check
     let isAdmin = false;
     onAuthStateChanged(auth, async user => {
       const errorMessage = document.getElementById('errorMessage');
+      errorMessage.innerText = '';
       if (user) {
         try {
           const userDoc = await getDoc(doc(db, 'users', user.uid));
@@ -444,7 +341,6 @@
             const currentTime = new Date().getTime();
             console.log('Subscription End:', subscriptionEnd, 'Current Time:', currentTime);
             if (subscriptionEnd && currentTime < subscriptionEnd) {
-              document.getElementById('loginContainer').classList.add('hidden');
               document.getElementById('appContainer').classList.remove('hidden');
               document.getElementById('subscriptionStatus').innerText = `Subscription: Active until ${new Date(subscriptionEnd).toLocaleString()}`;
               document.getElementById('adminPanel').classList.toggle('hidden', !isAdmin);
@@ -464,13 +360,10 @@
           signOut(auth);
         }
       } else {
-        document.getElementById('loginContainer').classList.remove('hidden');
-        document.getElementById('appContainer').classList.add('hidden');
-        document.getElementById('adminPanel').classList.add('hidden');
+        window.location.href = 'login.html';
       }
     });
 
-    // ---- State Management ----
     let state = {
       history: [],
       outcomes: [],
@@ -490,11 +383,9 @@
 
     function getCurrentPrediction() {
       if (state.history.length < 5) return null;
-
       const last5 = state.history.slice(-5);
       const countB = last5.filter(x => x === 'B').length;
       const countP = last5.filter(x => x === 'P').length;
-
       if (last5.every((v, i, a) => i === 0 || v !== a[i - 1])) {
         return last5.at(-1) === 'B' ? 'P' : 'B';
       } else if (last5.slice(-3).every(v => v === last5.at(-1))) {
@@ -511,10 +402,8 @@
         alert('Set bankroll/unit first');
         return;
       }
-
       const prediction = getCurrentPrediction();
       snapshots.push(JSON.parse(JSON.stringify(state)));
-
       if (!prediction) {
         state.history.push(result);
         alert('No prediction available yet (need 5 hands). No wager placed.');
@@ -522,7 +411,6 @@
         updateDisplay();
         return;
       }
-
       if (state.stopProfitReached) {
         alert('Stop profit reached');
         return;
@@ -532,7 +420,6 @@
         alert('Insufficient balance');
         return;
       }
-
       state.history.push(result);
       const outcome = result === prediction ? 'win' : 'loss';
       state.outcomes.push(outcome === 'win' ? 'W' : 'L');
@@ -578,7 +465,6 @@
       const unit = parseFloat(document.getElementById('basebetInput').value);
       const stopProfit = parseFloat(document.getElementById('stopProfitInput').value) || 0;
       state.stopProfitType = document.getElementById('stopProfitType').value;
-
       if (isNaN(bankroll) || bankroll <= 0 || isNaN(unit) || unit <= 0) {
         alert('Invalid bankroll or unit value');
         return;
@@ -587,7 +473,6 @@
         alert('Invalid stop profit');
         return;
       }
-
       snapshots.push(JSON.parse(JSON.stringify(state)));
       state.startBankroll = bankroll;
       state.baseUnit = unit;
@@ -653,7 +538,6 @@
       const predDiv = document.getElementById('prediction');
       const shoeDiv = document.getElementById('shoeType');
       const historyDiv = document.getElementById('historyDisplay');
-
       historyDiv.innerHTML = '';
       state.history.forEach((item, index) => {
         const cell = document.createElement('div');
@@ -665,18 +549,15 @@
         }
         historyDiv.appendChild(cell);
       });
-
       const prediction = getCurrentPrediction();
       if (!prediction) {
         predDiv.innerText = 'Waiting for more hands...';
         shoeDiv.innerText = 'Detected Pattern: N/A';
         return;
       }
-
       const last5 = state.history.slice(-5);
       const countB = last5.filter(x => x === 'B').length;
       const countP = last5.filter(x => x === 'P').length;
-
       let explanation = '';
       if (last5.every((v, i, a) => i === 0 || v !== a[i - 1])) {
         explanation = 'Zigzag breaker detected.';
@@ -687,20 +568,16 @@
       } else {
         explanation = 'Underdog fallback.';
       }
-
       predDiv.innerText = `Prediction: ${prediction} (${explanation})`;
-
       let streaks = 0;
       for (let i = 1; i < state.history.length; i++) {
         if (state.history[i] === state.history[i - 1]) streaks++;
       }
       const chopScore = state.history.length > 1 ? state.history.length - 1 - streaks : 0;
       const chopRatio = state.history.length > 1 ? chopScore / (state.history.length - 1) : 0;
-
       let pattern = 'Balanced';
       if (chopRatio > 0.7) pattern = 'Chop';
       else if (chopRatio < 0.3) pattern = 'Streak';
-
       shoeDiv.innerText = `Detected Pattern: ${pattern}`;
     }
 
@@ -786,11 +663,7 @@
       button.innerText = section.classList.contains('show') ? 'Hide Advanced' : 'Show Advanced';
     }
 
-    // Bind functions to global scope for HTML event handlers
-    window.signIn = signIn;
-    window.resetPassword = resetPassword;
     window.signOut = signOutUser;
-    window.createUser = createUser;
     window.updateUserSubscription = updateUserSubscription;
     window.deleteUser = deleteUser;
     window.recordResult = recordResult;
