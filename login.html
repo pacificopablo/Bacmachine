@@ -1,0 +1,251 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>BFC VIP - Login</title>
+  <style>
+    body {
+      font-family: 'Segoe UI', Arial, sans-serif;
+      padding: 20px;
+      margin: 0;
+      background-color: #f4f6f8;
+      color: #222;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      min-height: 100vh;
+    }
+    .container {
+      max-width: 400px;
+      background: white;
+      padding: 2rem;
+      border-radius: 10px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    }
+    h1 {
+      text-align: center;
+      margin-bottom: 20px;
+      font-size: 28px;
+      color: #333;
+    }
+    h2 {
+      text-align: center;
+      font-size: 24px;
+      margin-bottom: 15px;
+    }
+    .login-container, .signup-container {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 10px;
+    }
+    label {
+      font-size: 16px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      width: 100%;
+    }
+    input[type=email], input[type=password], input[type=checkbox] {
+      padding: 10px;
+      font-size: 16px;
+      border: 1px solid #ccc;
+      border-radius: 8px;
+      width: 100%;
+      box-sizing: border-box;
+    }
+    button {
+      padding: 10px;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+      font-weight: 600;
+      color: #fff;
+      background-color: #28a745;
+      width: 100%;
+      transition: background 0.3s;
+    }
+    button:hover {
+      filter: brightness(85%);
+    }
+    .secondary-button {
+      background-color: #6c757d;
+    }
+    .error {
+      color: #dc3545;
+      text-align: center;
+      margin-top: 10px;
+    }
+    .hidden {
+      display: none;
+    }
+    @media (max-width: 500px) {
+      .container {
+        padding: 1rem;
+        margin: 10px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>BFC VIP</h1>
+    <div class="login-container" id="loginContainer">
+      <h2>Sign In</h2>
+      <label><span>Email</span><input type="email" id="emailInput" placeholder="Email" aria-label="Enter email"></label>
+      <label><span>Password</span><input type="password" id="passwordInput" placeholder="Password" aria-label="Enter password"></label>
+      <button onclick="signIn()">Sign In</button>
+      <button class="secondary-button" onclick="resetPassword()">Forgot Password?</button>
+      <button class="secondary-button" onclick="showSignUp()">Sign Up</button>
+      <div class="error" id="errorMessage"></div>
+    </div>
+    <div class="signup-container hidden" id="signupContainer">
+      <h2>Sign Up</h2>
+      <label><span>Email</span><input type="email" id="signupEmail" placeholder="Email" aria-label="Sign up email"></label>
+      <label><span>Password</span><input type="password" id="signupPassword" placeholder="Password" aria-label="Sign up password"></label>
+      <label><span>Admin</span><input type="checkbox" id="signupIsAdmin" aria-label="Admin status"></label>
+      <button onclick="signUp()">Create Account</button>
+      <button class="secondary-button" onclick="showLogin()">Back to Sign In</button>
+      <div class="error" id="errorMessage"></div>
+    </div>
+  </div>
+
+  <script type="module">
+    import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js';
+    import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword, sendPasswordResetEmail } from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js';
+    import { getAnalytics, logEvent } from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-analytics.js';
+    import { getFirestore, doc, getDoc, setDoc } from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js';
+
+    const firebaseConfig = {
+      apiKey: "AIzaSyBs3LHGZA_8spAwQ5kgULiqcZmKqcIvZiI",
+      authDomain: "bfc-vip.firebaseapp.com",
+      projectId: "bfc-vip",
+      storageBucket: "bfc-vip.firebasestorage.app",
+      messagingSenderId: "92211995630",
+      appId: "1:92211995630:web:186a26085329fc607724ff",
+      measurementId: "G-1EBPP36F59"
+    };
+
+    const app = initializeApp(firebaseConfig);
+    const auth = getAuth(app);
+    const db = getFirestore(app);
+    const analytics = getAnalytics(app);
+
+    function signIn() {
+      const email = document.getElementById('emailInput').value;
+      const password = document.getElementById('passwordInput').value;
+      const errorMessage = document.getElementById('errorMessage');
+      errorMessage.innerText = '';
+      console.log('Attempting sign-in with:', email);
+      signInWithEmailAndPassword(auth, email, password)
+        .then(async userCredential => {
+          console.log('Sign-in successful');
+          logEvent(analytics, 'login_attempt', { email, success: true });
+          const userDoc = await getDoc(doc(db, 'users', userCredential.user.uid));
+          if (userDoc.exists()) {
+            const subscriptionEnd = userDoc.data().subscriptionEnd;
+            const currentTime = new Date().getTime();
+            if (subscriptionEnd && currentTime < subscriptionEnd) {
+              window.location.href = 'index.html';
+            } else {
+              errorMessage.innerText = 'Your subscription has expired. Contact admin to renew.';
+              signOut(auth);
+            }
+          } else {
+            errorMessage.innerText = 'User data not found. Contact admin.';
+            signOut(auth);
+          }
+        })
+        .catch(error => {
+          console.error('Sign-in error:', error);
+          logEvent(analytics, 'login_attempt', { email, success: false, error: error.code });
+          if (error.code === 'auth/invalid-credential') {
+            errorMessage.innerText = 'Incorrect email or password. Try again or reset your password.';
+          } else {
+            errorMessage.innerText = error.message;
+          }
+        });
+    }
+
+    function signUp() {
+      const email = document.getElementById('signupEmail').value;
+      const password = document.getElementById('signupPassword').value;
+      const isAdmin = document.getElementById('signupIsAdmin').checked;
+      const errorMessage = document.getElementById('errorMessage');
+      errorMessage.innerText = '';
+
+      if (!email || !password) {
+        errorMessage.innerText = 'Please fill in all fields';
+        return;
+      }
+
+      createUserWithEmailAndPassword(auth, email, password)
+        .then(userCredential => {
+          const user = userCredential.user;
+          const subscriptionEnd = new Date().getTime() + 30 * 24 * 60 * 60 * 1000; // 30 days
+          return setDoc(doc(db, 'users', user.uid), {
+            email: user.email,
+            subscriptionEnd,
+            isAdmin,
+            state: {
+              history: [],
+              outcomes: [],
+              wins: 0,
+              losses: 0,
+              baseUnit: 0,
+              startBankroll: 0,
+              currentBankroll: 0,
+              betState: { currentBetUnits: 1, totalProfit: 0, cycleProfit: 0, previousLosses: [] },
+              stopProfitType: 'percentage',
+              stopProfitValue: 0,
+              stopProfitEffective: 0,
+              stopProfitReached: false
+            }
+          }).then(() => {
+            alert('Account created successfully. Please sign in.');
+            logEvent(analytics, 'sign_up', { email, isAdmin });
+            showLogin();
+          });
+        })
+        .catch(error => {
+          errorMessage.innerText = error.message;
+          logEvent(analytics, 'sign_up', { email, success: false, error: error.code });
+        });
+    }
+
+    function resetPassword() {
+      const email = document.getElementById('emailInput').value;
+      const errorMessage = document.getElementById('errorMessage');
+      if (!email) {
+        errorMessage.innerText = 'Enter your email first';
+        return;
+      }
+      sendPasswordResetEmail(auth, email)
+        .then(() => alert('Password reset email sent'))
+        .catch(error => errorMessage.innerText = error.message);
+    }
+
+    function showSignUp() {
+      document.getElementById('loginContainer').classList.add('hidden');
+      document.getElementById('signupContainer').classList.remove('hidden');
+      document.getElementById('errorMessage').innerText = '';
+    }
+
+    function showLogin() {
+      document.getElementById('loginContainer').classList.remove('hidden');
+      document.getElementById('signupContainer').classList.add('hidden');
+      document.getElementById('errorMessage').innerText = '';
+      document.getElementById('signupEmail').value = '';
+      document.getElementById('signupPassword').value = '';
+      document.getElementById('signupIsAdmin').checked = false;
+    }
+
+    window.signIn = signIn;
+    window.signUp = signUp;
+    window.resetPassword = resetPassword;
+    window.showSignUp = showSignUp;
+    window.showLogin = showLogin;
+  </script>
+</body>
+</html>
