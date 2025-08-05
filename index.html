@@ -186,7 +186,7 @@
     <div class="section" id="subscriptionStatus">Subscription: -</div>
     <div class="error" id="errorMessage"></div>
     <div class="flex-row">
-      <button onclick="signOut()" aria-label="Sign out">Sign Out</button>
+      <button onclick="signOutUser()" aria-label="Sign out">Sign Out</button>
     </div>
     <div class="flex-row">
       <button class="player" onclick="recordResult('P')" aria-label="Record Player result">Player</button>
@@ -663,7 +663,7 @@
       button.innerText = section.classList.contains('show') ? 'Hide Advanced' : 'Show Advanced';
     }
 
-    window.signOut = signOutUser;
+    window.signOutUser = signOutUser;
     window.updateUserSubscription = updateUserSubscription;
     window.deleteUser = deleteUser;
     window.recordResult = recordResult;
