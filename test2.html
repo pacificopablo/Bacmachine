@@ -624,9 +624,23 @@
       const bayesian = bayesianPrediction();
       const ruleBased = ruleBasedPrediction();
       snapshots.push(JSON.parse(JSON.stringify(state)));
-      if (bayesian.confidence <= 60 || !ruleBased.predict || bayesian.predict !== ruleBased.predict) {
+      if (bayesian.confidence <= 60) {
         state.history.push(result);
-        showMessage('Predictions disagree or not strong enough. No wager placed.');
+        showMessage('Bayesian confidence too low (≤ 60%). No wager placed.');
+        saveMemoryFast();
+        updateDisplay();
+        return;
+      }
+      if (!ruleBased.predict) {
+        state.history.push(result);
+        showMessage('Need at least 5 hands for rule-based prediction. No wager placed.');
+        saveMemoryFast();
+        updateDisplay();
+        return;
+      }
+      if (bayesian.predict !== ruleBased.predict) {
+        state.history.push(result);
+        showMessage(`Predictions disagree (Bayesian: ${bayesian.predict === 'P' ? 'Player' : 'Banker'}, Rule-Based: ${ruleBased.predict === 'P' ? 'Player' : 'Banker'}). No wager placed.`);
         saveMemoryFast();
         updateDisplay();
         return;
