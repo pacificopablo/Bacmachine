@@ -573,9 +573,12 @@
       }
     }
 
-    function bayesianPrediction() {
-      for (let n = 5; n >= 2; n--) {
-        const key = state.history.slice(-n + 1).join('');
+    function ruleBasedPrediction() {
+      if (state.history.length < 2) {
+        return { predict: null, explanation: 'Waiting for more hands...' };
+      }
+      for (let n = 4; n >= 1; n--) {
+        const key = state.history.slice(-n).join('');
         if (state.patternMemory[key]) {
           const p = state.patternMemory[key].P || 0;
           const b = state.patternMemory[key].B || 0;
@@ -583,40 +586,13 @@
           if (total > 0) {
             const confidence = Math.round(100 * Math.max(p, b) / total);
             const predict = p > b ? 'P' : 'B';
-            return { predict, confidence };
+            return { predict, explanation: `Pattern predicts ${predict === 'P' ? 'Player' : 'Banker'} (${confidence}% confidence)` };
           }
         }
       }
-      return { predict: 'P', confidence: 50 };
-    }
-
-    function ruleBasedPrediction() {
-      if (state.history.length < 3) {
-        return { predict: null, explanation: 'Waiting for more hands...' };
-      }
-      const last3 = state.history.slice(-3);
-      const countB = last3.filter(x => x === 'B').length;
-      const countP = last3.filter(x => x === 'P').length;
-      let prediction = '';
-      let explanation = '';
-
-      if (last3.every((v, i, a) => i === 0 || v !== a[i - 1])) {
-        prediction = last3.at(-1) === 'B' ? 'P' : 'B';
-        explanation = 'Zigzag breaker detected.';
-      } else if (last3.every(v => v === last3.at(-1))) {
-        prediction = last3.at(-1);
-        explanation = 'Streak detected.';
-      } else if (countB >= 2) {
-        prediction = 'P';
-        explanation = 'Player underdog detected.';
-      } else if (countP >= 2) {
-        prediction = 'B';
-        explanation = 'Banker underdog detected.';
-      } else {
-        prediction = last3.at(-1) === 'B' ? 'P' : 'B';
-        explanation = 'Default underdog fallback.';
-      }
-      return { predict: prediction, explanation };
+      const lastResult = state.history[state.history.length - 1];
+      const predict = lastResult === 'B' ? 'P' : 'B';
+      return { predict, explanation: `Default underdog: ${predict === 'P' ? 'Player' : 'Banker'}` };
     }
 
     function recordResult(result) {
@@ -624,35 +600,15 @@
         showMessage('Set bankroll/unit first');
         return;
       }
-      const bayesian = bayesianPrediction();
       const ruleBased = ruleBasedPrediction();
       snapshots.push(JSON.parse(JSON.stringify(state)));
 
-      let betPlaced = false;
-      let prediction = null;
-      let message = '';
-
-      if (bayesian.confidence <= 50) {
-        state.history.push(result);
-        showMessage('Bayesian confidence too low (≤ 50%). No wager placed.');
-        saveMemoryFast();
-        updateDisplay();
-        return;
-      }
-
       if (!ruleBased.predict) {
-        prediction = bayesian.predict;
-        message = `Bet placed using Bayesian only: ${prediction === 'P' ? 'Player' : 'Banker'} (${bayesian.confidence}%).`;
-        betPlaced = true;
-      } else if (bayesian.predict !== ruleBased.predict) {
         state.history.push(result);
-        showMessage(`Predictions disagree (Bayesian: ${bayesian.predict === 'P' ? 'Player' : 'Banker'}, Rule-Based: ${ruleBased.predict === 'P' ? 'Player' : 'Banker'}). No wager placed.`);
+        showMessage('Need at least 2 hands for prediction. No wager placed.');
         saveMemoryFast();
         updateDisplay();
         return;
-      } else {
-        prediction = bayesian.predict;
-        betPlaced = true;
       }
 
       if (state.stopProfitReached) {
@@ -667,17 +623,13 @@
 
       state.history.push(result);
       learnPattern(result);
-      if (betPlaced) {
-        state.outcomes.push(result === prediction ? 'W' : 'L');
-        if (result === prediction) {
-          handleWin();
-          state.wins++;
-          if (message) showMessage(message, true);
-        } else {
-          handleLoss();
-          state.losses++;
-          if (message) showMessage(message);
-        }
+      state.outcomes.push(result === ruleBased.predict ? 'W' : 'L');
+      if (result === ruleBased.predict) {
+        handleWin();
+        state.wins++;
+      } else {
+        handleLoss();
+        state.losses++;
       }
       if (state.stopProfitEffective > 0 && state.currentBankroll - state.startBankroll >= state.stopProfitEffective) {
         state.stopProfitReached = true;
@@ -829,14 +781,10 @@
         historyDiv.appendChild(cell);
       });
 
-      const bayesian = bayesianPrediction();
       const ruleBased = ruleBasedPrediction();
-      let bayesianText = bayesian.confidence <= 50 ? 'Waiting for strong signal...' : 
-        `Bayesian: ${bayesian.predict === 'P' ? 'Player' : 'Banker'} (${bayesian.confidence}%)`;
-      let ruleBasedText = ruleBased.predict ? 
-        `Rule-Based: ${ruleBased.predict === 'P' ? 'Player' : 'Banker'} (${ruleBased.explanation})` : 
-        `Rule-Based: ${ruleBased.explanation}`;
-      predDiv.innerText = `${bayesianText} | ${ruleBasedText}`;
+      predDiv.innerText = ruleBased.predict ? 
+        `Prediction: ${ruleBased.predict === 'P' ? 'Player' : 'Banker'} (${ruleBased.explanation})` : 
+        `Prediction: ${ruleBased.explanation}`;
 
       let streaks = 0;
       for (let i = 1; i < state.history.length; i++) {
