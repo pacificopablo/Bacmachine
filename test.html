@@ -1,0 +1,862 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>BFC VIP</title>
+  <script src="https://cdn.jsdelivr.net/npm/luxon@3.4.4/build/global/luxon.min.js"></script>
+  <style>
+    body {
+      font-family: 'Segoe UI', Arial, sans-serif;
+      padding: 20px;
+      margin: 0;
+      background-color: #f4f6f8;
+      color: #222;
+    }
+    h1, h2 {
+      text-align: center;
+      margin-bottom: 20px;
+      font-size: 28px;
+      color: #333;
+    }
+    h2 {
+      font-size: 24px;
+    }
+    .container {
+      max-width: 600px;
+      margin: auto;
+      background: white;
+      padding: 1rem;
+      border-radius: 10px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    }
+    .flex-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      justify-content: center;
+      margin: 10px 0;
+    }
+    button {
+      padding: 8px 16px;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+      font-weight: 600;
+      color: #fff;
+      transition: background 0.3s;
+    }
+    button:hover {
+      filter: brightness(85%);
+    }
+    .player { background-color: #2196F3; }
+    .banker { background-color: #E91E63; }
+    .clear-all { background-color: #dc3545; }
+    .set-bet, .reset-bet, .mm-action, .admin-action {
+      background-color: #6c757d;
+    }
+    .fix-subscription { background-color: #28a745; }
+    .toggle-section {
+      background-color: #6c757d;
+      padding: 8px;
+      width: 100%;
+      text-align: center;
+    }
+    .collapsible {
+      display: none;
+    }
+    .collapsible.show {
+      display: block;
+    }
+    .prediction {
+      font-weight: bold;
+      font-size: 1.2rem;
+      text-align: center;
+      margin-top: 1rem;
+    }
+    .shoe-type {
+      text-align: center;
+      font-size: 1rem;
+      margin-top: 0.5rem;
+      color: #555;
+    }
+    .history {
+      margin-top: 1rem;
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: center;
+    }
+    .history div {
+      width: 40px;
+      height: 30px;
+      margin: 3px;
+      line-height: 30px;
+      text-align: center;
+      color: white;
+      font-weight: bold;
+      border-radius: 5px;
+      position: relative;
+    }
+    .P { background-color: #2196F3; }
+    .B { background-color: #E91E63; }
+    .W::after, .L::after {
+      content: attr(data-outcome);
+      position: absolute;
+      top: -10px;
+      right: -5px;
+      font-size: 12px;
+      color: #fff;
+      background: #28a745;
+      border-radius: 50%;
+      width: 16px;
+      height: 16px;
+      line-height: 16px;
+      text-align: center;
+    }
+    .L::after {
+      background: #dc3545;
+    }
+    .stats {
+      padding: 15px;
+      text-align: center;
+    }
+    .section {
+      text-align: center;
+      margin: 12px 0;
+      font-size: 18px;
+      font-weight: 700;
+    }
+    .bet-controls {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+      justify-content: center;
+      margin-bottom: 1rem;
+      width: 100%;
+      max-width: 90vw;
+    }
+    input[type=number], select, input[type=datetime-local], input[type=email], input[type=password], input[type=checkbox] {
+      padding: 10px;
+      font-size: 16px;
+      border: 1px solid #ccc;
+      border-radius: 8px;
+      width: 150px;
+    }
+    label {
+      font-size: 16px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .cycle-reset {
+      color: #28a745;
+      font-weight: 700;
+    }
+    .error {
+      color: #dc3545;
+      text-align: center;
+    }
+    .hidden {
+      display: none;
+    }
+    .admin-panel table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 1rem;
+    }
+    .admin-panel th, .admin-panel td {
+      border: 1px solid #ccc;
+      padding: 8px;
+      text-align: center;
+    }
+    .admin-panel th {
+      background-color: #f0f0f0;
+    }
+    .admin-panel button {
+      background-color: #dc3545;
+    }
+    @media (max-width: 500px) {
+      .flex-row { flex-direction: column; align-items: stretch; }
+      .bet-controls { flex-direction: column; align-items: stretch; }
+      input[type=number], input[type=datetime-local], select, input[type=email], input[type=password] { width: 100%; }
+    }
+  </style>
+</head>
+<body>
+  <div class="container" id="appContainer">
+    <h1>BFC VIP</h1>
+    <div class="section" id="subscriptionStatus">Subscription: -</div>
+    <div class="error" id="errorMessage"></div>
+    <div class="flex-row">
+      <button onclick="signOutUser()" aria-label="Sign out">Sign Out</button>
+    </div>
+    <div class="flex-row">
+      <button class="player" onclick="recordResult('P')" aria-label="Record Player result">Player</button>
+      <button class="banker" onclick="recordResult('B')" aria-label="Record Banker result">Banker</button>
+      <button class="clear-all" onclick="clearAll()" aria-label="Clear all data">Clear All</button>
+      <button class="undo" onclick="undo()" aria-label="Undo last action">Undo</button>
+    </div>
+
+    <div class="prediction" id="prediction">Waiting for input...</div>
+    <div class="shoe-type" id="shoeType">Detected Pattern: N/A</div>
+    <div class="history" id="historyDisplay"></div>
+
+    <div class="stats">
+      <div class="section" id="currentWager">💵 Current Bet: 0</div>
+      <div class="section" id="bankrollDisplay">💼 Balance: - | Profit: -</div>
+      <div class="section" id="streakInfo"></div>
+      <div class="section">
+        ✅ <span id="wins">0</span> | ❌ <span id="losses">0</span> | 📊 <span id="accuracy">0%</span>
+      </div>
+      <div class="bet-controls">
+        <label><span>Bankroll</span><input type="number" id="bankrollInput" placeholder="Bankroll" min="0.01" step="0.01" aria-label="Set bankroll"></label>
+        <label><span>Unit Value</span><input type="number" id="basebetInput" placeholder="Unit Value ($)" min="0.01" step="0.01" aria-label="Set base unit"></label>
+        <label>
+          <select id="stopProfitType" aria-label="Select stop profit type">
+            <option value="currency">$</option>
+            <option value="percentage">%</option>
+          </select>
+          <input type="number" id="stopProfitInput" placeholder="Stop Profit" min="0" step="0.01" aria-label="Set stop profit">
+        </label>
+        <button class="set-bet" onclick="setBankroll()" aria-label="Set bankroll and bet">Set</button>
+      </div>
+      <button class="toggle-section" onclick="toggleAdvanced()" aria-label="Toggle advanced controls">Show Advanced</button>
+      <div class="flex-row collapsible" id="advancedControls">
+        <button class="reset-bet" onclick="resetBet()" aria-label="Reset bet">Reset Bet</button>
+        <button class="mm-action" onclick="saveMemory()" aria-label="Save state">💾</button>
+        <button class="mm-action" onclick="loadMemory()" aria-label="Load state">📥</button>
+      </div>
+    </div>
+
+    <div class="admin-panel hidden" id="adminPanel">
+      <h2>Admin Panel</h2>
+      <div class="section">
+        <h3>Create User</h3>
+        <div class="flex-row">
+          <label><span>Email</span><input type="email" id="newUserEmail" placeholder="Email" aria-label="New user email"></label>
+          <label><span>Password</span><input type="password" id="newUserPassword" placeholder="Password" aria-label="New user password"></label>
+          <label><span>Admin</span><input type="checkbox" id="newUserIsAdmin" aria-label="New user admin status"></label>
+          <button class="admin-action" onclick="createUser()">Create User</button>
+        </div>
+      </div>
+      <div class="section">
+        <h3>Manage Users</h3>
+        <table id="userTable">
+          <thead>
+            <tr>
+              <th>Email</th>
+              <th>Subscription End (PST)</th>
+              <th>Admin</th>
+              <th>Add Time</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody id="userTableBody"></tbody>
+        </table>
+      </div>
+      <div class="section">
+        <h3>Add Subscription Time</h3>
+        <div class="flex-row">
+          <label><span>User Email</span><input type="email" id="extendUserEmail" placeholder="User Email" aria-label="User email to extend subscription"></label>
+          <label>
+            <select id="extendTimeUnit" aria-label="Select time unit">
+              <option value="hours">Hours</option>
+              <option value="days">Days</option>
+              <option value="test">24-Hour Test</option>
+            </select>
+          </label>
+          <label><span>Amount</span><input type="number" id="extendTimeAmount" placeholder="Amount" min="1" step="1" aria-label="Amount of time to add"></label>
+          <button class="admin-action" onclick="extendSubscription()">Add Time</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script type="module">
+    import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js';
+    import { getAuth, signOut, onAuthStateChanged, createUserWithEmailAndPassword } from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js';
+    import { getAnalytics, logEvent } from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-analytics.js';
+    import { getFirestore, doc, getDoc, setDoc, collection, getDocs, query, where } from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js';
+
+    const { DateTime } = luxon;
+
+    const firebaseConfig = {
+      apiKey: "AIzaSyBs3LHGZA_8spAwQ5kgULiqcZmKqcIvZiI",
+      authDomain: "bfc-vip.firebaseapp.com",
+      projectId: "bfc-vip",
+      storageBucket: "bfc-vip.firebasestorage.app",
+      messagingSenderId: "92211995630",
+      appId: "1:92211995630:web:186a26085329fc607724ff",
+      measurementId: "G-1EBPP36F59"
+    };
+
+    const app = initializeApp(firebaseConfig);
+    const auth = getAuth(app);
+    const db = getFirestore(app);
+    const analytics = getAnalytics(app);
+
+    function signOutUser() {
+      signOut(auth).then(() => {
+        window.location.href = 'login.html';
+      });
+    }
+
+    async function createUser() {
+      const email = document.getElementById('newUserEmail').value;
+      const password = document.getElementById('newUserPassword').value;
+      const isAdmin = document.getElementById('newUserIsAdmin').checked;
+      const errorMessage = document.getElementById('errorMessage');
+      errorMessage.innerText = '';
+
+      if (!email || !password) {
+        errorMessage.innerText = 'Please fill in email and password';
+        return;
+      }
+
+      try {
+        const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+        const subscriptionEnd = DateTime.now().setZone('Asia/Manila').plus({ days: 60 }).toMillis();
+        await setDoc(doc(db, 'users', userCredential.user.uid), {
+          email: userCredential.user.email,
+          subscriptionEnd,
+          isAdmin,
+          state: {
+            history: [],
+            outcomes: [],
+            wins: 0,
+            losses: 0,
+            baseUnit: 0,
+            startBankroll: 0,
+            currentBankroll: 0,
+            betState: { currentBetUnits: 1, totalProfit: 0, cycleProfit: 0, previousLosses: [] },
+            stopProfitType: 'percentage',
+            stopProfitValue: 0,
+            stopProfitEffective: 0,
+            stopProfitReached: false,
+            patternMemory: {}
+          }
+        });
+        alert('User created successfully');
+        logEvent(analytics, 'create_user', { email, isAdmin });
+        document.getElementById('newUserEmail').value = '';
+        document.getElementById('newUserPassword').value = '';
+        document.getElementById('newUserIsAdmin').checked = false;
+        loadUsers();
+      } catch (error) {
+        errorMessage.innerText = error.message;
+        logEvent(analytics, 'create_user', { email, success: false, error: error.code });
+      }
+    }
+
+    async function updateUserSubscription(uid) {
+      const subscriptionEndInput = document.getElementById(`subscriptionEnd_${uid}`).value;
+      const errorMessage = document.getElementById('errorMessage');
+      if (!subscriptionEndInput) {
+        errorMessage.innerText = 'Please select a valid subscription date';
+        return;
+      }
+      const subscriptionEnd = DateTime.fromISO(subscriptionEndInput, { zone: 'Asia/Manila' }).toMillis();
+      if (isNaN(subscriptionEnd)) {
+        errorMessage.innerText = 'Invalid subscription date';
+        return;
+      }
+      try {
+        await setDoc(doc(db, 'users', uid), { subscriptionEnd }, { merge: true });
+        alert('Subscription updated');
+        logEvent(analytics, 'update_subscription', { uid });
+        loadUsers();
+      } catch (error) {
+        errorMessage.innerText = 'Error updating subscription: ' + error.message;
+      }
+    }
+
+    async function fixUserSubscription(uid) {
+      try {
+        const subscriptionEnd = DateTime.now().setZone('Asia/Manila').plus({ days: 60 }).toMillis();
+        await setDoc(doc(db, 'users', uid), { subscriptionEnd }, { merge: true });
+        alert('Subscription fixed to 60 days from now');
+        logEvent(analytics, 'fix_subscription', { uid });
+        loadUsers();
+      } catch (error) {
+        document.getElementById('errorMessage').innerText = 'Error fixing subscription: ' + error.message;
+      }
+    }
+
+    async function extendSubscription() {
+      const email = document.getElementById('extendUserEmail').value;
+      const timeUnit = document.getElementById('extendTimeUnit').value;
+      const timeAmount = parseInt(document.getElementById('extendTimeAmount').value);
+      const errorMessage = document.getElementById('errorMessage');
+      errorMessage.innerText = '';
+
+      if (!email) {
+        errorMessage.innerText = 'Please enter a user email';
+        return;
+      }
+      if (timeUnit !== 'test' && (!timeAmount || timeAmount < 1)) {
+        errorMessage.innerText = 'Please enter a valid time amount';
+        return;
+      }
+
+      try {
+        const userQuery = query(collection(db, 'users'), where('email', '==', email));
+        const querySnapshot = await getDocs(userQuery);
+        if (querySnapshot.empty) {
+          errorMessage.innerText = 'User not found';
+          return;
+        }
+        const userDoc = querySnapshot.docs[0];
+        const uid = userDoc.id;
+        const currentSubscriptionEnd = Number.isInteger(userDoc.data().subscriptionEnd) ? userDoc.data().subscriptionEnd : DateTime.now().setZone('Asia/Manila').toMillis();
+        const currentTime = DateTime.now().setZone('Asia/Manila').toMillis();
+        const effectiveStart = Math.max(currentSubscriptionEnd, currentTime);
+        let additionalTime;
+
+        if (timeUnit === 'test') {
+          additionalTime = 24 * 60 * 60 * 1000; // 24 hours
+        } else if (timeUnit === 'hours') {
+          additionalTime = timeAmount * 60 * 60 * 1000;
+        } else {
+          additionalTime = timeAmount * 24 * 60 * 60 * 1000;
+        }
+
+        const newSubscriptionEnd = effectiveStart + additionalTime;
+        await setDoc(doc(db, 'users', uid), { subscriptionEnd: newSubscriptionEnd }, { merge: true });
+        alert(`Subscription extended to ${DateTime.fromMillis(newSubscriptionEnd, { zone: 'Asia/Manila' }).toLocaleString(DateTime.DATETIME_FULL)}`);
+        logEvent(analytics, 'extend_subscription', { email, timeUnit, timeAmount });
+        document.getElementById('extendUserEmail').value = '';
+        document.getElementById('extendTimeUnit').value = 'hours';
+        document.getElementById('extendTimeAmount').value = '';
+        loadUsers();
+      } catch (error) {
+        errorMessage.innerText = 'Error extending subscription: ' + error.message;
+        logEvent(analytics, 'extend_subscription', { email, success: false, error: error.code });
+      }
+    }
+
+    async function deleteUser(uid) {
+      if (!confirm('Are you sure you want to delete this user?')) return;
+      try {
+        await setDoc(doc(db, 'users', uid), { deleted: true }, { merge: true });
+        alert('User marked as deleted (use Admin SDK for full deletion)');
+        logEvent(analytics, 'delete_user', { uid });
+        loadUsers();
+      } catch (error) {
+        document.getElementById('errorMessage').innerText = 'Error deleting user: ' + error.message;
+      }
+    }
+
+    async function loadUsers() {
+      const userTableBody = document.getElementById('userTableBody');
+      userTableBody.innerHTML = '';
+      try {
+        const querySnapshot = await getDocs(collection(db, 'users'));
+        querySnapshot.forEach(doc => {
+          const user = doc.data();
+          if (user.deleted) return;
+          const row = document.createElement('tr');
+          const subscriptionEnd = Number.isInteger(user.subscriptionEnd) ? user.subscriptionEnd : null;
+          const dateValue = subscriptionEnd ? DateTime.fromMillis(subscriptionEnd, { zone: 'Asia/Manila' }).toFormat('yyyy-MM-dd\'T\'HH:mm') : '';
+          row.innerHTML = `
+            <td>${user.email}</td>
+            <td>${subscriptionEnd ? `<input type="datetime-local" id="subscriptionEnd_${doc.id}" value="${dateValue}" aria-label="Subscription end date for ${user.email}">` : 'Not Set'}</td>
+            <td>${user.isAdmin ? 'Yes' : 'No'}</td>
+            <td><button class="admin-action" onclick="extendSubscriptionFor('${doc.id}', '${user.email}')">Add Time</button></td>
+            <td>
+              ${subscriptionEnd ? `<button class="admin-action" onclick="updateUserSubscription('${doc.id}')">Update</button>` : `<button class="fix-subscription" onclick="fixUserSubscription('${doc.id}')">Fix</button>`}
+              <button class="admin-action" onclick="deleteUser('${doc.id}')">Delete</button>
+            </td>
+          `;
+          userTableBody.appendChild(row);
+        });
+      } catch (error) {
+        document.getElementById('errorMessage').innerText = 'Error loading users: ' + error.message;
+      }
+    }
+
+    async function extendSubscriptionFor(uid, email) {
+      document.getElementById('extendUserEmail').value = email;
+      document.getElementById('extendTimeUnit').value = 'hours';
+      document.getElementById('extendTimeAmount').value = '';
+      document.getElementById('extendTimeUnit').focus();
+    }
+
+    let isAdmin = false;
+    onAuthStateChanged(auth, async user => {
+      const errorMessage = document.getElementById('errorMessage');
+      errorMessage.innerText = '';
+      if (user) {
+        try {
+          const userDoc = await getDoc(doc(db, 'users', user.uid));
+          console.log('User Doc:', userDoc.exists(), userDoc.data());
+          if (userDoc.exists()) {
+            const userData = userDoc.data();
+            isAdmin = userData.isAdmin || false;
+            const subscriptionEnd = Number.isInteger(userData.subscriptionEnd) ? userData.subscriptionEnd : null;
+            const currentTime = DateTime.now().setZone('Asia/Manila').toMillis();
+            console.log('Subscription End:', subscriptionEnd, 'Current Time:', currentTime);
+            if (subscriptionEnd && currentTime < subscriptionEnd) {
+              document.getElementById('appContainer').classList.remove('hidden');
+              document.getElementById('subscriptionStatus').innerText = `Subscription: Active until ${DateTime.fromMillis(subscriptionEnd, { zone: 'Asia/Manila' }).toLocaleString(DateTime.DATETIME_FULL)}`;
+              document.getElementById('adminPanel').classList.toggle('hidden', !isAdmin);
+              if (isAdmin) loadUsers();
+              loadMemory();
+            } else {
+              errorMessage.innerText = 'Your subscription has expired or is invalid. Contact admin to renew.';
+              signOut(auth);
+            }
+          } else {
+            errorMessage.innerText = 'User data not found. Contact admin.';
+            signOut(auth);
+          }
+        } catch (error) {
+          console.error('Error:', error);
+          errorMessage.innerText = 'Error checking subscription: ' + error.message;
+          signOut(auth);
+        }
+      } else {
+        window.location.href = 'login.html';
+      }
+    });
+
+    let state = {
+      history: [],
+      outcomes: [],
+      wins: 0,
+      losses: 0,
+      baseUnit: 0,
+      startBankroll: 0,
+      currentBankroll: 0,
+      betState: { currentBetUnits: 1, totalProfit: 0, cycleProfit: 0, previousLosses: [] },
+      stopProfitType: 'percentage',
+      stopProfitValue: 0,
+      stopProfitEffective: 0,
+      stopProfitReached: false,
+      patternMemory: {}
+    };
+    let snapshots = [];
+    let saveTimeout = null;
+
+    function learnPattern(latest) {
+      for (let n = 2; n <= 5; n++) {
+        if (state.history.length >= n) {
+          const seq = state.history.slice(-n).join('');
+          const key = seq.slice(0, -1);
+          const next = seq.slice(-1);
+          if (!state.patternMemory[key]) state.patternMemory[key] = { P: 0, B: 0 };
+          state.patternMemory[key][next]++;
+        }
+      }
+    }
+
+    function unlearnPattern(latest) {
+      for (let n = 2; n <= 5; n++) {
+        if (state.history.length >= n) {
+          const seq = state.history.slice(-n).join('');
+          const key = seq.slice(0, -1);
+          const next = seq.slice(-1);
+          if (state.patternMemory[key]) {
+            state.patternMemory[key][next] = Math.max(0, state.patternMemory[key][next] - 1);
+          }
+        }
+      }
+    }
+
+    function bayesianPrediction() {
+      for (let n = 5; n >= 2; n--) {
+        const key = state.history.slice(-n + 1).join('');
+        if (state.patternMemory[key]) {
+          const p = state.patternMemory[key].P || 0;
+          const b = state.patternMemory[key].B || 0;
+          const total = p + b;
+          if (total > 0) {
+            const confidence = Math.round(100 * Math.max(p, b) / total);
+            const predict = p > b ? 'P' : 'B';
+            return { predict, confidence };
+          }
+        }
+      }
+      return { predict: 'P', confidence: 50 };
+    }
+
+    function recordResult(result) {
+      if (!state.baseUnit || !state.startBankroll) {
+        alert('Set bankroll/unit first');
+        return;
+      }
+      const prediction = bayesianPrediction();
+      snapshots.push(JSON.parse(JSON.stringify(state)));
+      if (prediction.confidence <= 60) {
+        state.history.push(result);
+        learnPattern(result);
+        alert('No strong prediction (confidence ≤ 60%). No wager placed.');
+        saveMemoryFast();
+        updateDisplay();
+        return;
+      }
+      if (state.stopProfitReached) {
+        alert('Stop profit reached');
+        return;
+      }
+      const wager = getWager();
+      if (wager > state.currentBankroll) {
+        alert('Insufficient balance');
+        return;
+      }
+      state.history.push(result);
+      learnPattern(result);
+      const outcome = result === prediction.predict ? 'win' : 'loss';
+      state.outcomes.push(outcome === 'win' ? 'W' : 'L');
+      if (outcome === 'win') {
+        handleWin();
+        state.wins++;
+      } else {
+        handleLoss();
+        state.losses++;
+      }
+      if (state.stopProfitEffective > 0 && state.currentBankroll - state.startBankroll >= state.stopProfitEffective) {
+        state.stopProfitReached = true;
+      }
+      saveMemoryFast();
+      updateDisplay();
+    }
+
+    function undo() {
+      if (snapshots.length) {
+        const prevState = snapshots.pop();
+        unlearnPattern(state.history[state.history.length - 1]);
+        state = prevState;
+        saveMemoryFast();
+        updateDisplay();
+      }
+    }
+
+    function clearAll() {
+      if (confirm('Reset all data?')) {
+        snapshots.push(JSON.parse(JSON.stringify(state)));
+        state.history = [];
+        state.outcomes = [];
+        state.wins = 0;
+        state.losses = 0;
+        state.patternMemory = {};
+        saveMemoryFast();
+        document.getElementById('prediction').innerText = 'Waiting for input...';
+        document.getElementById('shoeType').innerText = 'Detected Pattern: N/A';
+        document.getElementById('historyDisplay').innerHTML = '';
+        updateMMDisplay();
+      }
+    }
+
+    function setBankroll() {
+      const bankroll = parseFloat(document.getElementById('bankrollInput').value);
+      const unit = parseFloat(document.getElementById('basebetInput').value);
+      const stopProfit = parseFloat(document.getElementById('stopProfitInput').value) || 0;
+      state.stopProfitType = document.getElementById('stopProfitType').value;
+      if (isNaN(bankroll) || bankroll <= 0 || isNaN(unit) || unit <= 0) {
+        alert('Invalid bankroll or unit value');
+        return;
+      }
+      if (stopProfit < 0) {
+        alert('Invalid stop profit');
+        return;
+      }
+      snapshots.push(JSON.parse(JSON.stringify(state)));
+      state.startBankroll = bankroll;
+      state.baseUnit = unit;
+      state.currentBankroll = bankroll;
+      state.stopProfitValue = stopProfit;
+      state.stopProfitEffective = state.stopProfitType === 'percentage' ? stopProfit / 100 * bankroll : stopProfit;
+      state.stopProfitReached = false;
+      state.betState = { currentBetUnits: 1, totalProfit: 0, cycleProfit: 0, previousLosses: [] };
+      state.wins = 0;
+      state.losses = 0;
+      state.outcomes = [];
+      state.patternMemory = {};
+      saveMemoryFast();
+      updateMMDisplay();
+    }
+
+    function handleWin() {
+      const wager = state.baseUnit * state.betState.currentBetUnits;
+      const payout = state.history[state.history.length - 1] === 'B' ? wager * 0.95 : wager;
+      state.betState.totalProfit += state.betState.currentBetUnits;
+      state.betState.cycleProfit += state.betState.currentBetUnits;
+      state.currentBankroll += payout;
+      if (state.betState.cycleProfit >= 1) {
+        state.betState.currentBetUnits = 1;
+        state.betState.cycleProfit = 0;
+        state.betState.previousLosses = [];
+      } else {
+        if (state.betState.previousLosses.length > 0) {
+          state.betState.previousLosses.pop();
+        }
+        const lastLoss = state.betState.previousLosses.length > 0 ? state.betState.previousLosses[state.betState.previousLosses.length - 1] : 1;
+        state.betState.currentBetUnits = lastLoss + 1;
+      }
+    }
+
+    function handleLoss() {
+      const wager = state.baseUnit * state.betState.currentBetUnits;
+      state.betState.totalProfit -= state.betState.currentBetUnits;
+      state.betState.cycleProfit -= state.betState.currentBetUnits;
+      state.betState.previousLosses.push(state.betState.currentBetUnits);
+      state.currentBankroll -= wager;
+    }
+
+    function resetBet() {
+      if (confirm('Reset bet?')) {
+        snapshots.push(JSON.parse(JSON.stringify(state)));
+        state.betState = { currentBetUnits: 1, totalProfit: 0, cycleProfit: 0, previousLosses: [] };
+        saveMemoryFast();
+        updateMMDisplay();
+      }
+    }
+
+    function getWager() {
+      if (!state.baseUnit || state.stopProfitReached) return 0;
+      return Math.min(state.betState.currentBetUnits * state.baseUnit, state.currentBankroll);
+    }
+
+    function updateDisplay() {
+      updatePrediction();
+      updateMMDisplay();
+    }
+
+    function updatePrediction() {
+      const predDiv = document.getElementById('prediction');
+      const shoeDiv = document.getElementById('shoeType');
+      const historyDiv = document.getElementById('historyDisplay');
+      historyDiv.innerHTML = '';
+      state.history.forEach((item, index) => {
+        const cell = document.createElement('div');
+        cell.innerText = item;
+        cell.className = item;
+        if (state.outcomes[index]) {
+          cell.classList.add(state.outcomes[index]);
+          cell.setAttribute('data-outcome', state.outcomes[index]);
+        }
+        historyDiv.appendChild(cell);
+      });
+      const prediction = bayesianPrediction();
+      if (prediction.confidence <= 60) {
+        predDiv.innerText = 'Waiting for strong signal...';
+        shoeDiv.innerText = 'Detected Pattern: N/A';
+        return;
+      }
+      predDiv.innerText = `Prediction: ${prediction.predict === 'P' ? 'Player' : 'Banker'} (${prediction.confidence}%)`;
+      let streaks = 0;
+      for (let i = 1; i < state.history.length; i++) {
+        if (state.history[i] === state.history[i - 1]) streaks++;
+      }
+      const chopScore = state.history.length > 1 ? state.history.length - 1 - streaks : 0;
+      const chopRatio = state.history.length > 1 ? chopScore / (state.history.length - 1) : 0;
+      let pattern = 'Balanced';
+      if (chopRatio > 0.7) pattern = 'Chop';
+      else if (chopRatio < 0.3) pattern = 'Streak';
+      shoeDiv.innerText = `Detected Pattern: ${pattern}`;
+    }
+
+    function updateMMDisplay() {
+      document.getElementById('streakInfo').innerText = state.stopProfitReached ? '' : 
+        state.outcomes.slice(-3).every(v => v === 'L') ? `🧊 Cold Streak - Losses: ${state.betState.previousLosses.length}` :
+        state.outcomes.slice(-3).every(v => v === 'W') ? `🔥 Hot Streak` : '';
+      document.getElementById('currentWager').innerText = `💵 Current Bet: ${getWager().toFixed(2)}`;
+      document.getElementById('wins').innerText = state.wins;
+      document.getElementById('losses').innerText = state.losses;
+      document.getElementById('accuracy').innerText = state.wins + state.losses ? ((state.wins / (state.wins + state.losses)) * 100).toFixed(1) + '%' : '0%';
+      const previousLosses = state.betState.previousLosses.length > 0 ? state.betState.previousLosses.join(', ') : 'None';
+      const stopProfitDisplay = state.stopProfitValue > 0 ? 
+        state.stopProfitType === 'percentage' ? `${state.stopProfitValue}% ($${state.stopProfitEffective.toFixed(2)})` : 
+        `$${state.stopProfitValue.toFixed(2)}` : 'Not Set';
+      document.getElementById('bankrollDisplay').innerHTML = state.startBankroll ? 
+        `💼 Balance: ${state.currentBankroll.toFixed(2)} | Profit: ${(state.currentBankroll - state.startBankroll).toFixed(2)}<br>` +
+        `Bet: $${(state.betState.currentBetUnits * state.baseUnit).toFixed(2)} (${state.betState.currentBetUnits} units)<br>` +
+        `Losses: ${previousLosses}<br>` +
+        `<span class="${state.betState.cycleProfit >= 1 ? 'cycle-reset' : ''}">Cycle: $${(state.betState.cycleProfit * state.baseUnit).toFixed(2)}</span><br>` +
+        `Total: $${(state.betState.totalProfit * state.baseUnit).toFixed(2)}<br>` +
+        `Stop: ${stopProfitDisplay} | ${state.stopProfitReached ? '🚨 Reached' : 'Active'}` : 
+        '💼 Balance: - | Profit: -';
+      document.getElementById('bankrollInput').value = state.startBankroll || '';
+      document.getElementById('basebetInput').value = state.baseUnit || '';
+      document.getElementById('stopProfitType').value = state.stopProfitType;
+      document.getElementById('stopProfitInput').value = state.stopProfitValue || '';
+    }
+
+    function saveMemoryFast() {
+      clearTimeout(saveTimeout);
+      saveTimeout = setTimeout(saveMemory, 300);
+    }
+
+    async function saveMemory() {
+      try {
+        const user = auth.currentUser;
+        if (user) {
+          await setDoc(doc(db, 'users', user.uid), {
+            email: user.email,
+            subscriptionEnd: (await getDoc(doc(db, 'users', user.uid))).data().subscriptionEnd,
+            isAdmin: (await getDoc(doc(db, 'users', user.uid))).data().isAdmin || false,
+            state: state
+          }, { merge: true });
+        }
+      } catch (e) {
+        alert('Error saving to Firestore: ' + e.message);
+      }
+    }
+
+    async function loadMemory() {
+      try {
+        const user = auth.currentUser;
+        if (user) {
+          const userDoc = await getDoc(doc(db, 'users', user.uid));
+          if (userDoc.exists()) {
+            const saved = userDoc.data().state || {};
+            state.wins = Number(saved.wins) || 0;
+            state.losses = Number(saved.losses) || 0;
+            state.baseUnit = Number(saved.baseUnit) || 0;
+            state.startBankroll = Number(saved.startBankroll) || 0;
+            state.currentBankroll = Number(saved.currentBankroll) || 0;
+            state.stopProfitType = saved.stopProfitType || 'percentage';
+            state.stopProfitValue = Number(saved.stopProfitValue) || 0;
+            state.stopProfitEffective = Number(saved.stopProfitEffective) || 0;
+            state.stopProfitReached = saved.stopProfitReached || false;
+            state.betState = saved.betState || { currentBetUnits: 1, totalProfit: 0, cycleProfit: 0, previousLosses: [] };
+            state.history = Array.isArray(saved.history) ? saved.history : [];
+            state.outcomes = Array.isArray(saved.outcomes) ? saved.outcomes : [];
+            state.patternMemory = saved.patternMemory || {};
+            const subscriptionEnd = Number.isInteger(userDoc.data().subscriptionEnd) ? userDoc.data().subscriptionEnd : null;
+            document.getElementById('subscriptionStatus').innerText = subscriptionEnd ? 
+              `Subscription: Active until ${DateTime.fromMillis(subscriptionEnd, { zone: 'Asia/Manila' }).toLocaleString(DateTime.DATETIME_FULL)}` : 
+              'Subscription: Invalid or not set';
+            updateDisplay();
+          }
+        }
+      } catch (e) {
+        alert('Error loading from Firestore: ' + e.message);
+      }
+    }
+
+    function toggleAdvanced() {
+      const section = document.getElementById('advancedControls');
+      const button = document.querySelector('.toggle-section');
+      section.classList.toggle('show');
+      button.innerText = section.classList.contains('show') ? 'Hide Advanced' : 'Show Advanced';
+    }
+
+    window.signOutUser = signOutUser;
+    window.createUser = createUser;
+    window.updateUserSubscription = updateUserSubscription;
+    window.fixUserSubscription = fixUserSubscription;
+    window.extendSubscription = extendSubscription;
+    window.extendSubscriptionFor = extendSubscriptionFor;
+    window.deleteUser = deleteUser;
+    window.recordResult = recordResult;
+    window.undo = undo;
+    window.clearAll = clearAll;
+    window.setBankroll = setBankroll;
+    window.resetBet = resetBet;
+    window.saveMemory = saveMemory;
+    window.loadMemory = loadMemory;
+    window.toggleAdvanced = toggleAdvanced;
+  </script>
+</body>
+</html>
