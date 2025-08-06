@@ -158,6 +158,10 @@
       color: #dc3545;
       text-align: center;
     }
+    .success {
+      color: #28a745;
+      text-align: center;
+    }
     .hidden {
       display: none;
     }
@@ -300,6 +304,13 @@
     const db = getFirestore(app);
     const analytics = getAnalytics(app);
 
+    function showMessage(message, isSuccess = false) {
+      const errorMessage = document.getElementById('errorMessage');
+      errorMessage.innerText = message;
+      errorMessage.className = isSuccess ? 'success' : 'error';
+      setTimeout(() => { errorMessage.innerText = ''; errorMessage.className = 'error'; }, 5000);
+    }
+
     function signOutUser() {
       signOut(auth).then(() => {
         window.location.href = 'login.html';
@@ -314,7 +325,7 @@
       errorMessage.innerText = '';
 
       if (!email || !password) {
-        errorMessage.innerText = 'Please fill in email and password';
+        showMessage('Please fill in email and password');
         return;
       }
 
@@ -341,37 +352,36 @@
             patternMemory: {}
           }
         });
-        alert('User created successfully');
+        showMessage('User created successfully', true);
         logEvent(analytics, 'create_user', { email, isAdmin });
         document.getElementById('newUserEmail').value = '';
         document.getElementById('newUserPassword').value = '';
         document.getElementById('newUserIsAdmin').checked = false;
         loadUsers();
       } catch (error) {
-        errorMessage.innerText = error.message;
+        showMessage(error.message);
         logEvent(analytics, 'create_user', { email, success: false, error: error.code });
       }
     }
 
     async function updateUserSubscription(uid) {
       const subscriptionEndInput = document.getElementById(`subscriptionEnd_${uid}`).value;
-      const errorMessage = document.getElementById('errorMessage');
       if (!subscriptionEndInput) {
-        errorMessage.innerText = 'Please select a valid subscription date';
+        showMessage('Please select a valid subscription date');
         return;
       }
       const subscriptionEnd = DateTime.fromISO(subscriptionEndInput, { zone: 'Asia/Manila' }).toMillis();
       if (isNaN(subscriptionEnd)) {
-        errorMessage.innerText = 'Invalid subscription date';
+        showMessage('Invalid subscription date');
         return;
       }
       try {
         await setDoc(doc(db, 'users', uid), { subscriptionEnd }, { merge: true });
-        alert('Subscription updated');
+        showMessage('Subscription updated', true);
         logEvent(analytics, 'update_subscription', { uid });
         loadUsers();
       } catch (error) {
-        errorMessage.innerText = 'Error updating subscription: ' + error.message;
+        showMessage('Error updating subscription: ' + error.message);
       }
     }
 
@@ -379,11 +389,11 @@
       try {
         const subscriptionEnd = DateTime.now().setZone('Asia/Manila').plus({ days: 60 }).toMillis();
         await setDoc(doc(db, 'users', uid), { subscriptionEnd }, { merge: true });
-        alert('Subscription fixed to 60 days from now');
+        showMessage('Subscription fixed to 60 days from now', true);
         logEvent(analytics, 'fix_subscription', { uid });
         loadUsers();
       } catch (error) {
-        document.getElementById('errorMessage').innerText = 'Error fixing subscription: ' + error.message;
+        showMessage('Error fixing subscription: ' + error.message);
       }
     }
 
@@ -391,15 +401,12 @@
       const email = document.getElementById('extendUserEmail').value;
       const timeUnit = document.getElementById('extendTimeUnit').value;
       const timeAmount = parseInt(document.getElementById('extendTimeAmount').value);
-      const errorMessage = document.getElementById('errorMessage');
-      errorMessage.innerText = '';
-
       if (!email) {
-        errorMessage.innerText = 'Please enter a user email';
+        showMessage('Please enter a user email');
         return;
       }
       if (timeUnit !== 'test' && (!timeAmount || timeAmount < 1)) {
-        errorMessage.innerText = 'Please enter a valid time amount';
+        showMessage('Please enter a valid time amount');
         return;
       }
 
@@ -407,7 +414,7 @@
         const userQuery = query(collection(db, 'users'), where('email', '==', email));
         const querySnapshot = await getDocs(userQuery);
         if (querySnapshot.empty) {
-          errorMessage.innerText = 'User not found';
+          showMessage('User not found');
           return;
         }
         const userDoc = querySnapshot.docs[0];
@@ -427,14 +434,14 @@
 
         const newSubscriptionEnd = effectiveStart + additionalTime;
         await setDoc(doc(db, 'users', uid), { subscriptionEnd: newSubscriptionEnd }, { merge: true });
-        alert(`Subscription extended to ${DateTime.fromMillis(newSubscriptionEnd, { zone: 'Asia/Manila' }).toLocaleString(DateTime.DATETIME_FULL)}`);
+        showMessage(`Subscription extended to ${DateTime.fromMillis(newSubscriptionEnd, { zone: 'Asia/Manila' }).toLocaleString(DateTime.DATETIME_FULL)}`, true);
         logEvent(analytics, 'extend_subscription', { email, timeUnit, timeAmount });
         document.getElementById('extendUserEmail').value = '';
         document.getElementById('extendTimeUnit').value = 'hours';
         document.getElementById('extendTimeAmount').value = '';
         loadUsers();
       } catch (error) {
-        errorMessage.innerText = 'Error extending subscription: ' + error.message;
+        showMessage('Error extending subscription: ' + error.message);
         logEvent(analytics, 'extend_subscription', { email, success: false, error: error.code });
       }
     }
@@ -443,11 +450,11 @@
       if (!confirm('Are you sure you want to delete this user?')) return;
       try {
         await setDoc(doc(db, 'users', uid), { deleted: true }, { merge: true });
-        alert('User marked as deleted (use Admin SDK for full deletion)');
+        showMessage('User marked as deleted (use Admin SDK for full deletion)', true);
         logEvent(analytics, 'delete_user', { uid });
         loadUsers();
       } catch (error) {
-        document.getElementById('errorMessage').innerText = 'Error deleting user: ' + error.message;
+        showMessage('Error deleting user: ' + error.message);
       }
     }
 
@@ -475,7 +482,7 @@
           userTableBody.appendChild(row);
         });
       } catch (error) {
-        document.getElementById('errorMessage').innerText = 'Error loading users: ' + error.message;
+        showMessage('Error loading users: ' + error.message);
       }
     }
 
@@ -507,16 +514,16 @@
               if (isAdmin) loadUsers();
               loadMemory();
             } else {
-              errorMessage.innerText = 'Your subscription has expired or is invalid. Contact admin to renew.';
+              showMessage('Your subscription has expired or is invalid. Contact admin to renew.');
               signOut(auth);
             }
           } else {
-            errorMessage.innerText = 'User data not found. Contact admin.';
+            showMessage('User data not found. Contact admin.');
             signOut(auth);
           }
         } catch (error) {
           console.error('Error:', error);
-          errorMessage.innerText = 'Error checking subscription: ' + error.message;
+          showMessage('Error checking subscription: ' + error.message);
           signOut(auth);
         }
       } else {
@@ -586,7 +593,7 @@
 
     function recordResult(result) {
       if (!state.baseUnit || !state.startBankroll) {
-        alert('Set bankroll/unit first');
+        showMessage('Set bankroll/unit first');
         return;
       }
       const prediction = bayesianPrediction();
@@ -594,18 +601,18 @@
       if (prediction.confidence <= 60) {
         state.history.push(result);
         learnPattern(result);
-        alert('No strong prediction (confidence ≤ 60%). No wager placed.');
+        showMessage('No strong prediction (confidence ≤ 60%). No wager placed.');
         saveMemoryFast();
         updateDisplay();
         return;
       }
       if (state.stopProfitReached) {
-        alert('Stop profit reached');
+        showMessage('Stop profit reached');
         return;
       }
       const wager = getWager();
       if (wager > state.currentBankroll) {
-        alert('Insufficient balance');
+        showMessage('Insufficient balance');
         return;
       }
       state.history.push(result);
@@ -678,11 +685,11 @@
       const stopProfit = parseFloat(document.getElementById('stopProfitInput').value) || 0;
       state.stopProfitType = document.getElementById('stopProfitType').value;
       if (isNaN(bankroll) || bankroll <= 0 || isNaN(unit) || unit <= 0) {
-        alert('Invalid bankroll or unit value');
+        showMessage('Invalid bankroll or unit value');
         return;
       }
       if (stopProfit < 0) {
-        alert('Invalid stop profit');
+        showMessage('Invalid stop profit');
         return;
       }
       snapshots.push(JSON.parse(JSON.stringify(state)));
@@ -826,7 +833,7 @@
           }, { merge: true });
         }
       } catch (e) {
-        alert('Error saving to Firestore: ' + e.message);
+        showMessage('Error saving to Firestore: ' + e.message);
       }
     }
 
@@ -858,7 +865,7 @@
           }
         }
       } catch (e) {
-        alert('Error loading from Firestore: ' + e.message);
+        showMessage('Error loading from Firestore: ' + e.message);
       }
     }
 
