@@ -1,4 +1,3 @@
-```html
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -622,12 +621,12 @@
         showMessage('Set bankroll/unit first');
         return;
       }
-      const prediction = bayesianPrediction();
+      const bayesian = bayesianPrediction();
+      const ruleBased = ruleBasedPrediction();
       snapshots.push(JSON.parse(JSON.stringify(state)));
-      if (prediction.confidence <= 60) {
+      if (bayesian.confidence <= 60 || !ruleBased.predict || bayesian.predict !== ruleBased.predict) {
         state.history.push(result);
-        learnPattern(result);
-        showMessage('No strong prediction (confidence ≤ 60%). No wager placed.');
+        showMessage('Predictions disagree or not strong enough. No wager placed.');
         saveMemoryFast();
         updateDisplay();
         return;
@@ -643,7 +642,7 @@
       }
       state.history.push(result);
       learnPattern(result);
-      const outcome = result === prediction.predict ? 'win' : 'loss';
+      const outcome = result === bayesian.predict ? 'win' : 'loss';
       state.outcomes.push(outcome === 'win' ? 'W' : 'L');
       if (outcome === 'win') {
         handleWin();
@@ -662,7 +661,9 @@
     function undo() {
       if (snapshots.length) {
         const prevState = snapshots.pop();
-        unlearnPattern(state.history[state.history.length - 1]);
+        if (state.outcomes.length > prevState.outcomes.length) {
+          unlearnPattern(state.history[state.history.length - 1]);
+        }
         state = prevState;
         saveMemoryFast();
         updateDisplay();
@@ -927,4 +928,3 @@
   </script>
 </body>
 </html>
-```
