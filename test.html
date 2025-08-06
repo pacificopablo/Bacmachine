@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -175,6 +176,24 @@
     .admin-panel button {
       background-color: #dc3545;
     }
+    .patterns {
+      margin-top: 1rem;
+      text-align: left;
+      font-size: 0.9rem;
+      padding: 0 10px;
+    }
+    .patterns ul {
+      list-style: none;
+      padding: 0;
+      max-height: 150px;
+      overflow-y: auto;
+    }
+    .patterns li {
+      margin: 5px 0;
+      padding: 5px;
+      background-color: #f9f9f9;
+      border-radius: 5px;
+    }
     @media (max-width: 500px) {
       .flex-row { flex-direction: column; align-items: stretch; }
       .bet-controls { flex-direction: column; align-items: stretch; }
@@ -200,6 +219,10 @@
     <div class="prediction" id="prediction">Waiting for input...</div>
     <div class="shoe-type" id="shoeType">Detected Pattern: N/A</div>
     <div class="history" id="historyDisplay"></div>
+    <div class="section patterns" id="patternsDisplay">
+      <h3>🧠 Learned Patterns</h3>
+      <ul id="patternsList"></ul>
+    </div>
 
     <div class="stats">
       <div class="section" id="currentWager">💵 Current Bet: 0</div>
@@ -643,6 +666,7 @@
         document.getElementById('prediction').innerText = 'Waiting for input...';
         document.getElementById('shoeType').innerText = 'Detected Pattern: N/A';
         document.getElementById('historyDisplay').innerHTML = '';
+        document.getElementById('patternsList').innerHTML = '';
         updateMMDisplay();
       }
     }
@@ -673,7 +697,7 @@
       state.outcomes = [];
       state.patternMemory = {};
       saveMemoryFast();
-      updateMMDisplay();
+      updateDisplay();
     }
 
     function handleWin() {
@@ -708,7 +732,7 @@
         snapshots.push(JSON.parse(JSON.stringify(state)));
         state.betState = { currentBetUnits: 1, totalProfit: 0, cycleProfit: 0, previousLosses: [] };
         saveMemoryFast();
-        updateMMDisplay();
+        updateDisplay();
       }
     }
 
@@ -720,6 +744,7 @@
     function updateDisplay() {
       updatePrediction();
       updateMMDisplay();
+      updatePatternsDisplay();
     }
 
     function updatePrediction() {
@@ -754,6 +779,25 @@
       if (chopRatio > 0.7) pattern = 'Chop';
       else if (chopRatio < 0.3) pattern = 'Streak';
       shoeDiv.innerText = `Detected Pattern: ${pattern}`;
+    }
+
+    function updatePatternsDisplay() {
+      const patternsList = document.getElementById('patternsList');
+      patternsList.innerHTML = '';
+      Object.keys(state.patternMemory).forEach(key => {
+        const counts = state.patternMemory[key];
+        const total = (counts.P || 0) + (counts.B || 0);
+        if (total > 0) {
+          const li = document.createElement('li');
+          li.innerText = `${key} → Player: ${counts.P || 0}, Banker: ${counts.B || 0}`;
+          patternsList.appendChild(li);
+        }
+      });
+      if (!patternsList.innerHTML) {
+        const li = document.createElement('li');
+        li.innerText = 'No patterns learned yet';
+        patternsList.appendChild(li);
+      }
     }
 
     function updateMMDisplay() {
