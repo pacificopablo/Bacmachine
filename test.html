@@ -1,4 +1,4 @@
-
+```html
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -218,6 +218,7 @@
 
     <div class="prediction" id="prediction">Waiting for input...</div>
     <div class="shoe-type" id="shoeType">Detected Pattern: N/A</div>
+    <div class="section">Showing last 10 results</div>
     <div class="history" id="historyDisplay"></div>
     <div class="section patterns" id="patternsDisplay">
       <h3>🧠 Learned Patterns</h3>
@@ -248,6 +249,8 @@
         <button class="reset-bet" onclick="resetBet()" aria-label="Reset bet">Reset Bet</button>
         <button class="mm-action" onclick="saveMemory()" aria-label="Save state">💾</button>
         <button class="mm-action" onclick="loadMemory()" aria-label="Load state">📥</button>
+        <button class="mm-action" onclick="resetStats()" aria-label="Reset stats">🔄 Reset Stats</button>
+        <button class="mm-action" onclick="resetMemory()" aria-label="Reset memory">🧠 Reset Memory</button>
       </div>
     </div>
 
@@ -671,6 +674,26 @@
       }
     }
 
+    function resetStats() {
+      if (confirm('Reset stats (wins, losses, outcomes)?')) {
+        snapshots.push(JSON.parse(JSON.stringify(state)));
+        state.wins = 0;
+        state.losses = 0;
+        state.outcomes = [];
+        saveMemoryFast();
+        updateDisplay();
+      }
+    }
+
+    function resetMemory() {
+      if (confirm('Reset learned patterns?')) {
+        snapshots.push(JSON.parse(JSON.stringify(state)));
+        state.patternMemory = {};
+        saveMemoryFast();
+        updateDisplay();
+      }
+    }
+
     function setBankroll() {
       const bankroll = parseFloat(document.getElementById('bankrollInput').value);
       const unit = parseFloat(document.getElementById('basebetInput').value);
@@ -752,13 +775,15 @@
       const shoeDiv = document.getElementById('shoeType');
       const historyDiv = document.getElementById('historyDisplay');
       historyDiv.innerHTML = '';
-      state.history.forEach((item, index) => {
+      const displayHistory = state.history.slice(-10); // Limit to last 10 results
+      displayHistory.forEach((item, index) => {
+        const actualIndex = state.history.length - displayHistory.length + index;
         const cell = document.createElement('div');
         cell.innerText = item;
         cell.className = item;
-        if (state.outcomes[index]) {
-          cell.classList.add(state.outcomes[index]);
-          cell.setAttribute('data-outcome', state.outcomes[index]);
+        if (state.outcomes[actualIndex]) {
+          cell.classList.add(state.outcomes[actualIndex]);
+          cell.setAttribute('data-outcome', state.outcomes[actualIndex]);
         }
         historyDiv.appendChild(cell);
       });
@@ -896,6 +921,8 @@
     window.recordResult = recordResult;
     window.undo = undo;
     window.clearAll = clearAll;
+    window.resetStats = resetStats;
+    window.resetMemory = resetMemory;
     window.setBankroll = setBankroll;
     window.resetBet = resetBet;
     window.saveMemory = saveMemory;
@@ -904,3 +931,4 @@
   </script>
 </body>
 </html>
+```
