@@ -72,9 +72,10 @@
     }
     .prediction {
       font-weight: bold;
-      font-size: 1.2rem;
+      font-size: 1.1rem;
       text-align: center;
       margin-top: 1rem;
+      line-height: 1.5;
     }
     .shoe-type {
       text-align: center;
@@ -185,6 +186,7 @@
       .flex-row { flex-direction: column; align-items: stretch; }
       .bet-controls { flex-direction: column; align-items: stretch; }
       input[type=number], input[type=datetime-local], select, input[type=email], input[type=password] { width: 100%; }
+      .prediction { font-size: 1rem; }
     }
   </style>
 </head>
@@ -500,13 +502,11 @@
       if (user) {
         try {
           const userDoc = await getDoc(doc(db, 'users', user.uid));
-          console.log('User Doc:', userDoc.exists(), userDoc.data());
           if (userDoc.exists()) {
             const userData = userDoc.data();
             isAdmin = userData.isAdmin || false;
             const subscriptionEnd = Number.isInteger(userData.subscriptionEnd) ? userData.subscriptionEnd : null;
             const currentTime = DateTime.now().setZone('Asia/Manila').toMillis();
-            console.log('Subscription End:', subscriptionEnd, 'Current Time:', currentTime);
             if (subscriptionEnd && currentTime < subscriptionEnd) {
               document.getElementById('appContainer').classList.remove('hidden');
               document.getElementById('subscriptionStatus').innerText = `Subscription: Active until ${DateTime.fromMillis(subscriptionEnd, { zone: 'Asia/Manila' }).toLocaleString(DateTime.DATETIME_FULL)}`;
@@ -591,6 +591,32 @@
       return { predict: 'P', confidence: 50 };
     }
 
+    function ruleBasedPrediction() {
+      if (state.history.length < 5) {
+        return { predict: null, explanation: 'Waiting for more hands...' };
+      }
+      const last5 = state.history.slice(-5);
+      const countB = last5.filter(x => x === 'B').length;
+      const countP = last5.filter(x => x === 'P').length;
+      let prediction = '';
+      let explanation = '';
+
+      if (last5.every((v, i, a) => i === 0 || v !== a[i - 1])) {
+        prediction = last5.at(-1) === 'B' ? 'P' : 'B';
+        explanation = 'Zigzag breaker detected.';
+      } else if (last5.slice(-3).every(v => v === last5.at(-1))) {
+        prediction = last5.at(-1);
+        explanation = 'Streak detected.';
+      } else if (countB === 4 || countP === 4) {
+        prediction = countB > countP ? 'P' : 'B';
+        explanation = 'Dominance detected in last 5.';
+      } else {
+        prediction = state.history.slice(-3).filter(x => x === 'B').length < 2 ? 'B' : 'P';
+        explanation = 'Underdog fallback.';
+      }
+      return { predict: prediction, explanation };
+    }
+
     function recordResult(result) {
       if (!state.baseUnit || !state.startBankroll) {
         showMessage('Set bankroll/unit first');
@@ -651,6 +677,8 @@
         state.wins = 0;
         state.losses = 0;
         state.patternMemory = {};
+        state.betState = { currentBetUnits: 1, totalProfit: 0, cycleProfit: 0, previousLosses: [] };
+        state.stopProfitReached = false;
         saveMemoryFast();
         document.getElementById('prediction').innerText = 'Waiting for input...';
         document.getElementById('shoeType').innerText = 'Detected Pattern: N/A';
@@ -771,13 +799,16 @@
         }
         historyDiv.appendChild(cell);
       });
-      const prediction = bayesianPrediction();
-      if (prediction.confidence <= 60) {
-        predDiv.innerText = 'Waiting for strong signal...';
-        shoeDiv.innerText = 'Detected Pattern: N/A';
-        return;
-      }
-      predDiv.innerText = `Prediction: ${prediction.predict === 'P' ? 'Player' : 'Banker'} (${prediction.confidence}%)`;
+
+      const bayesian = bayesianPrediction();
+      const ruleBased = ruleBasedPrediction();
+      let bayesianText = bayesian.confidence <= 60 ? 'Waiting for strong signal...' : 
+        `Bayesian: ${bayesian.predict === 'P' ? 'Player' : 'Banker'} (${bayesian.confidence}%)`;
+      let ruleBasedText = ruleBased.predict ? 
+        `Rule-Based: ${ruleBased.predict === 'P' ? 'Player' : 'Banker'} (${ruleBased.explanation})` : 
+        `Rule-Based: ${ruleBased.explanation}`;
+      predDiv.innerText = `${bayesianText} | ${ruleBasedText}`;
+
       let streaks = 0;
       for (let i = 1; i < state.history.length; i++) {
         if (state.history[i] === state.history[i - 1]) streaks++;
