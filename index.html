@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -199,6 +200,7 @@
 
     <div class="prediction" id="prediction">Waiting for input...</div>
     <div class="shoe-type" id="shoeType">Detected Pattern: N/A</div>
+    <div class="section">Showing last 10 results</div>
     <div class="history" id="historyDisplay"></div>
 
     <div class="stats">
@@ -225,6 +227,8 @@
         <button class="reset-bet" onclick="resetBet()" aria-label="Reset bet">Reset Bet</button>
         <button class="mm-action" onclick="saveMemory()" aria-label="Save state">💾</button>
         <button class="mm-action" onclick="loadMemory()" aria-label="Load state">📥</button>
+        <button class="mm-action" onclick="resetStats()" aria-label="Reset stats">🔄 Reset Stats</button>
+        <button class="mm-action" onclick="resetMemory()" aria-label="Reset memory">🧠 Reset Memory</button>
       </div>
     </div>
 
@@ -332,7 +336,8 @@
             stopProfitType: 'percentage',
             stopProfitValue: 0,
             stopProfitEffective: 0,
-            stopProfitReached: false
+            stopProfitReached: false,
+            patternMemory: {}
           }
         });
         alert('User created successfully');
@@ -530,25 +535,52 @@
       stopProfitType: 'percentage',
       stopProfitValue: 0,
       stopProfitEffective: 0,
-      stopProfitReached: false
+      stopProfitReached: false,
+      patternMemory: {}
     };
     let snapshots = [];
     let saveTimeout = null;
 
-    function getCurrentPrediction() {
-      if (state.history.length < 5) return null;
-      const last5 = state.history.slice(-5);
-      const countB = last5.filter(x => x === 'B').length;
-      const countP = last5.filter(x => x === 'P').length;
-      if (last5.every((v, i, a) => i === 0 || v !== a[i - 1])) {
-        return last5.at(-1) === 'B' ? 'P' : 'B';
-      } else if (last5.slice(-3).every(v => v === last5.at(-1))) {
-        return last5.at(-1);
-      } else if (countB === 4 || countP === 4) {
-        return countB > countP ? 'P' : 'B';
-      } else {
-        return state.history.slice(-3).filter(x => x === 'B').length < 2 ? 'B' : 'P';
+    function learnPattern(latest) {
+      for (let n = 2; n <= 5; n++) {
+        if (state.history.length >= n) {
+          const seq = state.history.slice(-n).join('');
+          const key = seq.slice(0, -1);
+          const next = seq.slice(-1);
+          if (!state.patternMemory[key]) state.patternMemory[key] = { P: 0, B: 0 };
+          state.patternMemory[key][next]++;
+        }
       }
+    }
+
+    function unlearnPattern(latest) {
+      for (n = 2; n <= 5; n++) {
+        if (state.history.length >= n) {
+          const seq = state.history.slice(-n).join('');
+          const key = seq.slice(0, -1);
+          const next = seq.slice(-1);
+          if (state.patternMemory[key]) {
+            state.patternMemory[key][next] = Math.max(0, state.patternMemory[key][next] - 1);
+          }
+        }
+      }
+    }
+
+    function bayesianPrediction() {
+      for (let n = 5; n >= 2; n--) {
+        const key = state.history.slice(-n + 1).join('');
+        if (state.patternMemory[key]) {
+          const p = state.patternMemory[key].P || 0;
+          const b = state.patternMemory[key].B || 0;
+          const total = p + b;
+          if (total > 0) {
+            const confidence = Math.round(100 * Math.max(p, b) / total);
+            const predict = p > b ? 'P' : 'B';
+            return { predict, confidence };
+          }
+        }
+      }
+      return { predict: 'P', confidence: 50 };
     }
 
     function recordResult(result) {
@@ -556,11 +588,12 @@
         alert('Set bankroll/unit first');
         return;
       }
-      const prediction = getCurrentPrediction();
+      const prediction = bayesianPrediction();
       snapshots.push(JSON.parse(JSON.stringify(state)));
-      if (!prediction) {
+      if (prediction.confidence <= 60) {
         state.history.push(result);
-        alert('No prediction available yet (need 5 hands). No wager placed.');
+        learnPattern(result);
+        alert('No strong prediction (confidence ≤ 60%). No wager placed.');
         saveMemoryFast();
         updateDisplay();
         return;
@@ -575,7 +608,8 @@
         return;
       }
       state.history.push(result);
-      const outcome = result === prediction ? 'win' : 'loss';
+      learnPattern(result);
+      const outcome = result === prediction.predict ? 'win' : 'loss';
       state.outcomes.push(outcome === 'win' ? 'W' : 'L');
       if (outcome === 'win') {
         handleWin();
@@ -593,7 +627,9 @@
 
     function undo() {
       if (snapshots.length) {
-        state = snapshots.pop();
+        const prevState = snapshots.pop();
+        unlearnPattern(state.history[state.history.length - 1]);
+        state = prevState;
         saveMemoryFast();
         updateDisplay();
       }
@@ -606,11 +642,32 @@
         state.outcomes = [];
         state.wins = 0;
         state.losses = 0;
+        state.patternMemory = {};
         saveMemoryFast();
         document.getElementById('prediction').innerText = 'Waiting for input...';
         document.getElementById('shoeType').innerText = 'Detected Pattern: N/A';
         document.getElementById('historyDisplay').innerHTML = '';
         updateMMDisplay();
+      }
+    }
+
+    function resetStats() {
+      if (confirm('Reset stats (wins, losses, outcomes)?')) {
+        snapshots.push(JSON.parse(JSON.stringify(state)));
+        state.wins = 0;
+        state.losses = 0;
+        state.outcomes = [];
+        saveMemoryFast();
+        updateDisplay();
+      }
+    }
+
+    function resetMemory() {
+      if (confirm('Reset learned patterns?')) {
+        snapshots.push(JSON.parse(JSON.stringify(state)));
+        state.patternMemory = {};
+        saveMemoryFast();
+        updateDisplay();
       }
     }
 
@@ -638,8 +695,9 @@
       state.wins = 0;
       state.losses = 0;
       state.outcomes = [];
+      state.patternMemory = {};
       saveMemoryFast();
-      updateMMDisplay();
+      updateDisplay();
     }
 
     function handleWin() {
@@ -674,7 +732,7 @@
         snapshots.push(JSON.parse(JSON.stringify(state)));
         state.betState = { currentBetUnits: 1, totalProfit: 0, cycleProfit: 0, previousLosses: [] };
         saveMemoryFast();
-        updateMMDisplay();
+        updateDisplay();
       }
     }
 
@@ -693,36 +751,25 @@
       const shoeDiv = document.getElementById('shoeType');
       const historyDiv = document.getElementById('historyDisplay');
       historyDiv.innerHTML = '';
-      state.history.forEach((item, index) => {
+      const displayHistory = state.history.slice(-10); // Limit to last 10 results
+      displayHistory.forEach((item, index) => {
+        const actualIndex = state.history.length - displayHistory.length + index;
         const cell = document.createElement('div');
         cell.innerText = item;
         cell.className = item;
-        if (state.outcomes[index]) {
-          cell.classList.add(state.outcomes[index]);
-          cell.setAttribute('data-outcome', state.outcomes[index]);
+        if (state.outcomes[actualIndex]) {
+          cell.classList.add(state.outcomes[actualIndex]);
+          cell.setAttribute('data-outcome', state.outcomes[actualIndex]);
         }
         historyDiv.appendChild(cell);
       });
-      const prediction = getCurrentPrediction();
-      if (!prediction) {
-        predDiv.innerText = 'Waiting for more hands...';
+      const prediction = bayesianPrediction();
+      if (prediction.confidence <= 60) {
+        predDiv.innerText = 'Waiting for strong signal...';
         shoeDiv.innerText = 'Detected Pattern: N/A';
         return;
       }
-      const last5 = state.history.slice(-5);
-      const countB = last5.filter(x => x === 'B').length;
-      const countP = last5.filter(x => x === 'P').length;
-      let explanation = '';
-      if (last5.every((v, i, a) => i === 0 || v !== a[i - 1])) {
-        explanation = 'Zigzag breaker detected.';
-      } else if (last5.slice(-3).every(v => v === last5.at(-1))) {
-        explanation = 'Streak detected.';
-      } else if (countB === 4 || countP === 4) {
-        explanation = 'Dominance detected in last 5.';
-      } else {
-        explanation = 'Underdog fallback.';
-      }
-      predDiv.innerText = `Prediction: ${prediction} (${explanation})`;
+      predDiv.innerText = `Prediction: ${prediction.predict === 'P' ? 'Player' : 'Banker'} (${prediction.confidence}%)`;
       let streaks = 0;
       for (let i = 1; i < state.history.length; i++) {
         if (state.history[i] === state.history[i - 1]) streaks++;
@@ -801,6 +848,7 @@
             state.betState = saved.betState || { currentBetUnits: 1, totalProfit: 0, cycleProfit: 0, previousLosses: [] };
             state.history = Array.isArray(saved.history) ? saved.history : [];
             state.outcomes = Array.isArray(saved.outcomes) ? saved.outcomes : [];
+            state.patternMemory = saved.patternMemory || {};
             const subscriptionEnd = Number.isInteger(userDoc.data().subscriptionEnd) ? userDoc.data().subscriptionEnd : null;
             document.getElementById('subscriptionStatus').innerText = subscriptionEnd ? 
               `Subscription: Active until ${DateTime.fromMillis(subscriptionEnd, { zone: 'Asia/Manila' }).toLocaleString(DateTime.DATETIME_FULL)}` : 
@@ -830,6 +878,8 @@
     window.recordResult = recordResult;
     window.undo = undo;
     window.clearAll = clearAll;
+    window.resetStats = resetStats;
+    window.resetMemory = resetMemory;
     window.setBankroll = setBankroll;
     window.resetBet = resetBet;
     window.saveMemory = saveMemory;
