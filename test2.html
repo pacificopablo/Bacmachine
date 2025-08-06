@@ -606,6 +606,7 @@
       if (!ruleBased.predict) {
         state.history.push(result);
         showMessage('Need at least 2 hands for prediction. No wager placed.');
+        learnPattern(result);
         saveMemoryFast();
         updateDisplay();
         return;
@@ -641,7 +642,7 @@
     function undo() {
       if (snapshots.length) {
         const prevState = snapshots.pop();
-        if (state.outcomes.length > prevState.outcomes.length) {
+        if (state.history.length > prevState.history.length) {
           unlearnPattern(state.history[state.history.length - 1]);
         }
         state = prevState;
@@ -654,7 +655,6 @@
       if (confirm('Reset session history?')) {
         snapshots.push(JSON.parse(JSON.stringify(state)));
         state.history = [];
-        state.outcomes = [];
         state.patternMemory = {};
         saveMemoryFast();
         document.getElementById('prediction').innerText = 'Waiting for input...';
@@ -665,11 +665,12 @@
     }
 
     function resetStats() {
-      if (confirm('Reset stats (wins, losses, outcomes)?')) {
+      if (confirm('Reset stats and bets?')) {
         snapshots.push(JSON.parse(JSON.stringify(state)));
         state.wins = 0;
         state.losses = 0;
         state.outcomes = [];
+        state.betState = { currentBetUnits: 1, totalProfit: 0, cycleProfit: 0, previousLosses: [] };
         saveMemoryFast();
         updateDisplay();
       }
@@ -682,7 +683,6 @@
         state.baseUnit = 0;
         state.startBankroll = 0;
         state.currentBankroll = 0;
-        state.betState = { currentBetUnits: 1, totalProfit: 0, cycleProfit: 0, previousLosses: [] };
         state.stopProfitType = 'percentage';
         state.stopProfitValue = 0;
         state.stopProfitEffective = 0;
@@ -716,6 +716,7 @@
       state.wins = 0;
       state.losses = 0;
       state.outcomes = [];
+      state.betState = { currentBetUnits: 1, totalProfit: 0, cycleProfit: 0, previousLosses: [] };
       state.patternMemory = {};
       saveMemoryFast();
       updateDisplay();
