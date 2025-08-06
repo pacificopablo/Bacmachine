@@ -651,15 +651,11 @@
     }
 
     function clearAll() {
-      if (confirm('Reset all data?')) {
+      if (confirm('Reset session history?')) {
         snapshots.push(JSON.parse(JSON.stringify(state)));
         state.history = [];
         state.outcomes = [];
-        state.wins = 0;
-        state.losses = 0;
         state.patternMemory = {};
-        state.betState = { currentBetUnits: 1, totalProfit: 0, cycleProfit: 0, previousLosses: [] };
-        state.stopProfitReached = false;
         saveMemoryFast();
         document.getElementById('prediction').innerText = 'Waiting for input...';
         document.getElementById('shoeType').innerText = 'Detected Pattern: N/A';
@@ -680,9 +676,17 @@
     }
 
     function resetMemory() {
-      if (confirm('Reset learned patterns?')) {
+      if (confirm('Reset learned patterns and money management?')) {
         snapshots.push(JSON.parse(JSON.stringify(state)));
         state.patternMemory = {};
+        state.baseUnit = 0;
+        state.startBankroll = 0;
+        state.currentBankroll = 0;
+        state.betState = { currentBetUnits: 1, totalProfit: 0, cycleProfit: 0, previousLosses: [] };
+        state.stopProfitType = 'percentage';
+        state.stopProfitValue = 0;
+        state.stopProfitEffective = 0;
+        state.stopProfitReached = false;
         saveMemoryFast();
         updateDisplay();
       }
@@ -692,7 +696,7 @@
       const bankroll = parseFloat(document.getElementById('bankrollInput').value);
       const unit = parseFloat(document.getElementById('basebetInput').value);
       const stopProfit = parseFloat(document.getElementById('stopProfitInput').value) || 0;
-      state.stopProfitType = document.getElementById('stopProfitType').value;
+      const stopProfitType = document.getElementById('stopProfitType').value;
       if (isNaN(bankroll) || bankroll <= 0 || isNaN(unit) || unit <= 0) {
         showMessage('Invalid bankroll or unit value');
         return;
@@ -706,9 +710,9 @@
       state.baseUnit = unit;
       state.currentBankroll = bankroll;
       state.stopProfitValue = stopProfit;
-      state.stopProfitEffective = state.stopProfitType === 'percentage' ? stopProfit / 100 * bankroll : stopProfit;
+      state.stopProfitType = stopProfitType;
+      state.stopProfitEffective = stopProfitType === 'percentage' ? stopProfit / 100 * bankroll : stopProfit;
       state.stopProfitReached = false;
-      state.betState = { currentBetUnits: 1, totalProfit: 0, cycleProfit: 0, previousLosses: [] };
       state.wins = 0;
       state.losses = 0;
       state.outcomes = [];
