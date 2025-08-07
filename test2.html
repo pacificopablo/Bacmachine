@@ -691,14 +691,6 @@
       state.wins = 0;
       state.losses = 0;
       state.patternMemory = {};
-      state.baseUnit = 0;
-      state.startBankroll = 0;
-      state.currentBankroll = 0;
-      state.betState = { currentBetUnits: 1, totalProfit: 0, cycleProfit: 0, previousLosses: [] };
-      state.stopProfitType = 'percentage';
-      state.stopProfitValue = 0;
-      state.stopProfitEffective = 0;
-      state.stopProfitReached = false;
       document.getElementById('errorMessage').innerText = 'All data cleared';
       console.log('All data cleared');
       saveMemoryFast();
@@ -729,6 +721,7 @@
       pruneMemory();
       document.getElementById('errorMessage').innerText = 'Pattern memory reset';
       console.log('Pattern memory reset');
+      saveMemoryFast();
       updateDisplay();
     }
 
