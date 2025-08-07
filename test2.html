@@ -828,25 +828,20 @@
           }
         }
       }
-      if (prediction.confidence <= confidenceThreshold) {
-        predDiv.innerText = 'Waiting for strong signal...';
-        predDiv.classList.remove('player', 'banker');
-        shoeDiv.innerText = 'Detected Pattern: N/A';
-      } else {
-        predDiv.innerHTML = `Prediction: ${prediction.predict === 'P' ? 'PLAYER' : 'BANKER'} (${prediction.confidence}%)<br><small>${patternInfo}</small>`;
-        predDiv.classList.remove('player', 'banker');
-        predDiv.classList.add(prediction.predict === 'P' ? 'player' : 'banker');
-        let streaks = 0;
-        for (let i = 1; i < state.history.length; i++) {
-          if (state.history[i] === state.history[i - 1]) streaks++;
-        }
-        const chopScore = state.history.length > 1 ? state.history.length - 1 - streaks : 0;
-        const chopRatio = state.history.length > 1 ? chopScore / (state.history.length - 1) : 0;
-        let pattern = 'Balanced';
-        if (chopRatio > 0.7) pattern = 'Chop';
-        else if (chopRatio < 0.3) pattern = 'Streak';
-        shoeDiv.innerText = `Detected Pattern: ${pattern}`;
+      // Always display the prediction with PLAYER or BANKER
+      predDiv.innerHTML = `Prediction: ${prediction.predict === 'P' ? 'PLAYER' : 'BANKER'} (${prediction.confidence}%)<br><small>${patternInfo || 'No strong pattern detected'}</small>`;
+      predDiv.classList.remove('player', 'banker');
+      predDiv.classList.add(prediction.predict === 'P' ? 'player' : 'banker');
+      let streaks = 0;
+      for (let i = 1; i < state.history.length; i++) {
+        if (state.history[i] === state.history[i - 1]) streaks++;
       }
+      const chopScore = state.history.length > 1 ? state.history.length - 1 - streaks : 0;
+      const chopRatio = state.history.length > 1 ? chopScore / (state.history.length - 1) : 0;
+      let pattern = 'Balanced';
+      if (chopRatio > 0.7) pattern = 'Chop';
+      else if (chopRatio < 0.3) pattern = 'Streak';
+      shoeDiv.innerText = `Detected Pattern: ${pattern}`;
     }
 
     function updateMMDisplay() {
@@ -942,8 +937,7 @@
         if (user) {
           const userDoc = await getDoc(doc(db, 'users', user.uid));
           if (userDoc.exists()) {
-            const saved = userDoc.data().state一代
-
+            const saved = userDoc.data().state;
             state.wins = Number(saved.wins) || 0;
             state.losses = Number(saved.losses) || 0;
             state.baseUnit = Number(saved.baseUnit) || 0;
