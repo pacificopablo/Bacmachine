@@ -653,7 +653,7 @@
         alert('Set bankroll/unit first');
         return;
       }
-      const prediction = bayesianPrediction();
+      const prediction = chatGPTPrediction(); // Use ChatGPT prediction for betting
       snapshots.push(JSON.parse(JSON.stringify(state)));
       if (prediction.confidence <= 60) {
         state.history.push(result);
@@ -674,7 +674,7 @@
       }
       state.history.push(result);
       learnPattern(result);
-      const outcome = result === prediction.predict ? 'win' : 'loss';
+      const outcome = result === prediction.prediction ? 'win' : 'loss'; // Use ChatGPT prediction
       state.outcomes.push(outcome === 'win' ? 'W' : 'L');
       if (outcome === 'win') {
         handleWin();
@@ -838,7 +838,7 @@
         shoeDiv.innerText = 'Detected Pattern: N/A';
         return;
       }
-      predDiv.innerText = `Prediction: ${prediction.predict === 'P' ? 'Player' : 'Banker'} (${prediction.confidence}%)`;
+      predDiv.innerText = `Bayesian Prediction: ${prediction.predict === 'P' ? 'Player' : 'Banker'} (${prediction.confidence}%)`;
       chatGPTPredDiv.innerText = `ChatGPT Prediction: ${chatGPTPred.message}`;
       let streaks = 0;
       for (let i = 1; i < state.history.length; i++) {
