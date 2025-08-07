@@ -73,18 +73,12 @@
       font-size: 1.2rem;
       text-align: center;
       margin-top: 1rem;
-      color: #222; /* Neutral text color */
     }
-    .prediction.highlight {
-      border: 2px solid #FFD700; /* Yellow border for highlight */
-      box-shadow: 0 0 8px rgba(255, 215, 0, 0.5); /* Subtle glow effect */
-      padding: 5px;
-      border-radius: 5px;
-      transition: all 0.3s ease; /* Smooth transition for highlight */
+    .prediction.player {
+      color: #2196F3;
     }
-    .prediction.player,
     .prediction.banker {
-      /* No color changes; rely on highlight */
+      color: #E91E63;
     }
     .shoe-type {
       text-align: center;
@@ -187,6 +181,18 @@
     .admin-panel button {
       background-color: #dc3545;
     }
+    .analysis {
+      margin-top: 1rem;
+      padding: 10px;
+      background: #f9f9f9;
+      border-radius: 8px;
+      text-align: center;
+      font-size: 16px;
+      color: #333;
+    }
+    .analysis p {
+      margin: 5px 0;
+    }
     @media (max-width: 500px) {
       .flex-row { flex-direction: column; align-items: stretch; }
       .bet-controls { flex-direction: column; align-items: stretch; }
@@ -213,6 +219,8 @@
     <div class="shoe-type" id="shoeType">Detected Pattern: N/A</div>
     <div class="section">Showing last 10 results</div>
     <div class="history" id="historyDisplay"></div>
+    <div class="section">Result Analysis</div>
+    <div class="analysis" id="analysisDisplay"></div>
 
     <div class="stats">
       <div class="section" id="currentWager">💵 Current Bet: 0</div>
@@ -681,7 +689,7 @@
       document.getElementById('errorMessage').innerText = '';
       saveMemoryFast();
       document.getElementById('prediction').innerText = 'Waiting for input...';
-      document.getElementById('prediction').classList.remove('player', 'banker', 'highlight');
+      document.getElementById('prediction').classList.remove('player', 'banker');
       document.getElementById('shoeType').innerText = 'Detected Pattern: N/A';
       document.getElementById('historyDisplay').innerHTML = '';
       updateMMDisplay();
@@ -792,9 +800,76 @@
       return Math.min(state.betState.currentBetUnits * state.baseUnit, state.currentBankroll);
     }
 
+    function analyzeResults() {
+      const analysis = {
+        streakInfo: '',
+        patternReliability: '',
+        winLossRatio: '',
+        recentTrend: '',
+      };
+
+      // Streak Analysis
+      let currentStreak = 0;
+      let currentStreakType = '';
+      let maxStreak = 0;
+      let maxStreakType = '';
+      for (let i = 1; i < state.history.length; i++) {
+        if (state.history[i] === state.history[i - 1]) {
+          currentStreak++;
+          if (currentStreak >= maxStreak) {
+            maxStreak = currentStreak;
+            maxStreakType = state.history[i];
+          }
+        } else {
+          currentStreak = 0;
+        }
+      }
+      currentStreakType = state.history.length > 0 ? state.history[state.history.length - 1] : '';
+      analysis.streakInfo = state.history.length > 0 
+        ? `Current Streak: ${currentStreak + 1} ${currentStreakType === 'P' ? 'Player' : 'Banker'} | Longest: ${maxStreak + 1} ${maxStreakType === 'P' ? 'Player' : 'Banker'}`
+        : 'No streaks detected';
+
+      // Pattern Reliability
+      let reliablePatterns = 0;
+      Object.keys(state.patternMemory).forEach(key => {
+        const total = (state.patternMemory[key].P || 0) + (state.patternMemory[key].B || 0);
+        if (total >= 3) {
+          const wins = state.patternMemory[key].wins || 0;
+          const losses = state.patternMemory[key].losses || 0;
+          if (wins + losses > 0 && wins / (wins + losses) >= 0.7) {
+            reliablePatterns++;
+          }
+        }
+      });
+      analysis.patternReliability = `Reliable Patterns (≥70% accuracy): ${reliablePatterns}`;
+
+      // Win/Loss Ratio
+      const totalBets = state.wins + state.losses;
+      analysis.winLossRatio = totalBets > 0 
+        ? `Win/Loss Ratio: ${state.wins}/${state.losses} (${((state.wins / totalBets) * 100).toFixed(1)}% wins)`
+        : 'No bets placed';
+
+      // Recent Trend (last 5 predictions)
+      const recentPredictions = state.predictionHistory.slice(-5);
+      const recentAccuracy = recentPredictions.length > 0 
+        ? (recentPredictions.filter(p => p.outcome === 'win').length / recentPredictions.length * 100).toFixed(1)
+        : 0;
+      analysis.recentTrend = recentPredictions.length > 0 
+        ? `Recent Trend (last 5): ${recentAccuracy}% accuracy`
+        : 'No recent predictions';
+
+      return `
+        <p>${analysis.streakInfo}</p>
+        <p>${analysis.patternReliability}</p>
+        <p>${analysis.winLossRatio}</p>
+        <p>${analysis.recentTrend}</p>
+      `;
+    }
+
     function updateDisplay() {
       updatePrediction();
       updateMMDisplay();
+      document.getElementById('analysisDisplay').innerHTML = analyzeResults();
     }
 
     function updatePrediction() {
@@ -836,12 +911,12 @@
       }
       if (prediction.confidence <= confidenceThreshold) {
         predDiv.innerText = 'Waiting for strong signal...';
-        predDiv.classList.remove('player', 'banker', 'highlight');
+        predDiv.classList.remove('player', 'banker');
         shoeDiv.innerText = 'Detected Pattern: N/A';
       } else {
         predDiv.innerHTML = `Prediction: ${prediction.predict === 'P' ? 'PLAYER' : 'BANKER'} (${prediction.confidence}%)<br><small>${patternInfo}</small>`;
-        predDiv.classList.remove('player', 'banker', 'highlight');
-        predDiv.classList.add('highlight');
+        predDiv.classList.remove('player', 'banker');
+        predDiv.classList.add(prediction.predict === 'P' ? 'player' : 'banker');
         let streaks = 0;
         for (let i = 1; i < state.history.length; i++) {
           if (state.history[i] === state.history[i - 1]) streaks++;
