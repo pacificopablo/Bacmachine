@@ -75,7 +75,12 @@
       text-align: center;
       margin-top: 1rem;
       line-height: 1.5;
+      padding: 8px;
+      border-radius: 5px;
+      color: #fff;
     }
+    .prediction.P { background-color: #2196F3; }
+    .prediction.B { background-color: #E91E63; }
     .shoe-type {
       text-align: center;
       font-size: 1rem;
@@ -546,18 +551,18 @@
     let saveTimeout = null;
 
     function getCurrentPrediction() {
-      if (state.history.length < 5) return { predict: null, explanation: 'Waiting for more hands...' };
+      if (state.history.length < 5) return { predict: null, confidence: 0 };
       const last5 = state.history.slice(-5);
       const countB = last5.filter(x => x === 'B').length;
       const countP = last5.filter(x => x === 'P').length;
       if (last5.every((v, i, a) => i === 0 || v !== a[i - 1])) {
-        return { predict: last5.at(-1) === 'B' ? 'P' : 'B', explanation: 'Zigzag breaker detected' };
+        return { predict: last5.at(-1) === 'B' ? 'P' : 'B', confidence: 90 };
       } else if (last5.slice(-3).every(v => v === last5.at(-1))) {
-        return { predict: last5.at(-1), explanation: 'Streak detected' };
+        return { predict: last5.at(-1), confidence: 85 };
       } else if (countB === 4 || countP === 4) {
-        return { predict: countB > countP ? 'P' : 'B', explanation: 'Dominance detected in last 5' };
+        return { predict: countB > countP ? 'P' : 'B', confidence: 80 };
       } else {
-        return { predict: state.history.slice(-3).filter(x => x === 'B').length < 2 ? 'B' : 'P', explanation: 'Underdog fallback' };
+        return { predict: state.history.slice(-3).filter(x => x === 'B').length < 2 ? 'B' : 'P', confidence: 60 };
       }
     }
 
@@ -588,7 +593,7 @@
 
     function ruleBasedPrediction() {
       if (state.history.length < 2) {
-        return { predict: null, explanation: 'Waiting for more hands...' };
+        return { predict: null, confidence: 0 };
       }
       for (let n = 4; n >= 1; n--) {
         const key = state.history.slice(-n).join('');
@@ -599,13 +604,27 @@
           if (total > 0) {
             const confidence = Math.round(100 * Math.max(p, b) / total);
             const predict = p > b ? 'P' : 'B';
-            return { predict, explanation: `Pattern predicts ${predict === 'P' ? 'Player' : 'Banker'} (${confidence}% confidence)` };
+            return { predict, confidence };
           }
         }
       }
       const lastResult = state.history[state.history.length - 1];
       const predict = lastResult === 'B' ? 'P' : 'B';
-      return { predict, explanation: `Default underdog: ${predict === 'P' ? 'Player' : 'Banker'}` };
+      return { predict, confidence: 50 };
+    }
+
+    function combinePredictions() {
+      const main = getCurrentPrediction();
+      const smart = ruleBasedPrediction();
+      if (!main.predict && !smart.predict) {
+        return { predict: null, confidence: 0 };
+      }
+      if (!main.predict) return smart;
+      if (!smart.predict) return main;
+      if (main.predict === smart.predict) {
+        return { predict: main.predict, confidence: Math.max(main.confidence, smart.confidence) };
+      }
+      return main.confidence >= smart.confidence ? main : smart;
     }
 
     function recordResult(result) {
@@ -613,14 +632,13 @@
         showMessage('Set bankroll/unit first');
         return;
       }
-      const mainPrediction = getCurrentPrediction();
-      const ruleBased = ruleBasedPrediction();
+      const combinedPrediction = combinePredictions();
       snapshots.push(JSON.parse(JSON.stringify(state)));
 
-      if (!mainPrediction.predict) {
+      if (!combinedPrediction.predict) {
         state.history.push(result);
         learnPattern(result);
-        showMessage('No main prediction available yet (need 5 hands). No wager placed.');
+        showMessage('No prediction available yet (need 2+ hands). No wager placed.');
         saveMemoryFast();
         updateDisplay();
         return;
@@ -638,8 +656,8 @@
 
       state.history.push(result);
       learnPattern(result);
-      state.outcomes.push(result === mainPrediction.predict ? 'W' : 'L');
-      if (result === mainPrediction.predict) {
+      state.outcomes.push(result === combinedPrediction.predict ? 'W' : 'L');
+      if (result === combinedPrediction.predict) {
         handleWin();
         state.wins++;
       } else {
@@ -804,11 +822,11 @@
         historyDiv.appendChild(cell);
       });
 
-      const mainPrediction = getCurrentPrediction();
-      const ruleBased = ruleBasedPrediction();
-      predDiv.innerText = mainPrediction.predict ? 
-        `Main Prediction: ${mainPrediction.predict === 'P' ? 'Player' : 'Banker'} (${mainPrediction.explanation}) | Smart Underdog: ${ruleBased.predict ? (ruleBased.predict === 'P' ? 'Player' : 'Banker') + ' (' + ruleBased.explanation + ')' : ruleBased.explanation}` : 
-        `Main Prediction: ${mainPrediction.explanation} | Smart Underdog: ${ruleBased.explanation}`;
+      const combinedPrediction = combinePredictions();
+      predDiv.innerText = combinedPrediction.predict ? 
+        (combinedPrediction.predict === 'P' ? 'Player' : 'Banker') : 
+        'Waiting for input...';
+      predDiv.className = 'prediction' + (combinedPrediction.predict ? ' ' + combinedPrediction.predict : '');
 
       let streaks = 0;
       for (let i = 1; i < state.history.length; i++) {
