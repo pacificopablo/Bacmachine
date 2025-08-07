@@ -73,12 +73,18 @@
       font-size: 1.2rem;
       text-align: center;
       margin-top: 1rem;
+      color: #222; /* Neutral text color */
     }
-    .prediction.player {
-      color: #2196F3;
+    .prediction.highlight {
+      border: 2px solid #FFD700; /* Yellow border for highlight */
+      box-shadow: 0 0 8px rgba(255, 215, 0, 0.5); /* Subtle glow effect */
+      padding: 5px;
+      border-radius: 5px;
+      transition: all 0.3s ease; /* Smooth transition for highlight */
     }
+    .prediction.player,
     .prediction.banker {
-      color: #E91E63;
+      /* No color changes; rely on highlight */
     }
     .shoe-type {
       text-align: center;
@@ -547,7 +553,7 @@
     let saveTimeout = null;
 
     function learnPattern(latest) {
-      const maxLength = 4; // Default: 4
+      const maxLength = 4;
       for (let n = 2; n <= maxLength; n++) {
         if (state.history.length >= n) {
           const seq = state.history.slice(-n).join('');
@@ -562,7 +568,7 @@
     }
 
     function unlearnPattern(latest) {
-      const maxLength = 4; // Default: 4
+      const maxLength = 4;
       for (let n = 2; n <= maxLength; n++) {
         if (state.history.length >= n) {
           const seq = state.history.slice(-n).join('');
@@ -576,7 +582,7 @@
     }
 
     function bayesianPrediction() {
-      const maxLength = 4; // Default: 4
+      const maxLength = 4;
       const minOccurrences = 3;
       for (let n = maxLength; n >= 2; n--) {
         if (state.history.length >= n - 1) {
@@ -605,7 +611,7 @@
         return;
       }
       const prediction = bayesianPrediction();
-      const confidenceThreshold = 70; // Default: 70
+      const confidenceThreshold = 70;
       snapshots.push(JSON.parse(JSON.stringify(state)));
       if (snapshots.length > 50) snapshots.shift();
       if (prediction.confidence <= confidenceThreshold) {
@@ -675,7 +681,7 @@
       document.getElementById('errorMessage').innerText = '';
       saveMemoryFast();
       document.getElementById('prediction').innerText = 'Waiting for input...';
-      document.getElementById('prediction').classList.remove('player', 'banker');
+      document.getElementById('prediction').classList.remove('player', 'banker', 'highlight');
       document.getElementById('shoeType').innerText = 'Detected Pattern: N/A';
       document.getElementById('historyDisplay').innerHTML = '';
       updateMMDisplay();
@@ -809,7 +815,7 @@
         historyDiv.appendChild(cell);
       });
       const prediction = bayesianPrediction();
-      const confidenceThreshold = 70; // Default: 70
+      const confidenceThreshold = 70;
       let patternInfo = '';
       for (let n = 5; n >= 2; n--) {
         if (state.history.length >= n - 1) {
@@ -830,12 +836,12 @@
       }
       if (prediction.confidence <= confidenceThreshold) {
         predDiv.innerText = 'Waiting for strong signal...';
-        predDiv.classList.remove('player', 'banker');
+        predDiv.classList.remove('player', 'banker', 'highlight');
         shoeDiv.innerText = 'Detected Pattern: N/A';
       } else {
         predDiv.innerHTML = `Prediction: ${prediction.predict === 'P' ? 'PLAYER' : 'BANKER'} (${prediction.confidence}%)<br><small>${patternInfo}</small>`;
-        predDiv.classList.remove('player', 'banker');
-        predDiv.classList.add(prediction.predict === 'P' ? 'player' : 'banker');
+        predDiv.classList.remove('player', 'banker', 'highlight');
+        predDiv.classList.add('highlight');
         let streaks = 0;
         for (let i = 1; i < state.history.length; i++) {
           if (state.history[i] === state.history[i - 1]) streaks++;
@@ -942,8 +948,7 @@
         if (user) {
           const userDoc = await getDoc(doc(db, 'users', user.uid));
           if (userDoc.exists()) {
-            const saved = userDoc.data().state一代
-
+            const saved = userDoc.data().state;
             state.wins = Number(saved.wins) || 0;
             state.losses = Number(saved.losses) || 0;
             state.baseUnit = Number(saved.baseUnit) || 0;
