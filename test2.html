@@ -220,8 +220,8 @@
         <label><span>Unit Value</span><input type="number" id="basebetInput" placeholder="Unit Value ($)" min="0.01" step="0.01" aria-label="Set base unit"></label>
         <label>
           <select id="stopProfitType" aria-label="Select stop profit type">
-            <option value="currency">$</option>
             <option value="percentage">%</option>
+            <option value="currency">$</option>
           </select>
           <input type="number" id="stopProfitInput" placeholder="Stop Profit" min="0" step="0.01" aria-label="Set stop profit">
         </label>
@@ -229,8 +229,8 @@
       </div>
       <button class="toggle-section" onclick="toggleAdvanced()" aria-label="Toggle advanced controls">Show Advanced</button>
       <div class="flex-row collapsible" id="advancedControls">
-        <label><span>Max Pattern Length</span><input type="number" id="maxPatternLength" min="2" max="10" value="5" aria-label="Set max pattern length"></label>
-        <label><span>Confidence Threshold (%)</span><input type="number" id="confidenceThreshold" min="50" max="100" value="60" aria-label="Set confidence threshold"></label>
+        <label><span>Max Pattern Length</span><input type="number" id="maxPatternLength" min="3" max="10" value="4" aria-label="Set max pattern length"></label>
+        <label><span>Confidence Threshold (%)</span><input type="number" id="confidenceThreshold" min="50" max="100" value="70" aria-label="Set confidence threshold"></label>
         <button class="reset-bet" onclick="resetBet()" aria-label="Reset bet">Reset Bet</button>
         <button class="mm-action" onclick="saveMemory()" aria-label="Save state">💾</button>
         <button class="mm-action" onclick="loadMemory()" aria-label="Load state">📥</button>
@@ -550,7 +550,7 @@
     let saveTimeout = null;
 
     function learnPattern(latest) {
-      const maxLength = parseInt(document.getElementById('maxPatternLength').value) || 5;
+      const maxLength = parseInt(document.getElementById('maxPatternLength').value) || 4;
       for (let n = 2; n <= maxLength; n++) {
         if (state.history.length >= n) {
           const seq = state.history.slice(-n).join('');
@@ -565,7 +565,7 @@
     }
 
     function unlearnPattern(latest) {
-      const maxLength = parseInt(document.getElementById('maxPatternLength').value) || 5;
+      const maxLength = parseInt(document.getElementById('maxPatternLength').value) || 4;
       for (let n = 2; n <= maxLength; n++) {
         if (state.history.length >= n) {
           const seq = state.history.slice(-n).join('');
@@ -579,7 +579,7 @@
     }
 
     function bayesianPrediction() {
-      const maxLength = parseInt(document.getElementById('maxPatternLength').value) || 5;
+      const maxLength = parseInt(document.getElementById('maxPatternLength').value) || 4;
       const minOccurrences = 3;
       for (let n = maxLength; n >= 2; n--) {
         if (state.history.length >= n - 1) {
@@ -608,7 +608,7 @@
         return;
       }
       const prediction = bayesianPrediction();
-      const confidenceThreshold = parseInt(document.getElementById('confidenceThreshold').value) || 60;
+      const confidenceThreshold = parseInt(document.getElementById('confidenceThreshold').value) || 70;
       snapshots.push(JSON.parse(JSON.stringify(state)));
       if (snapshots.length > 50) snapshots.shift();
       if (prediction.confidence <= confidenceThreshold) {
@@ -820,7 +820,7 @@
         historyDiv.appendChild(cell);
       });
       const prediction = bayesianPrediction();
-      const confidenceThreshold = parseInt(document.getElementById('confidenceThreshold').value) || 60;
+      const confidenceThreshold = parseInt(document.getElementById('confidenceThreshold').value) || 70;
       let patternInfo = '';
       for (let n = 5; n >= 2; n--) {
         if (state.history.length >= n - 1) {
