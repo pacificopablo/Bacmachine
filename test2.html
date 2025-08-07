@@ -74,6 +74,12 @@
       text-align: center;
       margin-top: 1rem;
     }
+    .prediction.player {
+      color: #2196F3;
+    }
+    .prediction.banker {
+      color: #E91E63;
+    }
     .shoe-type {
       text-align: center;
       font-size: 1rem;
@@ -604,9 +610,11 @@
     }
 
     function recordResult(result) {
+      const errorMessage = document.getElementById('errorMessage');
+      errorMessage.innerText = '';
       if (!['P', 'B'].includes(result)) return;
       if (!state.baseUnit || !state.startBankroll) {
-        alert('Set bankroll/unit first');
+        errorMessage.innerText = 'Set bankroll/unit first';
         return;
       }
       const prediction = bayesianPrediction();
@@ -615,18 +623,18 @@
       if (prediction.confidence <= confidenceThreshold) {
         state.history.push(result);
         learnPattern(result);
-        alert(`No strong prediction (confidence ≤ ${confidenceThreshold}%). No wager placed.`);
+        errorMessage.innerText = `No strong prediction (confidence ≤ ${confidenceThreshold}%). No wager placed.`;
         saveMemoryFast();
         updateDisplay();
         return;
       }
       if (state.stopProfitReached) {
-        alert('Stop profit reached');
+        errorMessage.innerText = 'Stop profit reached';
         return;
       }
       const wager = getWager();
       if (wager > state.currentBankroll) {
-        alert('Insufficient balance');
+        errorMessage.innerText = 'Insufficient balance';
         return;
       }
       state.history.push(result);
@@ -721,11 +729,11 @@
       const stopProfit = parseFloat(document.getElementById('stopProfitInput').value) || 0;
       state.stopProfitType = document.getElementById('stopProfitType').value;
       if (isNaN(bankroll) || bankroll <= 0 || isNaN(unit) || unit <= 0) {
-        alert('Invalid bankroll or unit value');
+        document.getElementById('errorMessage').innerText = 'Invalid bankroll or unit value';
         return;
       }
       if (stopProfit < 0) {
-        alert('Invalid stop profit');
+        document.getElementById('errorMessage').innerText = 'Invalid stop profit';
         return;
       }
       snapshots.push(JSON.parse(JSON.stringify(state)));
@@ -828,9 +836,12 @@
       }
       if (prediction.confidence <= confidenceThreshold) {
         predDiv.innerText = 'Waiting for strong signal...';
+        predDiv.classList.remove('player', 'banker');
         shoeDiv.innerText = 'Detected Pattern: N/A';
       } else {
         predDiv.innerHTML = `Prediction: ${prediction.predict === 'P' ? 'Player' : 'Banker'} (${prediction.confidence}%)<br><small>${patternInfo}</small>`;
+        predDiv.classList.remove('player', 'banker');
+        predDiv.classList.add(prediction.predict === 'P' ? 'player' : 'banker');
         let streaks = 0;
         for (let i = 1; i < state.history.length; i++) {
           if (state.history[i] === state.history[i - 1]) streaks++;
@@ -874,7 +885,6 @@
       const confidences = state.predictionHistory.map(p => p.confidence);
       const accuracies = state.predictionHistory.map(p => p.outcome === 'win' ? 100 : 0);
       const labels = state.predictionHistory.map((_, i) => `Game ${i + 1}`);
-      // The chart is displayed in a separate canvas panel by the system
       const chartConfig = {
         type: 'line',
         data: {
@@ -908,8 +918,7 @@
           }
         }
       };
-      // Trigger chart display (handled by the system)
-      console.log(JSON.stringify(chartConfig)); // For debugging; actual chart is rendered by the system
+      console.log(JSON.stringify(chartConfig));
     }
 
     function saveMemoryFast() {
@@ -929,7 +938,7 @@
           }, { merge: true });
         }
       } catch (e) {
-        alert('Error saving to Firestore: ' + e.message);
+        document.getElementById('errorMessage').innerText = 'Error saving to Firestore: ' + e.message;
       }
     }
 
@@ -962,7 +971,7 @@
           }
         }
       } catch (e) {
-        alert('Error loading from Firestore: ' + e.message);
+        document.getElementById('errorMessage').innerText = 'Error loading from Firestore: ' + e.message;
       }
     }
 
