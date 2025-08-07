@@ -826,6 +826,8 @@
         winLossRatio: '',
         recentTrend: '',
         nextPrediction: '',
+        streakContinuation: '',
+        patternLikelihood: ''
       };
 
       // Streak Analysis
@@ -878,12 +880,63 @@
         ? `Recent Trend (last 5): ${recentAccuracy}% accuracy`
         : 'No recent predictions';
 
-      // Next Prediction
+      // Streak Continuation Probability
+      let streakContinuationProb = 50;
+      if (currentStreakType && state.history.length >= 3) {
+        let streakCount = 0;
+        let continuationCount = 0;
+        for (let i = 1; i < state.history.length; i++) {
+          if (state.history[i] === state.history[i - 1]) {
+            streakCount++;
+            if (i < state.history.length - 1 && state.history[i + 1] === state.history[i]) {
+              continuationCount++;
+            }
+          } else {
+            streakCount = 0;
+          }
+        }
+        streakContinuationProb = streakCount > 0 ? (continuationCount / streakCount * 100).toFixed(1) : 50;
+      }
+      analysis.streakContinuation = state.history.length >= 3 
+        ? `Streak Continuation: ${streakContinuationProb}% chance ${currentStreakType === 'P' ? 'Player' : 'Banker'} continues`
+        : 'Insufficient data for streak continuation';
+
+      // Pattern Sequence Likelihood
+      let patternLikelihood = { predict: 'P', confidence: 50 };
+      let patternDetails = 'No reliable pattern';
+      const maxLength = 4;
+      const minOccurrences = 3;
+      for (let n = maxLength; n >= 2; n--) {
+        if (state.history.length >= n - 1) {
+          const key = state.history.slice(-(n - 1)).join('');
+          if (state.patternMemory[key]) {
+            const p = state.patternMemory[key].P || 0;
+            const b = state.patternMemory[key].B || 0;
+            const total = p + b;
+            if (total >= minOccurrences) {
+              const confidence = Math.round(100 * Math.max(p, b) / total);
+              patternLikelihood = { predict: p >= b ? 'P' : 'B', confidence };
+              const wins = state.patternMemory[key].wins || 0;
+              const losses = state.patternMemory[key].losses || 0;
+              const accuracy = wins + losses > 0 ? ((wins / (wins + losses)) * 100).toFixed(1) : 0;
+              patternDetails = `Pattern "${key}" (P: ${p}, B: ${b}, Accuracy: ${accuracy}%)`;
+              break;
+            }
+          }
+        }
+      }
+      analysis.patternLikelihood = `Likely Pattern: ${patternLikelihood.predict === 'P' ? 'Player' : 'Banker'} (${patternLikelihood.confidence}%) - ${patternDetails}`;
+
+      // Next Prediction (Weighted Recommendation)
       const prediction = bayesianPrediction();
       const confidenceThreshold = 70;
-      analysis.nextPrediction = prediction.confidence > confidenceThreshold 
-        ? `Next Bet Recommendation: ${prediction.predict === 'P' ? 'Player' : 'Banker'} (${prediction.confidence}%)`
-        : 'No strong prediction for next bet (confidence ≤ 70%)';
+      const weightedConfidence = Math.max(prediction.confidence, patternLikelihood.confidence, streakContinuationProb);
+      const recommendedBet = prediction.confidence >= patternLikelihood.confidence 
+        ? prediction.predict 
+        : patternLikelihood.predict;
+      analysis.nextPrediction = weightedConfidence > confidenceThreshold 
+        ? `Next Bet Recommendation: ${recommendedBet === 'P' ? 'Player' : 'Banker'} (${weightedConfidence.toFixed(1)}%)`
+        : 'No strong recommendation for next bet (confidence ≤ 70%)';
 
       return {
         historical: `
@@ -893,9 +946,11 @@
           <p>${analysis.recentTrend}</p>
         `,
         prediction: `
-          <p class="${prediction.confidence > confidenceThreshold ? (prediction.predict === 'P' ? 'player' : 'banker') : ''}">
+          <p class="${weightedConfidence > confidenceThreshold ? (recommendedBet === 'P' ? 'player' : 'banker') : ''}">
             ${analysis.nextPrediction}
           </p>
+          <p>${analysis.streakContinuation}</p>
+          <p>${analysis.patternLikelihood}</p>
         `
       };
     }
