@@ -52,7 +52,6 @@
     .player { background-color: #2196F3; }
     .banker { background-color: #E91E63; }
     .clear-all { background-color: #dc3545; }
-    .new-shoe { background-color: #17a2b8; }
     .set-bet, .reset-bet, .mm-action, .admin-action {
       background-color: #6c757d;
     }
@@ -200,7 +199,6 @@
     <div class="flex-row">
       <button class="player" onclick="recordResult('P')" aria-label="Record Player result">Player</button>
       <button class="banker" onclick="recordResult('B')" aria-label="Record Banker result">Banker</button>
-      <button class="new-shoe" onclick="newShoe()" aria-label="Start new shoe">New Shoe</button>
       <button class="clear-all" onclick="clearAll()" aria-label="Clear all data">Clear All</button>
       <button class="undo" onclick="undo()" aria-label="Undo last action">Undo</button>
     </div>
@@ -633,7 +631,7 @@
       state.outcomes.push(outcome === 'win' ? 'W' : 'L');
       state.predictionHistory.push({ predict: prediction.predict, confidence: prediction.confidence, outcome });
       state.predictionHistory = state.predictionHistory.slice(-50);
-      for (let n = maxLength; n >= 2; n--) {
+      for (let n = 5; n >= 2; n--) {
         const key = state.history.slice(-n).slice(0, -1).join('');
         if (state.patternMemory[key]) {
           state.patternMemory[key][outcome + 's']++;
@@ -665,23 +663,6 @@
       }
     }
 
-    function newShoe() {
-      snapshots.push(JSON.parse(JSON.stringify(state)));
-      if (snapshots.length > 50) snapshots.shift();
-      state.history = [];
-      state.outcomes = [];
-      state.predictionHistory = [];
-      state.patternMemory = {};
-      document.getElementById('errorMessage').innerText = 'Started new shoe';
-      console.log('New shoe started');
-      saveMemoryFast();
-      document.getElementById('prediction').innerText = 'Waiting for input...';
-      document.getElementById('prediction').classList.remove('player', 'banker');
-      document.getElementById('shoeType').innerText = 'Detected Pattern: N/A';
-      document.getElementById('historyDisplay').innerHTML = '';
-      updateMMDisplay();
-    }
-
     function clearAll() {
       snapshots.push(JSON.parse(JSON.stringify(state)));
       if (snapshots.length > 50) snapshots.shift();
@@ -691,8 +672,7 @@
       state.wins = 0;
       state.losses = 0;
       state.patternMemory = {};
-      document.getElementById('errorMessage').innerText = 'All data cleared';
-      console.log('All data cleared');
+      document.getElementById('errorMessage').innerText = '';
       saveMemoryFast();
       document.getElementById('prediction').innerText = 'Waiting for input...';
       document.getElementById('prediction').classList.remove('player', 'banker');
@@ -708,8 +688,7 @@
       state.losses = 0;
       state.outcomes = [];
       state.predictionHistory = [];
-      document.getElementById('errorMessage').innerText = 'Stats reset';
-      console.log('Stats reset');
+      document.getElementById('errorMessage').innerText = '';
       saveMemoryFast();
       updateDisplay();
     }
@@ -719,9 +698,7 @@
       if (snapshots.length > 50) snapshots.shift();
       state.patternMemory = {};
       pruneMemory();
-      document.getElementById('errorMessage').innerText = 'Pattern memory reset';
-      console.log('Pattern memory reset');
-      saveMemoryFast();
+      document.getElementById('errorMessage').innerText = '';
       updateDisplay();
     }
 
@@ -763,8 +740,7 @@
       state.outcomes = [];
       state.predictionHistory = [];
       state.patternMemory = {};
-      document.getElementById('errorMessage').innerText = 'Bankroll set';
-      console.log(`Bankroll set: ${bankroll}, Unit: ${unit}, Stop Profit: ${stopProfit} ${state.stopProfitType}`);
+      document.getElementById('errorMessage').innerText = '';
       saveMemoryFast();
       updateDisplay();
     }
@@ -800,8 +776,7 @@
       snapshots.push(JSON.parse(JSON.stringify(state)));
       if (snapshots.length > 50) snapshots.shift();
       state.betState = { currentBetUnits: 1, totalProfit: 0, cycleProfit: 0, previousLosses: [] };
-      document.getElementById('errorMessage').innerText = 'Bet reset';
-      console.log('Bet reset');
+      document.getElementById('errorMessage').innerText = '';
       saveMemoryFast();
       updateDisplay();
     }
@@ -836,7 +811,7 @@
       const prediction = bayesianPrediction();
       const confidenceThreshold = 70; // Default: 70
       let patternInfo = '';
-      for (let n = 4; n >= 2; n--) {
+      for (let n = 5; n >= 2; n--) {
         if (state.history.length >= n - 1) {
           const key = state.history.slice(-(n - 1)).join('');
           if (state.patternMemory[key]) {
@@ -967,7 +942,8 @@
         if (user) {
           const userDoc = await getDoc(doc(db, 'users', user.uid));
           if (userDoc.exists()) {
-            const saved = userDoc.data().state || {};
+            const saved = userDoc.data().state一代
+
             state.wins = Number(saved.wins) || 0;
             state.losses = Number(saved.losses) || 0;
             state.baseUnit = Number(saved.baseUnit) || 0;
@@ -1011,7 +987,6 @@
     window.deleteUser = deleteUser;
     window.recordResult = recordResult;
     window.undo = undo;
-    window.newShoe = newShoe;
     window.clearAll = clearAll;
     window.resetStats = resetStats;
     window.resetMemory = resetMemory;
