@@ -571,7 +571,7 @@
           const seq = state.history.slice(-n).join('');
           const key = seq.slice(0, -1);
           const next = seq.slice(-1);
-          if (state.patternMemory[key]) {
+          if (state.patternMemory[key] && state.patternMemory[key][next]) {
             state.patternMemory[key][next] = Math.max(0, state.patternMemory[key][next] - 1);
           }
         }
@@ -579,30 +579,20 @@
     }
 
     function bayesianPrediction() {
-      let streaks = 0;
-      for (let i = 1; i < state.history.length; i++) {
-        if (state.history[i] === state.history[i - 1]) streaks++;
-      }
-      const chopScore = state.history.length > 1 ? state.history.length - 1 - streaks : 0;
-      const chopRatio = state.history.length > 1 ? chopScore / (state.history.length - 1) : 0;
-      const streakWeight = chopRatio < 0.3 ? 1.2 : 1.0;
-      const prior = { P: 0.5, B: 0.5 };
+      const maxLength = parseInt(document.getElementById('maxPatternLength').value) || 5;
       const minOccurrences = 3;
-      for (let n = 5; n >= 2; n--) {
-        const key = state.history.slice(-n + 1).join('');
-        if (state.patternMemory[key]) {
-          const p = state.patternMemory[key].P || 0;
-          const b = state.patternMemory[key].B || 0;
-          const total = p + b;
-          if (total >= minOccurrences) {
-            const pWeighted = p * (state.history[state.history.length - 1] === 'P' ? streakWeight : 1.0);
-            const bWeighted = b * (state.history[state.history.length - 1] === 'B' ? streakWeight : 1.0);
-            const totalWithPrior = total + 10;
-            const pProb = (pWeighted + prior.P * 10) / totalWithPrior;
-            const bProb = (bWeighted + prior.B * 10) / totalWithPrior;
-            const confidence = Math.round(100 * Math.max(pProb, bProb) / (pProb + bProb));
-            const predict = pProb > bProb ? 'P' : 'B';
-            return { predict, confidence };
+      for (let n = maxLength; n >= 2; n--) {
+        if (state.history.length >= n - 1) {
+          const key = state.history.slice(-(n - 1)).join('');
+          if (state.patternMemory[key]) {
+            const p = state.patternMemory[key].P || 0;
+            const b = state.patternMemory[key].B || 0;
+            const total = p + b;
+            if (total >= minOccurrences) {
+              const confidence = Math.round(100 * Math.max(p, b) / total);
+              const predict = p >= b ? 'P' : 'B';
+              return { predict, confidence };
+            }
           }
         }
       }
@@ -620,6 +610,7 @@
       const prediction = bayesianPrediction();
       const confidenceThreshold = parseInt(document.getElementById('confidenceThreshold').value) || 60;
       snapshots.push(JSON.parse(JSON.stringify(state)));
+      if (snapshots.length > 50) snapshots.shift();
       if (prediction.confidence <= confidenceThreshold) {
         state.history.push(result);
         learnPattern(result);
@@ -666,9 +657,10 @@
 
     function undo() {
       if (snapshots.length) {
-        const prevState = snapshots.pop();
-        unlearnPattern(state.history[state.history.length - 1]);
-        state = prevState;
+        const lastResult = state.history[state.history.length - 1];
+        if (lastResult) unlearnPattern(lastResult);
+        state = snapshots.pop();
+        document.getElementById('errorMessage').innerText = '';
         saveMemoryFast();
         updateDisplay();
       }
@@ -677,14 +669,17 @@
     function clearAll() {
       if (confirm('Reset all data?')) {
         snapshots.push(JSON.parse(JSON.stringify(state)));
+        if (snapshots.length > 50) snapshots.shift();
         state.history = [];
         state.outcomes = [];
         state.predictionHistory = [];
         state.wins = 0;
         state.losses = 0;
         state.patternMemory = {};
+        document.getElementById('errorMessage').innerText = '';
         saveMemoryFast();
         document.getElementById('prediction').innerText = 'Waiting for input...';
+        document.getElementById('prediction').classList.remove('player', 'banker');
         document.getElementById('shoeType').innerText = 'Detected Pattern: N/A';
         document.getElementById('historyDisplay').innerHTML = '';
         updateMMDisplay();
@@ -694,10 +689,12 @@
     function resetStats() {
       if (confirm('Reset stats (wins, losses, outcomes)?')) {
         snapshots.push(JSON.parse(JSON.stringify(state)));
+        if (snapshots.length > 50) snapshots.shift();
         state.wins = 0;
         state.losses = 0;
         state.outcomes = [];
         state.predictionHistory = [];
+        document.getElementById('errorMessage').innerText = '';
         saveMemoryFast();
         updateDisplay();
       }
@@ -706,8 +703,10 @@
     function resetMemory() {
       if (confirm('Reset learned patterns?')) {
         snapshots.push(JSON.parse(JSON.stringify(state)));
+        if (snapshots.length > 50) snapshots.shift();
         state.patternMemory = {};
         pruneMemory();
+        document.getElementById('errorMessage').innerText = '';
         updateDisplay();
       }
     }
@@ -737,6 +736,7 @@
         return;
       }
       snapshots.push(JSON.parse(JSON.stringify(state)));
+      if (snapshots.length > 50) snapshots.shift();
       state.startBankroll = bankroll;
       state.baseUnit = unit;
       state.currentBankroll = bankroll;
@@ -749,6 +749,7 @@
       state.outcomes = [];
       state.predictionHistory = [];
       state.patternMemory = {};
+      document.getElementById('errorMessage').innerText = '';
       saveMemoryFast();
       updateDisplay();
     }
@@ -783,7 +784,9 @@
     function resetBet() {
       if (confirm('Reset bet?')) {
         snapshots.push(JSON.parse(JSON.stringify(state)));
+        if (snapshots.length > 50) snapshots.shift();
         state.betState = { currentBetUnits: 1, totalProfit: 0, cycleProfit: 0, previousLosses: [] };
+        document.getElementById('errorMessage').innerText = '';
         saveMemoryFast();
         updateDisplay();
       }
@@ -820,17 +823,19 @@
       const confidenceThreshold = parseInt(document.getElementById('confidenceThreshold').value) || 60;
       let patternInfo = '';
       for (let n = 5; n >= 2; n--) {
-        const key = state.history.slice(-n + 1).join('');
-        if (state.patternMemory[key]) {
-          const p = state.patternMemory[key].P || 0;
-          const b = state.patternMemory[key].B || 0;
-          const wins = state.patternMemory[key].wins || 0;
-          const losses = state.patternMemory[key].losses || 0;
-          const total = p + b;
-          if (total >= 3) {
-            const accuracy = wins + losses > 0 ? ((wins / (wins + losses)) * 100).toFixed(1) : 0;
-            patternInfo = `Based on pattern "${key}" (P: ${p}, B: ${b}, Accuracy: ${accuracy}%)`;
-            break;
+        if (state.history.length >= n - 1) {
+          const key = state.history.slice(-(n - 1)).join('');
+          if (state.patternMemory[key]) {
+            const p = state.patternMemory[key].P || 0;
+            const b = state.patternMemory[key].B || 0;
+            const wins = state.patternMemory[key].wins || 0;
+            const losses = state.patternMemory[key].losses || 0;
+            const total = p + b;
+            if (total >= 3) {
+              const accuracy = wins + losses > 0 ? ((wins / (wins + losses)) * 100).toFixed(1) : 0;
+              patternInfo = `Based on pattern "${key}" (P: ${p}, B: ${b}, Accuracy: ${accuracy}%)`;
+              break;
+            }
           }
         }
       }
@@ -839,7 +844,7 @@
         predDiv.classList.remove('player', 'banker');
         shoeDiv.innerText = 'Detected Pattern: N/A';
       } else {
-        predDiv.innerHTML = `Prediction: ${prediction.predict === 'P' ? 'Player' : 'Banker'} (${prediction.confidence}%)<br><small>${patternInfo}</small>`;
+        predDiv.innerHTML = `Prediction: ${prediction.predict === 'P' ? 'PLAYER' : 'BANKER'} (${prediction.confidence}%)<br><small>${patternInfo}</small>`;
         predDiv.classList.remove('player', 'banker');
         predDiv.classList.add(prediction.predict === 'P' ? 'player' : 'banker');
         let streaks = 0;
@@ -967,6 +972,7 @@
             document.getElementById('subscriptionStatus').innerText = subscriptionEnd ? 
               `Subscription: Active until ${DateTime.fromMillis(subscriptionEnd, { zone: 'Asia/Manila' }).toLocaleString(DateTime.DATETIME_FULL)}` : 
               'Subscription: Invalid or not set';
+            document.getElementById('errorMessage').innerText = '';
             updateDisplay();
           }
         }
