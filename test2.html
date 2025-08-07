@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>Smart Underdog Tracker</title>
+  <title>BFC VIP - Smart Underdog Tracker</title>
   <script src="https://cdn.jsdelivr.net/npm/luxon@3.4.4/build/global/luxon.min.js"></script>
   <style>
     body {
@@ -51,8 +51,8 @@
     }
     .player { background-color: #2196F3; }
     .banker { background-color: #E91E63; }
-    .reset-session { background-color: #dc3545; }
-    .undo-last { background-color: #6c757d; }
+    .reset-session, .clear-all { background-color: #dc3545; }
+    .undo-last, .undo { background-color: #6c757d; }
     .set-bet, .reset-bet, .mm-action, .admin-action {
       background-color: #6c757d;
     }
@@ -191,7 +191,7 @@
 </head>
 <body>
   <div class="container" id="appContainer">
-    <h1>Smart Underdog Tracker</h1>
+    <h1>BFC VIP - Smart Underdog Tracker</h1>
     <div class="section" id="subscriptionStatus">Subscription: -</div>
     <div class="error" id="errorMessage"></div>
     <div class="flex-row">
@@ -322,9 +322,6 @@
       const email = document.getElementById('newUserEmail').value;
       const password = document.getElementById('newUserPassword').value;
       const isAdmin = document.getElementById('newUserIsAdmin').checked;
-      const errorMessage = document.getElementById('errorMessage');
-      errorMessage.innerText = '';
-
       if (!email || !password) {
         showMessage('Please fill in email and password');
         return;
@@ -548,6 +545,22 @@
     let snapshots = [];
     let saveTimeout = null;
 
+    function getCurrentPrediction() {
+      if (state.history.length < 5) return { predict: null, explanation: 'Waiting for more hands...' };
+      const last5 = state.history.slice(-5);
+      const countB = last5.filter(x => x === 'B').length;
+      const countP = last5.filter(x => x === 'P').length;
+      if (last5.every((v, i, a) => i === 0 || v !== a[i - 1])) {
+        return { predict: last5.at(-1) === 'B' ? 'P' : 'B', explanation: 'Zigzag breaker detected' };
+      } else if (last5.slice(-3).every(v => v === last5.at(-1))) {
+        return { predict: last5.at(-1), explanation: 'Streak detected' };
+      } else if (countB === 4 || countP === 4) {
+        return { predict: countB > countP ? 'P' : 'B', explanation: 'Dominance detected in last 5' };
+      } else {
+        return { predict: state.history.slice(-3).filter(x => x === 'B').length < 2 ? 'B' : 'P', explanation: 'Underdog fallback' };
+      }
+    }
+
     function learnPattern(latest) {
       for (let n = 2; n <= 5; n++) {
         if (state.history.length >= n) {
@@ -600,13 +613,14 @@
         showMessage('Set bankroll/unit first');
         return;
       }
+      const mainPrediction = getCurrentPrediction();
       const ruleBased = ruleBasedPrediction();
       snapshots.push(JSON.parse(JSON.stringify(state)));
 
-      if (!ruleBased.predict) {
+      if (!mainPrediction.predict) {
         state.history.push(result);
-        showMessage('Need at least 2 hands for prediction. No wager placed.');
         learnPattern(result);
+        showMessage('No main prediction available yet (need 5 hands). No wager placed.');
         saveMemoryFast();
         updateDisplay();
         return;
@@ -624,8 +638,8 @@
 
       state.history.push(result);
       learnPattern(result);
-      state.outcomes.push(result === ruleBased.predict ? 'W' : 'L');
-      if (result === ruleBased.predict) {
+      state.outcomes.push(result === mainPrediction.predict ? 'W' : 'L');
+      if (result === mainPrediction.predict) {
         handleWin();
         state.wins++;
       } else {
@@ -655,6 +669,7 @@
       if (confirm('Reset session history?')) {
         snapshots.push(JSON.parse(JSON.stringify(state)));
         state.history = [];
+        state.outcomes = [];
         state.patternMemory = {};
         saveMemoryFast();
         document.getElementById('prediction').innerText = 'Waiting for input...';
@@ -687,6 +702,9 @@
         state.stopProfitValue = 0;
         state.stopProfitEffective = 0;
         state.stopProfitReached = false;
+        state.wins = 0;
+        state.losses = 0;
+        state.outcomes = [];
         saveMemoryFast();
         updateDisplay();
       }
@@ -786,10 +804,11 @@
         historyDiv.appendChild(cell);
       });
 
+      const mainPrediction = getCurrentPrediction();
       const ruleBased = ruleBasedPrediction();
-      predDiv.innerText = ruleBased.predict ? 
-        `Prediction: ${ruleBased.predict === 'P' ? 'Player' : 'Banker'} (${ruleBased.explanation})` : 
-        `Prediction: ${ruleBased.explanation}`;
+      predDiv.innerText = mainPrediction.predict ? 
+        `Main Prediction: ${mainPrediction.predict === 'P' ? 'Player' : 'Banker'} (${mainPrediction.explanation}) | Smart Underdog: ${ruleBased.predict ? (ruleBased.predict === 'P' ? 'Player' : 'Banker') + ' (' + ruleBased.explanation + ')' : ruleBased.explanation}` : 
+        `Main Prediction: ${mainPrediction.explanation} | Smart Underdog: ${ruleBased.explanation}`;
 
       let streaks = 0;
       for (let i = 1; i < state.history.length; i++) {
