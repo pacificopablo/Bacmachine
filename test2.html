@@ -74,12 +74,6 @@
       text-align: center;
       margin-top: 1rem;
     }
-    .prediction.player {
-      color: #2196F3; /* Match Player button color */
-    }
-    .prediction.banker {
-      color: #E91E63; /* Match Banker button color */
-    }
     .shoe-type {
       text-align: center;
       font-size: 1rem;
@@ -181,43 +175,6 @@
     .admin-panel button {
       background-color: #dc3545;
     }
-    .admin-panel .flex-row label input[type=number] {
-      width: 120px;
-    }
-    .analysis {
-      margin-top: 1rem;
-      padding: 10px;
-      background: #f9f9f9;
-      border-radius: 8px;
-      text-align: center;
-      font-size: 16px;
-      color: #333;
-    }
-    .analysis p {
-      margin: 5px 0;
-    }
-    .historical-analysis {
-      margin-bottom: 10px;
-    }
-    .prediction-analysis {
-      font-weight: bold;
-      color: #333;
-      padding: 10px;
-      background: #e8ecef;
-      border-radius: 8px;
-    }
-    .prediction-analysis.player {
-      color: #2196F3;
-    }
-    .prediction-analysis.banker {
-      color: #E91E63;
-    }
-    .analysis-section {
-      display: none;
-    }
-    .admin-panel-visible .analysis-section {
-      display: block;
-    }
     @media (max-width: 500px) {
       .flex-row { flex-direction: column; align-items: stretch; }
       .bet-controls { flex-direction: column; align-items: stretch; }
@@ -240,15 +197,10 @@
       <button class="undo" onclick="undo()" aria-label="Undo last action">Undo</button>
     </div>
 
-    <div class="prediction" id="prediction"></div>
+    <div class="prediction" id="prediction">Waiting for input...</div>
     <div class="shoe-type" id="shoeType">Detected Pattern: N/A</div>
     <div class="section">Showing last 10 results</div>
     <div class="history" id="historyDisplay"></div>
-    <div class="section analysis-section" id="analysisSection">Result Analysis</div>
-    <div class="analysis analysis-section" id="analysisDisplay">
-      <div class="historical-analysis" id="historicalAnalysis"></div>
-      <div class="prediction-analysis" id="predictionAnalysis"></div>
-    </div>
 
     <div class="stats">
       <div class="section" id="currentWager">💵 Current Bet: 0</div>
@@ -262,8 +214,8 @@
         <label><span>Unit Value</span><input type="number" id="basebetInput" placeholder="Unit Value ($)" min="0.01" step="0.01" aria-label="Set base unit"></label>
         <label>
           <select id="stopProfitType" aria-label="Select stop profit type">
-            <option value="percentage">%</option>
             <option value="currency">$</option>
+            <option value="percentage">%</option>
           </select>
           <input type="number" id="stopProfitInput" placeholder="Stop Profit" min="0" step="0.01" aria-label="Set stop profit">
         </label>
@@ -276,7 +228,6 @@
         <button class="mm-action" onclick="loadMemory()" aria-label="Load state">📥</button>
         <button class="mm-action" onclick="resetStats()" aria-label="Reset stats">🔄 Reset Stats</button>
         <button class="mm-action" onclick="resetMemory()" aria-label="Reset memory">🧠 Reset Memory</button>
-        <button class="mm-action" onclick="showPredictionChart()" aria-label="Show prediction chart">📊 Chart</button>
       </div>
     </div>
 
@@ -299,6 +250,7 @@
               <th>Email</th>
               <th>Subscription End (PST)</th>
               <th>Admin</th>
+              <th>Online</th>
               <th>Add Time</th>
               <th>Actions</th>
             </tr>
@@ -319,14 +271,6 @@
           </label>
           <label><span>Amount</span><input type="number" id="extendTimeAmount" placeholder="Amount" min="1" step="1" aria-label="Amount of time to add"></label>
           <button class="admin-action" onclick="extendSubscription()">Add Time</button>
-        </div>
-      </div>
-      <div class="section">
-        <h3>Game Configuration</h3>
-        <div class="flex-row">
-          <label><span>Max Pattern Length</span><input type="number" id="maxPatternLength" placeholder="Max Pattern Length" min="2" max="6" step="1" aria-label="Set max pattern length"></label>
-          <label><span>Confidence Threshold (%)</span><input type="number" id="confidenceThreshold" placeholder="Confidence Threshold" min="50" max="90" step="1" aria-label="Set confidence threshold"></label>
-          <button class="admin-action" onclick="saveGameConfig()">Save Config</button>
         </div>
       </div>
     </div>
@@ -361,6 +305,19 @@
       });
     }
 
+    async function updateLastActive() {
+      const user = auth.currentUser;
+      if (user) {
+        try {
+          await setDoc(doc(db, 'users', user.uid), {
+            lastActive: DateTime.now().setZone('Asia/Manila').toMillis()
+          }, { merge: true });
+        } catch (error) {
+          document.getElementById('errorMessage').innerText = 'Error updating last active: ' + error.message;
+        }
+      }
+    }
+
     async function createUser() {
       const email = document.getElementById('newUserEmail').value;
       const password = document.getElementById('newUserPassword').value;
@@ -380,10 +337,10 @@
           email: userCredential.user.email,
           subscriptionEnd,
           isAdmin,
+          lastActive: DateTime.now().setZone('Asia/Manila').toMillis(),
           state: {
             history: [],
             outcomes: [],
-            predictionHistory: [],
             wins: 0,
             losses: 0,
             baseUnit: 0,
@@ -397,14 +354,14 @@
             patternMemory: {}
           }
         });
-        console.log(`User created: ${email}, Admin: ${isAdmin}`);
+        errorMessage.innerText = 'User created successfully';
         logEvent(analytics, 'create_user', { email, isAdmin });
         document.getElementById('newUserEmail').value = '';
         document.getElementById('newUserPassword').value = '';
         document.getElementById('newUserIsAdmin').checked = false;
         loadUsers();
       } catch (error) {
-        errorMessage.innerText = error.message;
+        errorMessage.innerText = 'Error creating user: ' + error.message;
         logEvent(analytics, 'create_user', { email, success: false, error: error.code });
       }
     }
@@ -423,7 +380,7 @@
       }
       try {
         await setDoc(doc(db, 'users', uid), { subscriptionEnd }, { merge: true });
-        console.log(`Subscription updated for user ${uid}`);
+        errorMessage.innerText = 'Subscription updated';
         logEvent(analytics, 'update_subscription', { uid });
         loadUsers();
       } catch (error) {
@@ -435,7 +392,7 @@
       try {
         const subscriptionEnd = DateTime.now().setZone('Asia/Manila').plus({ days: 60 }).toMillis();
         await setDoc(doc(db, 'users', uid), { subscriptionEnd }, { merge: true });
-        console.log(`Subscription fixed to 60 days for user ${uid}`);
+        document.getElementById('errorMessage').innerText = 'Subscription fixed to 60 days from now';
         logEvent(analytics, 'fix_subscription', { uid });
         loadUsers();
       } catch (error) {
@@ -474,7 +431,7 @@
         let additionalTime;
 
         if (timeUnit === 'test') {
-          additionalTime = 24 * 60 * 60 * 1000;
+          additionalTime = 24 * 60 * 60 * 1000; // 24 hours
         } else if (timeUnit === 'hours') {
           additionalTime = timeAmount * 60 * 60 * 1000;
         } else {
@@ -483,7 +440,7 @@
 
         const newSubscriptionEnd = effectiveStart + additionalTime;
         await setDoc(doc(db, 'users', uid), { subscriptionEnd: newSubscriptionEnd }, { merge: true });
-        console.log(`Subscription extended for ${email} to ${DateTime.fromMillis(newSubscriptionEnd, { zone: 'Asia/Manila' }).toLocaleString(DateTime.DATETIME_FULL)}`);
+        errorMessage.innerText = `Subscription extended to ${DateTime.fromMillis(newSubscriptionEnd, { zone: 'Asia/Manila' }).toLocaleString(DateTime.DATETIME_FULL)}`;
         logEvent(analytics, 'extend_subscription', { email, timeUnit, timeAmount });
         document.getElementById('extendUserEmail').value = '';
         document.getElementById('extendTimeUnit').value = 'hours';
@@ -496,9 +453,10 @@
     }
 
     async function deleteUser(uid) {
+      if (!confirm('Are you sure you want to delete this user?')) return;
       try {
         await setDoc(doc(db, 'users', uid), { deleted: true }, { merge: true });
-        console.log(`User ${uid} marked as deleted`);
+        document.getElementById('errorMessage').innerText = 'User marked as deleted (use Admin SDK for full deletion)';
         logEvent(analytics, 'delete_user', { uid });
         loadUsers();
       } catch (error) {
@@ -511,16 +469,21 @@
       userTableBody.innerHTML = '';
       try {
         const querySnapshot = await getDocs(collection(db, 'users'));
+        const currentTime = DateTime.now().setZone('Asia/Manila').toMillis();
+        const onlineThreshold = 5 * 60 * 1000; // 5 minutes
         querySnapshot.forEach(doc => {
           const user = doc.data();
           if (user.deleted) return;
-          const row = document.createElement('tr');
           const subscriptionEnd = Number.isInteger(user.subscriptionEnd) ? user.subscriptionEnd : null;
           const dateValue = subscriptionEnd ? DateTime.fromMillis(subscriptionEnd, { zone: 'Asia/Manila' }).toFormat('yyyy-MM-dd\'T\'HH:mm') : '';
+          const lastActive = Number.isInteger(user.lastActive) ? user.lastActive : 0;
+          const isOnline = (currentTime - lastActive) <= onlineThreshold ? 'Yes' : 'No';
+          const row = document.createElement('tr');
           row.innerHTML = `
             <td>${user.email}</td>
             <td>${subscriptionEnd ? `<input type="datetime-local" id="subscriptionEnd_${doc.id}" value="${dateValue}" aria-label="Subscription end date for ${user.email}">` : 'Not Set'}</td>
             <td>${user.isAdmin ? 'Yes' : 'No'}</td>
+            <td>${isOnline}</td>
             <td><button class="admin-action" onclick="extendSubscriptionFor('${doc.id}', '${user.email}')">Add Time</button></td>
             <td>
               ${subscriptionEnd ? `<button class="admin-action" onclick="updateUserSubscription('${doc.id}')">Update</button>` : `<button class="fix-subscription" onclick="fixUserSubscription('${doc.id}')">Fix</button>`}
@@ -541,86 +504,6 @@
       document.getElementById('extendTimeUnit').focus();
     }
 
-    async function loadGameConfig() {
-      try {
-        const configDoc = await getDoc(doc(db, 'config', 'gameSettings'));
-        if (configDoc.exists()) {
-          const data = configDoc.data();
-          gameConfig.maxLength = Number(data.maxLength) || 4;
-          gameConfig.confidenceThreshold = Number(data.confidenceThreshold) || 70;
-          if (isAdmin) {
-            document.getElementById('maxPatternLength').value = gameConfig.maxLength;
-            document.getElementById('confidenceThreshold').value = gameConfig.confidenceThreshold;
-          }
-          logEvent(analytics, 'load_game_config', { maxLength: gameConfig.maxLength, confidenceThreshold: gameConfig.confidenceThreshold });
-        }
-      } catch (error) {
-        console.error('Error loading game config:', error);
-      }
-    }
-
-    async function saveGameConfig() {
-      if (!isAdmin) {
-        document.getElementById('errorMessage').innerText = 'Admin access required';
-        return;
-      }
-      const maxLength = parseInt(document.getElementById('maxPatternLength').value);
-      const confidenceThreshold = parseInt(document.getElementById('confidenceThreshold').value);
-      if (isNaN(maxLength) || maxLength < 2 || maxLength > 6) {
-        document.getElementById('errorMessage').innerText = 'Max Pattern Length must be between 2 and 6';
-        return;
-      }
-      if (isNaN(confidenceThreshold) || confidenceThreshold < 50 || confidenceThreshold > 90) {
-        document.getElementById('errorMessage').innerText = 'Confidence Threshold must be between 50 and 90';
-        return;
-      }
-      try {
-        await setDoc(doc(db, 'config', 'gameSettings'), {
-          maxLength,
-          confidenceThreshold
-        });
-        gameConfig.maxLength = maxLength;
-        gameConfig.confidenceThreshold = confidenceThreshold;
-        document.getElementById('errorMessage').innerText = '';
-        logEvent(analytics, 'update_game_config', { maxLength, confidenceThreshold });
-        updateDisplay();
-      } catch (error) {
-        document.getElementById('errorMessage').innerText = 'Error saving game config: ' + error.message;
-      }
-    }
-
-    async function analyzeAndAdjustParameters() {
-      if (isAdmin) return;
-      const recentBets = state.predictionHistory.slice(-10);
-      if (recentBets.length < 10) return;
-      const winRate = recentBets.filter(p => p.outcome === 'win').length / recentBets.length * 100;
-      let newMaxLength = gameConfig.maxLength;
-      let newConfidenceThreshold = gameConfig.confidenceThreshold;
-
-      if (winRate < 40) {
-        if (newMaxLength < 6) newMaxLength++;
-        else if (newConfidenceThreshold < 90) newConfidenceThreshold += 5;
-      } else if (winRate > 60 && state.history.length >= 20) {
-        if (newConfidenceThreshold > 50 && newMaxLength === gameConfig.maxLength) newConfidenceThreshold -= 5;
-        else if (newMaxLength > 2) newMaxLength--;
-      }
-
-      if (newMaxLength !== gameConfig.maxLength || newConfidenceThreshold !== gameConfig.confidenceThreshold) {
-        gameConfig.maxLength = newMaxLength;
-        gameConfig.confidenceThreshold = newConfidenceThreshold;
-        try {
-          await setDoc(doc(db, 'config', 'gameSettings'), {
-            maxLength: newMaxLength,
-            confidenceThreshold: newConfidenceThreshold
-          });
-          logEvent(analytics, 'auto_adjust_config', { maxLength: newMaxLength, confidenceThreshold: newConfidenceThreshold, winRate });
-          updateDisplay();
-        } catch (error) {
-          console.error('Error saving auto-adjusted config:', error);
-        }
-      }
-    }
-
     let isAdmin = false;
     onAuthStateChanged(auth, async user => {
       const errorMessage = document.getElementById('errorMessage');
@@ -635,12 +518,11 @@
             const currentTime = DateTime.now().setZone('Asia/Manila').toMillis();
             if (subscriptionEnd && currentTime < subscriptionEnd) {
               document.getElementById('appContainer').classList.remove('hidden');
-              document.getElementById('appContainer').classList.toggle('admin-panel-visible', isAdmin);
               document.getElementById('subscriptionStatus').innerText = `Subscription: Active until ${DateTime.fromMillis(subscriptionEnd, { zone: 'Asia/Manila' }).toLocaleString(DateTime.DATETIME_FULL)}`;
               document.getElementById('adminPanel').classList.toggle('hidden', !isAdmin);
-              await loadGameConfig();
               if (isAdmin) loadUsers();
               loadMemory();
+              updateLastActive();
             } else {
               errorMessage.innerText = 'Your subscription has expired or is invalid. Contact admin to renew.';
               signOut(auth);
@@ -662,7 +544,6 @@
     let state = {
       history: [],
       outcomes: [],
-      predictionHistory: [],
       wins: 0,
       losses: 0,
       baseUnit: 0,
@@ -675,34 +556,28 @@
       stopProfitReached: false,
       patternMemory: {}
     };
-    let gameConfig = {
-      maxLength: 4,
-      confidenceThreshold: 70
-    };
     let snapshots = [];
     let saveTimeout = null;
 
     function learnPattern(latest) {
-      for (let n = 2; n <= gameConfig.maxLength; n++) {
+      for (let n = 2; n <= 5; n++) {
         if (state.history.length >= n) {
           const seq = state.history.slice(-n).join('');
           const key = seq.slice(0, -1);
           const next = seq.slice(-1);
-          if (!state.patternMemory[key]) {
-            state.patternMemory[key] = { P: 0, B: 0, wins: 0, losses: 0 };
-          }
+          if (!state.patternMemory[key]) state.patternMemory[key] = { P: 0, B: 0 };
           state.patternMemory[key][next]++;
         }
       }
     }
 
     function unlearnPattern(latest) {
-      for (let n = 2; n <= gameConfig.maxLength; n++) {
+      for (let n = 2; n <= 5; n++) {
         if (state.history.length >= n) {
           const seq = state.history.slice(-n).join('');
           const key = seq.slice(0, -1);
           const next = seq.slice(-1);
-          if (state.patternMemory[key] && state.patternMemory[key][next]) {
+          if (state.patternMemory[key]) {
             state.patternMemory[key][next] = Math.max(0, state.patternMemory[key][next] - 1);
           }
         }
@@ -710,164 +585,121 @@
     }
 
     function bayesianPrediction() {
-      const minOccurrences = 3;
-      for (let n = gameConfig.maxLength; n >= 2; n--) {
-        if (state.history.length >= n - 1) {
-          const key = state.history.slice(-(n - 1)).join('');
-          if (state.patternMemory[key]) {
-            const p = state.patternMemory[key].P || 0;
-            const b = state.patternMemory[key].B || 0;
-            const total = p + b;
-            if (total >= minOccurrences) {
-              const confidence = Math.round(100 * Math.max(p, b) / total);
-              const predict = p >= b ? 'P' : 'B';
-              return { predict, confidence };
-            }
+      if (state.outcomes.slice(-3).every(v => v === 'L')) {
+        const predict = Math.random() < 0.5 ? 'P' : 'B';
+        return { predict, confidence: 50 };
+      }
+      for (let n = 5; n >= 2; n--) {
+        const key = state.history.slice(-n + 1).join('');
+        if (state.patternMemory[key]) {
+          const p = state.patternMemory[key].P || 0;
+          const b = state.patternMemory[key].B || 0;
+          const total = p + b;
+          if (total > 0) {
+            const confidence = Math.round(100 * Math.max(p, b) / total);
+            const predict = p > b ? 'P' : 'B';
+            return { predict, confidence };
           }
         }
       }
       return { predict: 'P', confidence: 50 };
     }
 
-    function generateLossSuggestions() {
-      const recentOutcomes = state.outcomes.slice(-3);
-      const isLosingStreak = recentOutcomes.length >= 3 && recentOutcomes.every(o => o === 'L');
-      const cycleProfit = state.betState.cycleProfit;
-      if (isLosingStreak || cycleProfit < -2) {
-        const suggestions = [];
-        suggestions.push("Consider pausing to reassess the game pattern.");
-        if (state.betState.currentBetUnits > 1) {
-          suggestions.push("Try resetting your bet to the base unit to minimize risk (click Reset Bet).");
-        }
-        if (state.baseUnit > state.startBankroll * 0.01) {
-          suggestions.push("Reduce your base unit to manage losses in the Bet Controls.");
-        }
-        suggestions.push("Wait for a stronger signal (check Detected Pattern below).");
-        return suggestions.join(" ");
-      }
-      return "";
-    }
-
     function recordResult(result) {
-      const errorMessage = document.getElementById('errorMessage');
-      errorMessage.innerText = '';
-      if (!['P', 'B'].includes(result)) return;
       if (!state.baseUnit || !state.startBankroll) {
-        errorMessage.innerText = 'Set bankroll/unit first';
+        document.getElementById('errorMessage').innerText = 'Set bankroll/unit first';
         return;
       }
       const prediction = bayesianPrediction();
       snapshots.push(JSON.parse(JSON.stringify(state)));
-      if (snapshots.length > 50) snapshots.shift();
-      if (prediction.confidence <= gameConfig.confidenceThreshold) {
+      if (prediction.confidence <= 60 && !state.outcomes.slice(-3).every(v => v === 'L')) {
         state.history.push(result);
         learnPattern(result);
-        errorMessage.innerText = `No strong prediction (confidence ≤ ${gameConfig.confidenceThreshold}%). No wager placed.`;
+        document.getElementById('errorMessage').innerText = 'No strong prediction (confidence ≤ 60%). No wager placed.';
         saveMemoryFast();
         updateDisplay();
+        updateLastActive();
         return;
       }
       if (state.stopProfitReached) {
-        errorMessage.innerText = 'Stop profit reached';
+        document.getElementById('errorMessage').innerText = 'Stop profit reached';
         return;
       }
       const wager = getWager();
       if (wager > state.currentBankroll) {
-        errorMessage.innerText = 'Insufficient balance';
+        document.getElementById('errorMessage').innerText = 'Insufficient balance';
         return;
       }
       state.history.push(result);
       learnPattern(result);
       const outcome = result === prediction.predict ? 'win' : 'loss';
       state.outcomes.push(outcome === 'win' ? 'W' : 'L');
-      state.predictionHistory.push({ predict: prediction.predict, confidence: prediction.confidence, outcome });
-      state.predictionHistory = state.predictionHistory.slice(-50);
-      for (let n = gameConfig.maxLength + 1; n >= 2; n--) {
-        const key = state.history.slice(-n).slice(0, -1).join('');
-        if (state.patternMemory[key]) {
-          state.patternMemory[key][outcome + 's']++;
-          break;
-        }
-      }
       if (outcome === 'win') {
         handleWin();
         state.wins++;
-        errorMessage.innerText = ''; // Clear suggestions on win
       } else {
         handleLoss();
         state.losses++;
-        const suggestions = generateLossSuggestions();
-        if (suggestions) {
-          errorMessage.innerText = suggestions;
-        }
       }
       if (state.stopProfitEffective > 0 && state.currentBankroll - state.startBankroll >= state.stopProfitEffective) {
         state.stopProfitReached = true;
       }
       saveMemoryFast();
-      analyzeAndAdjustParameters();
       updateDisplay();
+      updateLastActive();
     }
 
     function undo() {
       if (snapshots.length) {
-        const lastResult = state.history[state.history.length - 1];
-        if (lastResult) unlearnPattern(lastResult);
-        state = snapshots.pop();
-        document.getElementById('errorMessage').innerText = '';
+        const prevState = snapshots.pop();
+        unlearnPattern(state.history[state.history.length - 1]);
+        state = prevState;
         saveMemoryFast();
         updateDisplay();
+        updateLastActive();
+        document.getElementById('errorMessage').innerText = 'Undo successful';
+      } else {
+        document.getElementById('errorMessage').innerText = 'Nothing to undo';
       }
     }
 
     function clearAll() {
+      if (!confirm('Reset all data?')) return;
       snapshots.push(JSON.parse(JSON.stringify(state)));
-      if (snapshots.length > 50) snapshots.shift();
       state.history = [];
       state.outcomes = [];
-      state.predictionHistory = [];
       state.wins = 0;
       state.losses = 0;
       state.patternMemory = {};
-      document.getElementById('errorMessage').innerText = '';
       saveMemoryFast();
-      document.getElementById('prediction').innerText = '';
-      document.getElementById('prediction').classList.remove('player', 'banker');
+      document.getElementById('prediction').innerText = 'Waiting for input...';
       document.getElementById('shoeType').innerText = 'Detected Pattern: N/A';
       document.getElementById('historyDisplay').innerHTML = '';
       updateMMDisplay();
+      updateLastActive();
+      document.getElementById('errorMessage').innerText = 'All data reset';
     }
 
     function resetStats() {
+      if (!confirm('Reset stats (wins, losses, outcomes)?')) return;
       snapshots.push(JSON.parse(JSON.stringify(state)));
-      if (snapshots.length > 50) snapshots.shift();
       state.wins = 0;
       state.losses = 0;
       state.outcomes = [];
-      state.predictionHistory = [];
-      document.getElementById('errorMessage').innerText = '';
       saveMemoryFast();
       updateDisplay();
+      updateLastActive();
+      document.getElementById('errorMessage').innerText = 'Stats reset';
     }
 
     function resetMemory() {
+      if (!confirm('Reset learned patterns?')) return;
       snapshots.push(JSON.parse(JSON.stringify(state)));
-      if (snapshots.length > 50) snapshots.shift();
       state.patternMemory = {};
-      pruneMemory();
-      document.getElementById('errorMessage').innerText = '';
-      updateDisplay();
-    }
-
-    function pruneMemory() {
-      const minOccurrences = 3;
-      Object.keys(state.patternMemory).forEach(key => {
-        const total = (state.patternMemory[key].P || 0) + (state.patternMemory[key].B || 0);
-        if (total < minOccurrences) {
-          delete state.patternMemory[key];
-        }
-      });
       saveMemoryFast();
+      updateDisplay();
+      updateLastActive();
+      document.getElementById('errorMessage').innerText = 'Learned patterns reset';
     }
 
     function setBankroll() {
@@ -875,16 +707,16 @@
       const unit = parseFloat(document.getElementById('basebetInput').value);
       const stopProfit = parseFloat(document.getElementById('stopProfitInput').value) || 0;
       state.stopProfitType = document.getElementById('stopProfitType').value;
+      const errorMessage = document.getElementById('errorMessage');
       if (isNaN(bankroll) || bankroll <= 0 || isNaN(unit) || unit <= 0) {
-        document.getElementById('errorMessage').innerText = 'Invalid bankroll or unit value';
+        errorMessage.innerText = 'Invalid bankroll or unit value';
         return;
       }
       if (stopProfit < 0) {
-        document.getElementById('errorMessage').innerText = 'Invalid stop profit';
+        errorMessage.innerText = 'Invalid stop profit';
         return;
       }
       snapshots.push(JSON.parse(JSON.stringify(state)));
-      if (snapshots.length > 50) snapshots.shift();
       state.startBankroll = bankroll;
       state.baseUnit = unit;
       state.currentBankroll = bankroll;
@@ -895,11 +727,11 @@
       state.wins = 0;
       state.losses = 0;
       state.outcomes = [];
-      state.predictionHistory = [];
       state.patternMemory = {};
-      document.getElementById('errorMessage').innerText = '';
       saveMemoryFast();
       updateDisplay();
+      updateLastActive();
+      errorMessage.innerText = 'Bankroll and bet settings updated';
     }
 
     function handleWin() {
@@ -930,12 +762,14 @@
     }
 
     function resetBet() {
-      snapshots.push(JSON.parse(JSON.stringify(state)));
-      if (snapshots.length > 50) snapshots.shift();
-      state.betState = { currentBetUnits: 1, totalProfit: 0, cycleProfit: 0, previousLosses: [] };
-      document.getElementById('errorMessage').innerText = '';
-      saveMemoryFast();
-      updateDisplay();
+      if (confirm('Reset bet?')) {
+        snapshots.push(JSON.parse(JSON.stringify(state)));
+        state.betState = { currentBetUnits: 1, totalProfit: 0, cycleProfit: 0, previousLosses: [] };
+        saveMemoryFast();
+        updateDisplay();
+        updateLastActive();
+        document.getElementById('errorMessage').innerText = 'Bet reset';
+      }
     }
 
     function getWager() {
@@ -943,141 +777,9 @@
       return Math.min(state.betState.currentBetUnits * state.baseUnit, state.currentBankroll);
     }
 
-    function analyzeResults() {
-      const analysis = {
-        streakInfo: '',
-        patternReliability: '',
-        winLossRatio: '',
-        recentTrend: '',
-        nextPrediction: '',
-        streakContinuation: '',
-        patternLikelihood: ''
-      };
-
-      let currentStreak = 0;
-      let currentStreakType = '';
-      let maxStreak = 0;
-      let maxStreakType = '';
-      for (let i = 1; i < state.history.length; i++) {
-        if (state.history[i] === state.history[i - 1]) {
-          currentStreak++;
-          if (currentStreak >= maxStreak) {
-            maxStreak = currentStreak;
-            maxStreakType = state.history[i];
-          }
-        } else {
-          currentStreak = 0;
-        }
-      }
-      currentStreakType = state.history.length > 0 ? state.history[state.history.length - 1] : '';
-      analysis.streakInfo = state.history.length > 0 
-        ? `Current Streak: ${currentStreak + 1} ${currentStreakType === 'P' ? 'Player' : 'Banker'} | Longest: ${maxStreak + 1} ${maxStreakType === 'P' ? 'Player' : 'Banker'}`
-        : 'No streaks detected';
-
-      let reliablePatterns = 0;
-      Object.keys(state.patternMemory).forEach(key => {
-        const total = (state.patternMemory[key].P || 0) + (state.patternMemory[key].B || 0);
-        if (total >= 3) {
-          const wins = state.patternMemory[key].wins || 0;
-          const losses = state.patternMemory[key].losses || 0;
-          if (wins + losses > 0 && wins / (wins + losses) >= 0.7) {
-            reliablePatterns++;
-          }
-        }
-      });
-      analysis.patternReliability = `Reliable Patterns (≥70% accuracy): ${reliablePatterns}`;
-
-      const totalBets = state.wins + state.losses;
-      analysis.winLossRatio = totalBets > 0 
-        ? `Win/Loss Ratio: ${state.wins}/${state.losses} (${((state.wins / totalBets) * 100).toFixed(1)}% wins)`
-        : 'No bets placed';
-
-      const recentPredictions = state.predictionHistory.slice(-5);
-      const recentAccuracy = recentPredictions.length > 0 
-        ? (recentPredictions.filter(p => p.outcome === 'win').length / recentPredictions.length * 100).toFixed(1)
-        : 0;
-      analysis.recentTrend = recentPredictions.length > 0 
-        ? `Recent Trend (last 5): ${recentAccuracy}% accuracy`
-        : 'No recent predictions';
-
-      let streakContinuationProb = 50;
-      if (currentStreakType && state.history.length >= 3) {
-        let streakCount = 0;
-        let continuationCount = 0;
-        for (let i = 1; i < state.history.length; i++) {
-          if (state.history[i] === state.history[i - 1]) {
-            streakCount++;
-            if (i < state.history.length - 1 && state.history[i + 1] === state.history[i]) {
-              continuationCount++;
-            }
-          } else {
-            streakCount = 0;
-          }
-        }
-        streakContinuationProb = streakCount > 0 ? (continuationCount / streakCount * 100).toFixed(1) : 50;
-      }
-      analysis.streakContinuation = state.history.length >= 3 
-        ? `Streak Continuation: ${streakContinuationProb}% chance ${currentStreakType === 'P' ? 'Player' : 'Banker'} continues`
-        : 'Insufficient data for streak continuation';
-
-      let patternLikelihood = { predict: 'P', confidence: 50 };
-      let patternDetails = 'No reliable pattern';
-      const minOccurrences = 3;
-      for (let n = gameConfig.maxLength; n >= 2; n--) {
-        if (state.history.length >= n - 1) {
-          const key = state.history.slice(-(n - 1)).join('');
-          if (state.patternMemory[key]) {
-            const p = state.patternMemory[key].P || 0;
-            const b = state.patternMemory[key].B || 0;
-            const total = p + b;
-            if (total >= minOccurrences) {
-              const confidence = Math.round(100 * Math.max(p, b) / total);
-              patternLikelihood = { predict: p >= b ? 'P' : 'B', confidence };
-              const wins = state.patternMemory[key].wins || 0;
-              const losses = state.patternMemory[key].losses || 0;
-              const accuracy = wins + losses > 0 ? ((wins / (wins + losses)) * 100).toFixed(1) : 0;
-              patternDetails = `Pattern "${key}" (P: ${p}, B: ${b}, Accuracy: ${accuracy}%)`;
-              break;
-            }
-          }
-        }
-      }
-      analysis.patternLikelihood = `Likely Pattern: ${patternLikelihood.predict === 'P' ? 'Player' : 'Banker'} (${patternLikelihood.confidence}%) - ${patternDetails}`;
-
-      const prediction = bayesianPrediction();
-      const weightedConfidence = Math.max(prediction.confidence, patternLikelihood.confidence, streakContinuationProb);
-      const recommendedBet = prediction.confidence >= patternLikelihood.confidence 
-        ? prediction.predict 
-        : patternLikelihood.predict;
-      analysis.nextPrediction = weightedConfidence > gameConfig.confidenceThreshold 
-        ? `Next Bet Recommendation: ${recommendedBet === 'P' ? 'Player' : 'Banker'} (${weightedConfidence.toFixed(1)}%)`
-        : `No strong recommendation for next bet (confidence ≤ ${gameConfig.confidenceThreshold}%)`;
-
-      return {
-        historical: `
-          <p>${analysis.streakInfo}</p>
-          <p>${analysis.patternReliability}</p>
-          <p>${analysis.winLossRatio}</p>
-          <p>${analysis.recentTrend}</p>
-        `,
-        prediction: `
-          <p class="${weightedConfidence > gameConfig.confidenceThreshold ? (recommendedBet === 'P' ? 'player' : 'banker') : ''}">
-            ${analysis.nextPrediction}
-          </p>
-          <p>${analysis.streakContinuation}</p>
-          <p>${analysis.patternLikelihood}</p>
-        `
-      };
-    }
-
     function updateDisplay() {
       updatePrediction();
       updateMMDisplay();
-      const analysis = analyzeResults();
-      if (isAdmin) {
-        document.getElementById('historicalAnalysis').innerHTML = analysis.historical;
-        document.getElementById('predictionAnalysis').innerHTML = analysis.prediction;
-      }
     }
 
     function updatePrediction() {
@@ -1085,7 +787,7 @@
       const shoeDiv = document.getElementById('shoeType');
       const historyDiv = document.getElementById('historyDisplay');
       historyDiv.innerHTML = '';
-      const displayHistory = state.history.slice(-10);
+      const displayHistory = state.history.slice(-10); // Limit to last 10 results
       displayHistory.forEach((item, index) => {
         const actualIndex = state.history.length - displayHistory.length + index;
         const cell = document.createElement('div');
@@ -1098,43 +800,22 @@
         historyDiv.appendChild(cell);
       });
       const prediction = bayesianPrediction();
-      let patternInfo = '';
-      for (let n = gameConfig.maxLength + 1; n >= 2; n--) {
-        if (state.history.length >= n - 1) {
-          const key = state.history.slice(-(n - 1)).join('');
-          if (state.patternMemory[key]) {
-            const p = state.patternMemory[key].P || 0;
-            const b = state.patternMemory[key].B || 0;
-            const wins = state.patternMemory[key].wins || 0;
-            const losses = state.patternMemory[key].losses || 0;
-            const total = p + b;
-            if (total >= 3) {
-              const accuracy = wins + losses > 0 ? ((wins / (wins + losses)) * 100).toFixed(1) : 0;
-              patternInfo = `Based on pattern "${key}" (P: ${p}, B: ${b}, Accuracy: ${accuracy}%)`;
-              break;
-            }
-          }
-        }
-      }
-      if (prediction.confidence <= gameConfig.confidenceThreshold) {
-        predDiv.innerText = '';
-        predDiv.classList.remove('player', 'banker');
+      if (prediction.confidence <= 60) {
+        predDiv.innerText = 'Waiting for strong signal...';
         shoeDiv.innerText = 'Detected Pattern: N/A';
-      } else {
-        predDiv.innerText = prediction.predict === 'P' ? 'PLAYER' : 'BANKER';
-        predDiv.classList.remove('player', 'banker');
-        predDiv.classList.add(prediction.predict === 'P' ? 'player' : 'banker');
-        let streaks = 0;
-        for (let i = 1; i < state.history.length; i++) {
-          if (state.history[i] === state.history[i - 1]) streaks++;
-        }
-        const chopScore = state.history.length > 1 ? state.history.length - 1 - streaks : 0;
-        const chopRatio = state.history.length > 1 ? chopScore / (state.history.length - 1) : 0;
-        let pattern = 'Balanced';
-        if (chopRatio > 0.7) pattern = 'Chop';
-        else if (chopRatio < 0.3) pattern = 'Streak';
-        shoeDiv.innerText = `Detected Pattern: ${pattern}`;
+        return;
       }
+      predDiv.innerText = `Prediction: ${prediction.predict === 'P' ? 'Player' : 'Banker'} (${prediction.confidence}%)`;
+      let streaks = 0;
+      for (let i = 1; i < state.history.length; i++) {
+        if (state.history[i] === state.history[i - 1]) streaks++;
+      }
+      const chopScore = state.history.length > 1 ? state.history.length - 1 - streaks : 0;
+      const chopRatio = state.history.length > 1 ? chopScore / (state.history.length - 1) : 0;
+      let pattern = 'Balanced';
+      if (chopRatio > 0.7) pattern = 'Chop';
+      else if (chopRatio < 0.3) pattern = 'Streak';
+      shoeDiv.innerText = `Detected Pattern: ${pattern}`;
     }
 
     function updateMMDisplay() {
@@ -1163,46 +844,6 @@
       document.getElementById('stopProfitInput').value = state.stopProfitValue || '';
     }
 
-    function showPredictionChart() {
-      const confidences = state.predictionHistory.map(p => p.confidence);
-      const accuracies = state.predictionHistory.map(p => p.outcome === 'win' ? 100 : 0);
-      const labels = state.predictionHistory.map((_, i) => `Game ${i + 1}`);
-      const chartConfig = {
-        type: 'line',
-        data: {
-          labels: labels,
-          datasets: [
-            {
-              label: 'Prediction Confidence (%)',
-              data: confidences,
-              borderColor: '#2196F3',
-              backgroundColor: 'rgba(33, 150, 243, 0.2)',
-              fill: false
-            },
-            {
-              label: 'Prediction Outcome (100=Win, 0=Loss)',
-              data: accuracies,
-              borderColor: '#28a745',
-              backgroundColor: 'rgba(40, 167, 69, 0.2)',
-              fill: false
-            }
-          ]
-        },
-        options: {
-          responsive: true,
-          scales: {
-            y: {
-              beginAtZero: true,
-              max: 100,
-              title: { display: true, text: 'Percentage (%)' }
-            },
-            x: { title: { display: true, text: 'Game' } }
-          }
-        }
-      };
-      console.log(JSON.stringify(chartConfig));
-    }
-
     function saveMemoryFast() {
       clearTimeout(saveTimeout);
       saveTimeout = setTimeout(saveMemory, 300);
@@ -1216,8 +857,10 @@
             email: user.email,
             subscriptionEnd: (await getDoc(doc(db, 'users', user.uid))).data().subscriptionEnd,
             isAdmin: (await getDoc(doc(db, 'users', user.uid))).data().isAdmin || false,
+            lastActive: DateTime.now().setZone('Asia/Manila').toMillis(),
             state: state
           }, { merge: true });
+          document.getElementById('errorMessage').innerText = 'State saved successfully';
         }
       } catch (e) {
         document.getElementById('errorMessage').innerText = 'Error saving to Firestore: ' + e.message;
@@ -1230,7 +873,7 @@
         if (user) {
           const userDoc = await getDoc(doc(db, 'users', user.uid));
           if (userDoc.exists()) {
-            const saved = userDoc.data().state;
+            const saved = userDoc.data().state || {};
             state.wins = Number(saved.wins) || 0;
             state.losses = Number(saved.losses) || 0;
             state.baseUnit = Number(saved.baseUnit) || 0;
@@ -1243,14 +886,14 @@
             state.betState = saved.betState || { currentBetUnits: 1, totalProfit: 0, cycleProfit: 0, previousLosses: [] };
             state.history = Array.isArray(saved.history) ? saved.history : [];
             state.outcomes = Array.isArray(saved.outcomes) ? saved.outcomes : [];
-            state.predictionHistory = Array.isArray(saved.predictionHistory) ? saved.predictionHistory : [];
             state.patternMemory = saved.patternMemory || {};
             const subscriptionEnd = Number.isInteger(userDoc.data().subscriptionEnd) ? userDoc.data().subscriptionEnd : null;
             document.getElementById('subscriptionStatus').innerText = subscriptionEnd ? 
               `Subscription: Active until ${DateTime.fromMillis(subscriptionEnd, { zone: 'Asia/Manila' }).toLocaleString(DateTime.DATETIME_FULL)}` : 
               'Subscription: Invalid or not set';
-            document.getElementById('errorMessage').innerText = '';
             updateDisplay();
+            updateLastActive();
+            document.getElementById('errorMessage').innerText = 'State loaded successfully';
           }
         }
       } catch (e) {
@@ -1282,9 +925,6 @@
     window.saveMemory = saveMemory;
     window.loadMemory = loadMemory;
     window.toggleAdvanced = toggleAdvanced;
-    window.showPredictionChart = showPredictionChart;
-    window.saveGameConfig = saveGameConfig;
-    window.analyzeAndAdjustParameters = analyzeAndAdjustParameters;
   </script>
 </body>
 </html>
