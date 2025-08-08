@@ -177,6 +177,15 @@
     .admin-panel button {
       background-color: #dc3545;
     }
+    .online-indicator {
+      display: inline-block;
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      margin-right: 5px;
+    }
+    .online { background-color: #28a745; }
+    .offline { background-color: #dc3545; }
     @media (max-width: 500px) {
       .flex-row { flex-direction: column; align-items: stretch; }
       .bet-controls { flex-direction: column; align-items: stretch; }
@@ -283,6 +292,32 @@
           <button class="admin-action" onclick="extendSubscription()">Add Time</button>
         </div>
       </div>
+      <div class="section">
+        <h3>Algorithm Selection</h3>
+        <div class="flex-row">
+          <label>
+            <span>Prediction Algorithm</span>
+            <select id="algorithmSelect" onchange="setAlgorithm()" aria-label="Select prediction algorithm">
+              <option value="auto">Auto</option>
+              <option value="bayesian">Bayesian</option>
+              <option value="chatgpt">ChatGPT</option>
+              <option value="grok">Grok</option>
+            </select>
+          </label>
+        </div>
+      </div>
+      <div class="section">
+        <h3>Online Users</h3>
+        <table id="onlineUsersTable">
+          <thead>
+            <tr>
+              <th>Email</th>
+              <th>Status</th>
+            </tr>
+          </thead>
+          <tbody id="onlineUsersTableBody"></tbody>
+        </table>
+      </div>
     </div>
   </div>
 
@@ -290,7 +325,7 @@
     import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js';
     import { getAuth, signOut, onAuthStateChanged, createUserWithEmailAndPassword } from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js';
     import { getAnalytics, logEvent } from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-analytics.js';
-    import { getFirestore, doc, getDoc, setDoc, collection, getDocs, query, where } from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js';
+    import { getFirestore, doc, getDoc, setDoc, collection, getDocs, query, where, onSnapshot } from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js';
 
     const { DateTime } = luxon;
 
@@ -316,6 +351,10 @@
     }
 
     function signOutUser() {
+      const user = auth.currentUser;
+      if (user) {
+        setDoc(doc(db, 'users', user.uid), { isOnline: false }, { merge: true });
+      }
       signOut(auth).then(() => {
         window.location.href = 'login.html';
       });
@@ -340,6 +379,7 @@
           email: userCredential.user.email,
           subscriptionEnd,
           isAdmin,
+          isOnline: false,
           state: {
             history: [],
             outcomes: [],
@@ -360,7 +400,8 @@
             altAlgoCount: 0,
             useAltAlgo: false,
             altAlgoType: 'chatgpt',
-            mmSystem: 'default'
+            mmSystem: 'default',
+            selectedAlgorithm: 'auto'
           }
         });
         showMessage('User created successfully');
@@ -464,7 +505,7 @@
     async function deleteUser(uid) {
       if (!confirm('Are you sure you want to delete this user?')) return;
       try {
-        await setDoc(doc(db, 'users', uid), { deleted: true }, { merge: true });
+        await setDoc(doc(db, 'users', uid), { deleted: true, isOnline: false }, { merge: true });
         showMessage('User marked as deleted (use Admin SDK for full deletion)');
         logEvent(analytics, 'delete_user', { uid });
         loadUsers();
@@ -501,14 +542,34 @@
       }
     }
 
-    async function extendSubscriptionFor(uid, email) {
-      document.getElementById('extendUserEmail').value = email;
-      document.getElementById('extendTimeUnit').value = 'hours';
-      document.getElementById('extendTimeAmount').value = '';
-      document.getElementById('extendTimeUnit').focus();
+    function loadOnlineUsers() {
+      if (!isAdmin) return;
+      const onlineUsersTableBody = document.getElementById('onlineUsersTableBody');
+      onlineUsersTableBody.innerHTML = '';
+      try {
+        const unsubscribe = onSnapshot(collection(db, 'users'), (querySnapshot) => {
+          onlineUsersTableBody.innerHTML = '';
+          querySnapshot.forEach(doc => {
+            const user = doc.data();
+            if (user.deleted) return;
+            const row = document.createElement('tr');
+            const status = user.isOnline ? 'Online' : 'Offline';
+            const statusClass = user.isOnline ? 'online' : 'offline';
+            row.innerHTML = `
+              <td>${user.email}</td>
+              <td><span class="online-indicator ${statusClass}"></span>${status}</td>
+            `;
+            onlineUsersTableBody.appendChild(row);
+          });
+        });
+        return unsubscribe;
+      } catch (error) {
+        showMessage('Error loading online users: ' + error.message);
+      }
     }
 
     let isAdmin = false;
+    let onlineUsersUnsubscribe = null;
     onAuthStateChanged(auth, async user => {
       const errorMessage = document.getElementById('errorMessage');
       errorMessage.innerText = '';
@@ -521,13 +582,19 @@
             const subscriptionEnd = Number.isInteger(userData.subscriptionEnd) ? userData.subscriptionEnd : null;
             const currentTime = DateTime.now().setZone('Asia/Manila').toMillis();
             if (subscriptionEnd && currentTime < subscriptionEnd) {
+              await setDoc(doc(db, 'users', user.uid), { isOnline: true }, { merge: true });
               document.getElementById('appContainer').classList.remove('hidden');
               document.getElementById('subscriptionStatus').innerText = `Subscription: Active until ${DateTime.fromMillis(subscriptionEnd, { zone: 'Asia/Manila' }).toLocaleString(DateTime.DATETIME_FULL)}`;
               document.getElementById('adminPanel').classList.toggle('hidden', !isAdmin);
               document.querySelectorAll('.admin-only').forEach(el => el.classList.toggle('hidden', !isAdmin));
-              if (isAdmin) loadUsers();
+              if (isAdmin) {
+                loadUsers();
+                onlineUsersUnsubscribe = loadOnlineUsers();
+                document.getElementById('algorithmSelect').value = userData.state?.selectedAlgorithm || 'auto';
+              }
               loadMemory();
             } else {
+              await setDoc(doc(db, 'users', user.uid), { isOnline: false }, { merge: true });
               showMessage('Your subscription has expired or is invalid. Contact admin to renew.');
               signOut(auth);
             }
@@ -538,10 +605,22 @@
         } catch (error) {
           console.error('Error:', error);
           showMessage('Error checking subscription: ' + error.message);
+          await setDoc(doc(db, 'users', user.uid), { isOnline: false }, { merge: true });
           signOut(auth);
         }
       } else {
+        if (onlineUsersUnsubscribe) {
+          onlineUsersUnsubscribe();
+          onlineUsersUnsubscribe = null;
+        }
         window.location.href = 'login.html';
+      }
+    });
+
+    window.addEventListener('beforeunload', () => {
+      const user = auth.currentUser;
+      if (user) {
+        setDoc(doc(db, 'users', user.uid), { isOnline: false }, { merge: true });
       }
     });
 
@@ -565,7 +644,8 @@
       altAlgoCount: 0,
       useAltAlgo: false,
       altAlgoType: 'chatgpt',
-      mmSystem: 'default'
+      mmSystem: 'default',
+      selectedAlgorithm: 'auto'
     };
     let snapshots = [];
     let saveTimeout = null;
@@ -800,6 +880,11 @@
     }
 
     function selectPredictionAlgorithm() {
+      if (isAdmin && state.selectedAlgorithm !== 'auto') {
+        if (state.selectedAlgorithm === 'bayesian') return bayesianPrediction();
+        if (state.selectedAlgorithm === 'chatgpt') return chatGPTPrediction();
+        if (state.selectedAlgorithm === 'grok') return grokPrediction();
+      }
       const recentAccuracy = calculateRecentAccuracy();
       if (state.accuracyWindow.length >= 10 && recentAccuracy < 0.4) {
         state.useAltAlgo = true;
@@ -814,6 +899,15 @@
         return state.altAlgoType === 'chatgpt' ? chatGPTPrediction() : grokPrediction();
       }
       return bayesianPrediction();
+    }
+
+    function setAlgorithm() {
+      if (!isAdmin) return;
+      state.selectedAlgorithm = document.getElementById('algorithmSelect').value;
+      saveMemoryFast();
+      updatePrediction();
+      showMessage(`Prediction algorithm set to ${state.selectedAlgorithm}`);
+      logEvent(analytics, 'set_algorithm', { algorithm: state.selectedAlgorithm });
     }
 
     function recordResult(result) {
@@ -1101,7 +1195,9 @@
         }
         const accuracy = state.predictionPerformance[sequenceLength].total > 0 ? 
           ((state.predictionPerformance[sequenceLength].correct / state.predictionPerformance[sequenceLength].total) * 100).toFixed(1) : 'N/A';
-        const algoName = state.useAltAlgo ? (state.altAlgoType === 'chatgpt' ? 'ChatGPT Algorithm' : 'Grok Algorithm') : 'Bayesian Algorithm';
+        const algoName = state.selectedAlgorithm !== 'auto' ? 
+          state.selectedAlgorithm.charAt(0).toUpperCase() + state.selectedAlgorithm.slice(1) + ' Algorithm' : 
+          (state.useAltAlgo ? (state.altAlgoType === 'chatgpt' ? 'ChatGPT Algorithm' : 'Grok Algorithm') : 'Bayesian Algorithm');
         predDiv.innerText = `Prediction: ${prediction.predict === 'P' ? 'Player' : 'Banker'} (${prediction.confidence}%) [Seq: ${sequenceLength}, Acc: ${accuracy}%] Using ${algoName}`;
         let streaks = 0;
         for (let i = 1; i < state.history.length; i++) {
@@ -1159,6 +1255,7 @@
             email: user.email,
             subscriptionEnd: (await getDoc(doc(db, 'users', user.uid))).data().subscriptionEnd,
             isAdmin: (await getDoc(doc(db, 'users', user.uid))).data().isAdmin || false,
+            isOnline: true,
             state: state
           }, { merge: true });
         }
@@ -1194,10 +1291,14 @@
             state.useAltAlgo = saved.useAltAlgo || false;
             state.altAlgoType = saved.altAlgoType || 'chatgpt';
             state.mmSystem = saved.mmSystem || 'default';
+            state.selectedAlgorithm = saved.selectedAlgorithm || 'auto';
             const subscriptionEnd = Number.isInteger(userDoc.data().subscriptionEnd) ? userDoc.data().subscriptionEnd : null;
             document.getElementById('subscriptionStatus').innerText = subscriptionEnd ? 
               `Subscription: Active until ${DateTime.fromMillis(subscriptionEnd, { zone: 'Asia/Manila' }).toLocaleString(DateTime.DATETIME_FULL)}` : 
               'Subscription: Invalid or not set';
+            if (isAdmin) {
+              document.getElementById('algorithmSelect').value = state.selectedAlgorithm;
+            }
             updateDisplay();
           }
         }
@@ -1218,7 +1319,12 @@
     window.updateUserSubscription = updateUserSubscription;
     window.fixUserSubscription = fixUserSubscription;
     window.extendSubscription = extendSubscription;
-    window.extendSubscriptionFor = extendSubscriptionFor;
+    window.extendSubscriptionFor = (uid, email) => {
+      document.getElementById('extendUserEmail').value = email;
+      document.getElementById('extendTimeUnit').value = 'hours';
+      document.getElementById('extendTimeAmount').value = '';
+      document.getElementById('extendTimeUnit').focus();
+    };
     window.deleteUser = deleteUser;
     window.recordResult = recordResult;
     window.undo = undo;
@@ -1230,6 +1336,7 @@
     window.saveMemory = saveMemory;
     window.loadMemory = loadMemory;
     window.toggleAdvanced = toggleAdvanced;
+    window.setAlgorithm = setAlgorithm;
   </script>
 </body>
 </html>
