@@ -986,7 +986,7 @@
 
     function calculatePlusX(number) {
       if (number < 10) return 1;
-      return Math.floor(number / 10);
+      return parseInt(String(number).slice(0, -1)) || 1; // Remove last digit
     }
 
     function handleWin() {
@@ -1035,9 +1035,15 @@
       } else if (state.mmSystem === 'plus1') {
         state.betState.totalProfit -= state.betState.currentBetUnits;
         state.betState.cycleProfit -= state.betState.currentBetUnits;
-        state.betState.previousLosses.push(state.betState.currentBetUnits);
-        const nextLoss = state.betState.previousLosses[0];
-        state.betState.currentBetUnits = nextLoss + calculatePlusX(nextLoss);
+        if (state.betState.previousLosses.length === 0) {
+          state.betState.previousLosses.push(state.baseUnit / state.baseUnit); // Use base bet in units
+        } else {
+          const nextLoss = state.betState.previousLosses[0];
+          const x = calculatePlusX(nextLoss);
+          state.betState.previousLosses.push(nextLoss + x);
+        }
+        const nextBet = state.betState.previousLosses[0];
+        state.betState.currentBetUnits = nextBet + calculatePlusX(nextBet);
       }
     }
 
