@@ -212,6 +212,12 @@
     .prediction-analysis.banker {
       color: #E91E63;
     }
+    .analysis-section {
+      display: none;
+    }
+    .admin-panel-visible .analysis-section {
+      display: block;
+    }
     @media (max-width: 500px) {
       .flex-row { flex-direction: column; align-items: stretch; }
       .bet-controls { flex-direction: column; align-items: stretch; }
@@ -238,8 +244,8 @@
     <div class="shoe-type" id="shoeType">Detected Pattern: N/A</div>
     <div class="section">Showing last 10 results</div>
     <div class="history" id="historyDisplay"></div>
-    <div class="section">Result Analysis</div>
-    <div class="analysis" id="analysisDisplay">
+    <div class="section analysis-section" id="analysisSection">Result Analysis</div>
+    <div class="analysis analysis-section" id="analysisDisplay">
       <div class="historical-analysis" id="historicalAnalysis"></div>
       <div class="prediction-analysis" id="predictionAnalysis"></div>
     </div>
@@ -629,6 +635,7 @@
             const currentTime = DateTime.now().setZone('Asia/Manila').toMillis();
             if (subscriptionEnd && currentTime < subscriptionEnd) {
               document.getElementById('appContainer').classList.remove('hidden');
+              document.getElementById('appContainer').classList.toggle('admin-panel-visible', isAdmin);
               document.getElementById('subscriptionStatus').innerText = `Subscription: Active until ${DateTime.fromMillis(subscriptionEnd, { zone: 'Asia/Manila' }).toLocaleString(DateTime.DATETIME_FULL)}`;
               document.getElementById('adminPanel').classList.toggle('hidden', !isAdmin);
               await loadGameConfig();
@@ -1043,8 +1050,10 @@
       updatePrediction();
       updateMMDisplay();
       const analysis = analyzeResults();
-      document.getElementById('historicalAnalysis').innerHTML = analysis.historical;
-      document.getElementById('predictionAnalysis').innerHTML = analysis.prediction;
+      if (isAdmin) {
+        document.getElementById('historicalAnalysis').innerHTML = analysis.historical;
+        document.getElementById('predictionAnalysis').innerHTML = analysis.prediction;
+      }
     }
 
     function updatePrediction() {
