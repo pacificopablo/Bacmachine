@@ -319,6 +319,20 @@
           <tbody id="onlineUsersTableBody"></tbody>
         </table>
       </div>
+      <div class="section">
+        <h3>Non-Admin Algorithm Accuracy</h3>
+        <table id="algorithmAccuracyTable">
+          <thead>
+            <tr>
+              <th>Email</th>
+              <th>Bayesian</th>
+              <th>ChatGPT</th>
+              <th>Grok</th>
+            </tr>
+          </thead>
+          <tbody id="algorithmAccuracyTableBody"></tbody>
+        </table>
+      </div>
     </div>
   </div>
 
@@ -569,8 +583,68 @@
       }
     }
 
+    function loadAlgorithmAccuracy() {
+      if (!isAdmin) return;
+      const accuracyTableBody = document.getElementById('algorithmAccuracyTableBody');
+      accuracyTableBody.innerHTML = '';
+      try {
+        const unsubscribe = onSnapshot(collection(db, 'users'), (querySnapshot) => {
+          accuracyTableBody.innerHTML = '';
+          querySnapshot.forEach(doc => {
+            const user = doc.data();
+            if (user.deleted || user.isAdmin) return;
+            const state = user.state || {};
+            const predictionPerformance = state.predictionPerformance || { 2: { correct: 0, total: 0 }, 3: { correct: 0, total: 0 }, 4: { correct: 0, total: 0 }, 5: { correct: 0, total: 0 } };
+            const accuracyWindow = state.accuracyWindow || [];
+            const altAlgoType = state.altAlgoType || 'chatgpt';
+
+            // Bayesian accuracy: aggregate across sequence lengths
+            let bayesianCorrect = 0, bayesianTotal = 0;
+            for (let n = 2; n <= 5; n++) {
+              bayesianCorrect += predictionPerformance[n]?.correct || 0;
+              bayesianTotal += predictionPerformance[n]?.total || 0;
+            }
+            const bayesianAccuracy = bayesianTotal > 0 ? (bayesianCorrect / bayesianTotal * 100).toFixed(1) + '%' : 'N/A';
+
+            // ChatGPT and Grok accuracy: estimate from accuracyWindow when altAlgoType matches
+            let chatgptCorrect = 0, chatgptTotal = 0, grokCorrect = 0, grokTotal = 0;
+            let currentAlgo = 'bayesian';
+            accuracyWindow.forEach(outcome => {
+              if (state.useAltAlgo && state.altAlgoCount > 0) {
+                currentAlgo = altAlgoType;
+              } else {
+                currentAlgo = 'bayesian';
+              }
+              if (currentAlgo === 'chatgpt') {
+                chatgptTotal++;
+                if (outcome === 'W') chatgptCorrect++;
+              } else if (currentAlgo === 'grok') {
+                grokTotal++;
+                if (outcome === 'W') grokCorrect++;
+              }
+            });
+            const chatgptAccuracy = chatgptTotal > 0 ? (chatgptCorrect / chatgptTotal * 100).toFixed(1) + '%' : 'N/A';
+            const grokAccuracy = grokTotal > 0 ? (grokCorrect / grokTotal * 100).toFixed(1) + '%' : 'N/A';
+
+            const row = document.createElement('tr');
+            row.innerHTML = `
+              <td>${user.email}</td>
+              <td>${bayesianAccuracy}</td>
+              <td>${chatgptAccuracy}</td>
+              <td>${grokAccuracy}</td>
+            `;
+            accuracyTableBody.appendChild(row);
+          });
+        });
+        return unsubscribe;
+      } catch (error) {
+        showMessage('Error loading algorithm accuracy: ' + error.message);
+      }
+    }
+
     let isAdmin = false;
     let onlineUsersUnsubscribe = null;
+    let accuracyUnsubscribe = null;
     onAuthStateChanged(auth, async user => {
       const errorMessage = document.getElementById('errorMessage');
       errorMessage.innerText = '';
@@ -591,6 +665,7 @@
               if (isAdmin) {
                 loadUsers();
                 onlineUsersUnsubscribe = loadOnlineUsers();
+                accuracyUnsubscribe = loadAlgorithmAccuracy();
                 const selectedAlgorithms = userData.state?.selectedAlgorithms || [];
                 document.getElementById('bayesianCheckbox').checked = selectedAlgorithms.includes('bayesian');
                 document.getElementById('chatgptCheckbox').checked = selectedAlgorithms.includes('chatgpt');
@@ -616,6 +691,10 @@
         if (onlineUsersUnsubscribe) {
           onlineUsersUnsubscribe();
           onlineUsersUnsubscribe = null;
+        }
+        if (accuracyUnsubscribe) {
+          accuracyUnsubscribe();
+          accuracyUnsubscribe = null;
         }
         window.location.href = 'login.html';
       }
