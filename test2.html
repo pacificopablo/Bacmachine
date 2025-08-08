@@ -248,9 +248,8 @@
           <thead>
             <tr>
               <th>Email</th>
-              <th>Subscription End (JST)</th>
+              <th>Subscription End (PST)</th>
               <th>Admin</th>
-              <th>Online</th>
               <th>Add Time</th>
               <th>Actions</th>
             </tr>
@@ -299,23 +298,16 @@
     const db = getFirestore(app);
     const analytics = getAnalytics(app);
 
+    function showMessage(message) {
+      const errorMessage = document.getElementById('errorMessage');
+      errorMessage.innerText = message;
+      setTimeout(() => { errorMessage.innerText = ''; }, 5000); // Clear message after 5 seconds
+    }
+
     function signOutUser() {
       signOut(auth).then(() => {
         window.location.href = 'login.html';
       });
-    }
-
-    async function updateLastActive() {
-      const user = auth.currentUser;
-      if (user) {
-        try {
-          await setDoc(doc(db, 'users', user.uid), {
-            lastActive: DateTime.now().setZone('Asia/Tokyo').toMillis()
-          }, { merge: true });
-        } catch (error) {
-          document.getElementById('errorMessage').innerText = 'Error updating last active: ' + error.message;
-        }
-      }
     }
 
     async function createUser() {
@@ -326,18 +318,17 @@
       errorMessage.innerText = '';
 
       if (!email || !password) {
-        errorMessage.innerText = 'Please fill in email and password';
+        showMessage('Please fill in email and password');
         return;
       }
 
       try {
         const userCredential = await createUserWithEmailAndPassword(auth, email, password);
-        const subscriptionEnd = DateTime.now().setZone('Asia/Tokyo').plus({ days: 60 }).toMillis();
+        const subscriptionEnd = DateTime.now().setZone('Asia/Manila').plus({ days: 60 }).toMillis();
         await setDoc(doc(db, 'users', userCredential.user.uid), {
           email: userCredential.user.email,
           subscriptionEnd,
           isAdmin,
-          lastActive: DateTime.now().setZone('Asia/Tokyo').toMillis(),
           state: {
             history: [],
             outcomes: [],
@@ -354,14 +345,14 @@
             patternMemory: {}
           }
         });
-        errorMessage.innerText = 'User created successfully';
+        showMessage('User created successfully');
         logEvent(analytics, 'create_user', { email, isAdmin });
         document.getElementById('newUserEmail').value = '';
         document.getElementById('newUserPassword').value = '';
         document.getElementById('newUserIsAdmin').checked = false;
         loadUsers();
       } catch (error) {
-        errorMessage.innerText = 'Error creating user: ' + error.message;
+        showMessage('Error creating user: ' + error.message);
         logEvent(analytics, 'create_user', { email, success: false, error: error.code });
       }
     }
@@ -370,33 +361,33 @@
       const subscriptionEndInput = document.getElementById(`subscriptionEnd_${uid}`).value;
       const errorMessage = document.getElementById('errorMessage');
       if (!subscriptionEndInput) {
-        errorMessage.innerText = 'Please select a valid subscription date';
+        showMessage('Please select a valid subscription date');
         return;
       }
-      const subscriptionEnd = DateTime.fromISO(subscriptionEndInput, { zone: 'Asia/Tokyo' }).toMillis();
+      const subscriptionEnd = DateTime.fromISO(subscriptionEndInput, { zone: 'Asia/Manila' }).toMillis();
       if (isNaN(subscriptionEnd)) {
-        errorMessage.innerText = 'Invalid subscription date';
+        showMessage('Invalid subscription date');
         return;
       }
       try {
         await setDoc(doc(db, 'users', uid), { subscriptionEnd }, { merge: true });
-        errorMessage.innerText = 'Subscription updated';
+        showMessage('Subscription updated');
         logEvent(analytics, 'update_subscription', { uid });
         loadUsers();
       } catch (error) {
-        errorMessage.innerText = 'Error updating subscription: ' + error.message;
+        showMessage('Error updating subscription: ' + error.message);
       }
     }
 
     async function fixUserSubscription(uid) {
       try {
-        const subscriptionEnd = DateTime.now().setZone('Asia/Tokyo').plus({ days: 60 }).toMillis();
+        const subscriptionEnd = DateTime.now().setZone('Asia/Manila').plus({ days: 60 }).toMillis();
         await setDoc(doc(db, 'users', uid), { subscriptionEnd }, { merge: true });
-        document.getElementById('errorMessage').innerText = 'Subscription fixed to 60 days from now';
+        showMessage('Subscription fixed to 60 days from now');
         logEvent(analytics, 'fix_subscription', { uid });
         loadUsers();
       } catch (error) {
-        document.getElementById('errorMessage').innerText = 'Error fixing subscription: ' + error.message;
+        showMessage('Error fixing subscription: ' + error.message);
       }
     }
 
@@ -408,11 +399,11 @@
       errorMessage.innerText = '';
 
       if (!email) {
-        errorMessage.innerText = 'Please enter a user email';
+        showMessage('Please enter a user email');
         return;
       }
       if (timeUnit !== 'test' && (!timeAmount || timeAmount < 1)) {
-        errorMessage.innerText = 'Please enter a valid time amount';
+        showMessage('Please enter a valid time amount');
         return;
       }
 
@@ -420,13 +411,13 @@
         const userQuery = query(collection(db, 'users'), where('email', '==', email));
         const querySnapshot = await getDocs(userQuery);
         if (querySnapshot.empty) {
-          errorMessage.innerText = 'User not found';
+          showMessage('User not found');
           return;
         }
         const userDoc = querySnapshot.docs[0];
         const uid = userDoc.id;
-        const currentSubscriptionEnd = Number.isInteger(userDoc.data().subscriptionEnd) ? userDoc.data().subscriptionEnd : DateTime.now().setZone('Asia/Tokyo').toMillis();
-        const currentTime = DateTime.now().setZone('Asia/Tokyo').toMillis();
+        const currentSubscriptionEnd = Number.isInteger(userDoc.data().subscriptionEnd) ? userDoc.data().subscriptionEnd : DateTime.now().setZone('Asia/Manila').toMillis();
+        const currentTime = DateTime.now().setZone('Asia/Manila').toMillis();
         const effectiveStart = Math.max(currentSubscriptionEnd, currentTime);
         let additionalTime;
 
@@ -440,14 +431,14 @@
 
         const newSubscriptionEnd = effectiveStart + additionalTime;
         await setDoc(doc(db, 'users', uid), { subscriptionEnd: newSubscriptionEnd }, { merge: true });
-        errorMessage.innerText = `Subscription extended to ${DateTime.fromMillis(newSubscriptionEnd, { zone: 'Asia/Tokyo' }).toLocaleString(DateTime.DATETIME_FULL)}`;
+        showMessage(`Subscription extended to ${DateTime.fromMillis(newSubscriptionEnd, { zone: 'Asia/Manila' }).toLocaleString(DateTime.DATETIME_FULL)}`);
         logEvent(analytics, 'extend_subscription', { email, timeUnit, timeAmount });
         document.getElementById('extendUserEmail').value = '';
         document.getElementById('extendTimeUnit').value = 'hours';
         document.getElementById('extendTimeAmount').value = '';
         loadUsers();
       } catch (error) {
-        errorMessage.innerText = 'Error extending subscription: ' + error.message;
+        showMessage('Error extending subscription: ' + error.message);
         logEvent(analytics, 'extend_subscription', { email, success: false, error: error.code });
       }
     }
@@ -456,11 +447,11 @@
       if (!confirm('Are you sure you want to delete this user?')) return;
       try {
         await setDoc(doc(db, 'users', uid), { deleted: true }, { merge: true });
-        document.getElementById('errorMessage').innerText = 'User marked as deleted (use Admin SDK for full deletion)';
+        showMessage('User marked as deleted (use Admin SDK for full deletion)');
         logEvent(analytics, 'delete_user', { uid });
         loadUsers();
       } catch (error) {
-        document.getElementById('errorMessage').innerText = 'Error deleting user: ' + error.message;
+        showMessage('Error deleting user: ' + error.message);
       }
     }
 
@@ -469,21 +460,16 @@
       userTableBody.innerHTML = '';
       try {
         const querySnapshot = await getDocs(collection(db, 'users'));
-        const currentTime = DateTime.now().setZone('Asia/Tokyo').toMillis();
-        const onlineThreshold = 5 * 60 * 1000; // 5 minutes
         querySnapshot.forEach(doc => {
           const user = doc.data();
           if (user.deleted) return;
-          const subscriptionEnd = Number.isInteger(user.subscriptionEnd) ? user.subscriptionEnd : null;
-          const dateValue = subscriptionEnd ? DateTime.fromMillis(subscriptionEnd, { zone: 'Asia/Tokyo' }).toFormat('yyyy-MM-dd\'T\'HH:mm') : '';
-          const lastActive = Number.isInteger(user.lastActive) ? user.lastActive : 0;
-          const isOnline = (currentTime - lastActive) <= onlineThreshold ? 'Yes' : 'No';
           const row = document.createElement('tr');
+          const subscriptionEnd = Number.isInteger(user.subscriptionEnd) ? user.subscriptionEnd : null;
+          const dateValue = subscriptionEnd ? DateTime.fromMillis(subscriptionEnd, { zone: 'Asia/Manila' }).toFormat('yyyy-MM-dd\'T\'HH:mm') : '';
           row.innerHTML = `
             <td>${user.email}</td>
             <td>${subscriptionEnd ? `<input type="datetime-local" id="subscriptionEnd_${doc.id}" value="${dateValue}" aria-label="Subscription end date for ${user.email}">` : 'Not Set'}</td>
             <td>${user.isAdmin ? 'Yes' : 'No'}</td>
-            <td>${isOnline}</td>
             <td><button class="admin-action" onclick="extendSubscriptionFor('${doc.id}', '${user.email}')">Add Time</button></td>
             <td>
               ${subscriptionEnd ? `<button class="admin-action" onclick="updateUserSubscription('${doc.id}')">Update</button>` : `<button class="fix-subscription" onclick="fixUserSubscription('${doc.id}')">Fix</button>`}
@@ -493,7 +479,7 @@
           userTableBody.appendChild(row);
         });
       } catch (error) {
-        document.getElementById('errorMessage').innerText = 'Error loading users: ' + error.message;
+        showMessage('Error loading users: ' + error.message);
       }
     }
 
@@ -511,30 +497,31 @@
       if (user) {
         try {
           const userDoc = await getDoc(doc(db, 'users', user.uid));
+          console.log('User Doc:', userDoc.exists(), userDoc.data());
           if (userDoc.exists()) {
             const userData = userDoc.data();
             isAdmin = userData.isAdmin || false;
             const subscriptionEnd = Number.isInteger(userData.subscriptionEnd) ? userData.subscriptionEnd : null;
-            const currentTime = DateTime.now().setZone('Asia/Tokyo').toMillis();
-            document.getElementById('appContainer').classList.remove('hidden');
+            const currentTime = DateTime.now().setZone('Asia/Manila').toMillis();
+            console.log('Subscription End:', subscriptionEnd, 'Current Time:', currentTime);
             if (subscriptionEnd && currentTime < subscriptionEnd) {
-              document.getElementById('subscriptionStatus').innerText = `Subscription: Active until ${DateTime.fromMillis(subscriptionEnd, { zone: 'Asia/Tokyo' }).toLocaleString(DateTime.DATETIME_FULL)}`;
+              document.getElementById('appContainer').classList.remove('hidden');
+              document.getElementById('subscriptionStatus').innerText = `Subscription: Active until ${DateTime.fromMillis(subscriptionEnd, { zone: 'Asia/Manila' }).toLocaleString(DateTime.DATETIME_FULL)}`;
+              document.getElementById('adminPanel').classList.toggle('hidden', !isAdmin);
+              if (isAdmin) loadUsers();
+              loadMemory();
             } else {
-              document.getElementById('subscriptionStatus').innerText = 'Subscription: Invalid or not set';
-              errorMessage.innerText = 'Your subscription has expired or is invalid. Contact an admin or use the admin panel to renew.';
+              showMessage('Your subscription has expired or is invalid. Contact admin to renew.');
+              signOut(auth);
             }
-            document.getElementById('adminPanel').classList.toggle('hidden', !isAdmin);
-            if (isAdmin) loadUsers();
-            loadMemory();
-            updateLastActive();
           } else {
-            document.getElementById('subscriptionStatus').innerText = 'Subscription: Invalid or not set';
-            errorMessage.innerText = 'User data not found. Contact an admin to resolve.';
+            showMessage('User data not found. Contact admin.');
+            signOut(auth);
           }
         } catch (error) {
           console.error('Error:', error);
-          document.getElementById('subscriptionStatus').innerText = 'Subscription: Error';
-          errorMessage.innerText = 'Error checking subscription: ' + error.message;
+          showMessage('Error checking subscription: ' + error.message);
+          signOut(auth);
         }
       } else {
         window.location.href = 'login.html';
@@ -585,10 +572,6 @@
     }
 
     function bayesianPrediction() {
-      if (state.outcomes.slice(-3).every(v => v === 'L')) {
-        const predict = Math.random() < 0.5 ? 'P' : 'B';
-        return { predict, confidence: 50 };
-      }
       for (let n = 5; n >= 2; n--) {
         const key = state.history.slice(-n + 1).join('');
         if (state.patternMemory[key]) {
@@ -607,27 +590,26 @@
 
     function recordResult(result) {
       if (!state.baseUnit || !state.startBankroll) {
-        document.getElementById('errorMessage').innerText = 'Set bankroll/unit first';
+        showMessage('Set bankroll/unit first');
         return;
       }
       const prediction = bayesianPrediction();
       snapshots.push(JSON.parse(JSON.stringify(state)));
-      if (prediction.confidence <= 60 && !state.outcomes.slice(-3).every(v => v === 'L')) {
+      if (prediction.confidence <= 60) {
         state.history.push(result);
         learnPattern(result);
-        document.getElementById('errorMessage').innerText = 'No strong prediction (confidence ≤ 60%). No wager placed.';
+        showMessage('No strong prediction (confidence ≤ 60%). No wager placed.');
         saveMemoryFast();
         updateDisplay();
-        updateLastActive();
         return;
       }
       if (state.stopProfitReached) {
-        document.getElementById('errorMessage').innerText = 'Stop profit reached';
+        showMessage('Stop profit reached');
         return;
       }
       const wager = getWager();
       if (wager > state.currentBankroll) {
-        document.getElementById('errorMessage').innerText = 'Insufficient balance';
+        showMessage('Insufficient balance');
         return;
       }
       state.history.push(result);
@@ -646,7 +628,6 @@
       }
       saveMemoryFast();
       updateDisplay();
-      updateLastActive();
     }
 
     function undo() {
@@ -656,50 +637,43 @@
         state = prevState;
         saveMemoryFast();
         updateDisplay();
-        updateLastActive();
-        document.getElementById('errorMessage').innerText = 'Undo successful';
-      } else {
-        document.getElementById('errorMessage').innerText = 'Nothing to undo';
       }
     }
 
     function clearAll() {
-      if (!confirm('Reset all data?')) return;
-      snapshots.push(JSON.parse(JSON.stringify(state)));
-      state.history = [];
-      state.outcomes = [];
-      state.wins = 0;
-      state.losses = 0;
-      state.patternMemory = {};
-      saveMemoryFast();
-      document.getElementById('prediction').innerText = 'Waiting for input...';
-      document.getElementById('shoeType').innerText = 'Detected Pattern: N/A';
-      document.getElementById('historyDisplay').innerHTML = '';
-      updateMMDisplay();
-      updateLastActive();
-      document.getElementById('errorMessage').innerText = 'All data reset';
+      if (confirm('Reset all data?')) {
+        snapshots.push(JSON.parse(JSON.stringify(state)));
+        state.history = [];
+        state.outcomes = [];
+        state.wins = 0;
+        state.losses = 0;
+        state.patternMemory = {};
+        saveMemoryFast();
+        document.getElementById('prediction').innerText = 'Waiting for input...';
+        document.getElementById('shoeType').innerText = 'Detected Pattern: N/A';
+        document.getElementById('historyDisplay').innerHTML = '';
+        updateMMDisplay();
+      }
     }
 
     function resetStats() {
-      if (!confirm('Reset stats (wins, losses, outcomes)?')) return;
-      snapshots.push(JSON.parse(JSON.stringify(state)));
-      state.wins = 0;
-      state.losses = 0;
-      state.outcomes = [];
-      saveMemoryFast();
-      updateDisplay();
-      updateLastActive();
-      document.getElementById('errorMessage').innerText = 'Stats reset';
+      if (confirm('Reset stats (wins, losses, outcomes)?')) {
+        snapshots.push(JSON.parse(JSON.stringify(state)));
+        state.wins = 0;
+        state.losses = 0;
+        state.outcomes = [];
+        saveMemoryFast();
+        updateDisplay();
+      }
     }
 
     function resetMemory() {
-      if (!confirm('Reset learned patterns?')) return;
-      snapshots.push(JSON.parse(JSON.stringify(state)));
-      state.patternMemory = {};
-      saveMemoryFast();
-      updateDisplay();
-      updateLastActive();
-      document.getElementById('errorMessage').innerText = 'Learned patterns reset';
+      if (confirm('Reset learned patterns?')) {
+        snapshots.push(JSON.parse(JSON.stringify(state)));
+        state.patternMemory = {};
+        saveMemoryFast();
+        updateDisplay();
+      }
     }
 
     function setBankroll() {
@@ -707,13 +681,12 @@
       const unit = parseFloat(document.getElementById('basebetInput').value);
       const stopProfit = parseFloat(document.getElementById('stopProfitInput').value) || 0;
       state.stopProfitType = document.getElementById('stopProfitType').value;
-      const errorMessage = document.getElementById('errorMessage');
       if (isNaN(bankroll) || bankroll <= 0 || isNaN(unit) || unit <= 0) {
-        errorMessage.innerText = 'Invalid bankroll or unit value';
+        showMessage('Invalid bankroll or unit value');
         return;
       }
       if (stopProfit < 0) {
-        errorMessage.innerText = 'Invalid stop profit';
+        showMessage('Invalid stop profit');
         return;
       }
       snapshots.push(JSON.parse(JSON.stringify(state)));
@@ -730,8 +703,6 @@
       state.patternMemory = {};
       saveMemoryFast();
       updateDisplay();
-      updateLastActive();
-      errorMessage.innerText = 'Bankroll and bet settings updated';
     }
 
     function handleWin() {
@@ -767,8 +738,6 @@
         state.betState = { currentBetUnits: 1, totalProfit: 0, cycleProfit: 0, previousLosses: [] };
         saveMemoryFast();
         updateDisplay();
-        updateLastActive();
-        document.getElementById('errorMessage').innerText = 'Bet reset';
       }
     }
 
@@ -857,13 +826,11 @@
             email: user.email,
             subscriptionEnd: (await getDoc(doc(db, 'users', user.uid))).data().subscriptionEnd,
             isAdmin: (await getDoc(doc(db, 'users', user.uid))).data().isAdmin || false,
-            lastActive: DateTime.now().setZone('Asia/Tokyo').toMillis(),
             state: state
           }, { merge: true });
-          document.getElementById('errorMessage').innerText = 'State saved successfully';
         }
       } catch (e) {
-        document.getElementById('errorMessage').innerText = 'Error saving to Firestore: ' + e.message;
+        showMessage('Error saving to Firestore: ' + e.message);
       }
     }
 
@@ -889,15 +856,13 @@
             state.patternMemory = saved.patternMemory || {};
             const subscriptionEnd = Number.isInteger(userDoc.data().subscriptionEnd) ? userDoc.data().subscriptionEnd : null;
             document.getElementById('subscriptionStatus').innerText = subscriptionEnd ? 
-              `Subscription: Active until ${DateTime.fromMillis(subscriptionEnd, { zone: 'Asia/Tokyo' }).toLocaleString(DateTime.DATETIME_FULL)}` : 
+              `Subscription: Active until ${DateTime.fromMillis(subscriptionEnd, { zone: 'Asia/Manila' }).toLocaleString(DateTime.DATETIME_FULL)}` : 
               'Subscription: Invalid or not set';
             updateDisplay();
-            updateLastActive();
-            document.getElementById('errorMessage').innerText = 'State loaded successfully';
           }
         }
       } catch (e) {
-        document.getElementById('errorMessage').innerText = 'Error loading from Firestore: ' + e.message;
+        showMessage('Error loading from Firestore: ' + e.message);
       }
     }
 
