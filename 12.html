@@ -354,7 +354,11 @@
             stopProfitReached: false,
             patternMemory: {},
             predictionPerformance: { 2: { correct: 0, total: 0 }, 3: { correct: 0, total: 0 }, 4: { correct: 0, total: 0 }, 5: { correct: 0, total: 0 } },
-            cardCounts: { low: 0, high: 0, totalCards: 0, decks: 8 }
+            cardCounts: { low: 0, high: 0, totalCards: 0, decks: 8 },
+            accuracyWindow: [],
+            altAlgoCount: 0,
+            useAltAlgo: false,
+            altAlgoType: 'chatgpt'
           }
         });
         showMessage('User created successfully');
@@ -553,7 +557,11 @@
       stopProfitReached: false,
       patternMemory: {},
       predictionPerformance: { 2: { correct: 0, total: 0 }, 3: { correct: 0, total: 0 }, 4: { correct: 0, total: 0 }, 5: { correct: 0, total: 0 } },
-      cardCounts: { low: 0, high: 0, totalCards: 0, decks: 8 }
+      cardCounts: { low: 0, high: 0, totalCards: 0, decks: 8 },
+      accuracyWindow: [],
+      altAlgoCount: 0,
+      useAltAlgo: false,
+      altAlgoType: 'chatgpt'
     };
     let snapshots = [];
     let saveTimeout = null;
@@ -617,28 +625,32 @@
     function estimateCardsDrawn(result) {
       let low = 0, high = 0, total = 4; // Default: 2 cards each for Player and Banker
       if (result === 'P') {
-        // Player wins often involve low points (0-4), suggesting low cards
         low += 1; // Assume one low card for Player
         high += 0.5; // Assume half a high card for Banker
         if (Math.random() < 0.4) total = 6; // ~40% chance of third card
       } else if (result === 'B') {
-        // Banker wins often involve high points (6-9), suggesting high cards
         high += 1; // Assume one high card for Banker
         low += 0.5; // Assume half a low card for Player
         if (Math.random() < 0.4) total = 6; // ~40% chance of third card
       } else if (result === 'T') {
-        // Ties often involve mid-range cards (6-8) or high cards
         high += 1; // Assume one high card
         total = Math.random() < 0.3 ? 6 : 4; // ~30% chance of third card
       }
       return { low, high, total };
     }
 
+    function calculateRecentAccuracy() {
+      if (state.accuracyWindow.length === 0) return 1.0;
+      const wins = state.accuracyWindow.filter(o => o === 'W').length;
+      return wins / state.accuracyWindow.length;
+    }
+
     function updateCardCountDisplay() {
       const trueCount = calculateTrueCount();
       const remainingDecks = (state.cardCounts.decks * 52 - state.cardCounts.totalCards) / 52;
+      const recentAccuracy = (calculateRecentAccuracy() * 100).toFixed(1);
       document.getElementById('cardCountDisplay').innerText = 
-        `Card Count: Low=${state.cardCounts.low.toFixed(1)}, High=${state.cardCounts.high.toFixed(1)}, True Count=${trueCount.toFixed(2)}, Decks Remaining=${remainingDecks.toFixed(1)}`;
+        `Card Count: Low=${state.cardCounts.low.toFixed(1)}, High=${state.cardCounts.high.toFixed(1)}, True Count=${trueCount.toFixed(2)}, Decks Remaining=${remainingDecks.toFixed(1)}, Recent Accuracy=${recentAccuracy}%`;
     }
 
     function bayesianPrediction() {
@@ -705,12 +717,106 @@
       return bestPrediction;
     }
 
+    function chatGPTPrediction() {
+      let bestPrediction = { predict: 'P', confidence: 50, score: 0 };
+      const threshold = getDynamicConfidenceThreshold();
+      
+      for (let n = 6; n >= 2; n--) {
+        if (state.history.length >= n) {
+          const key = state.history.slice(-n + 1).join('');
+          if (state.patternMemory[key]) {
+            let p = state.patternMemory[key].P || 0;
+            let b = state.patternMemory[key].B || 0;
+            const total = p + b;
+            if (total > 0) {
+              const recencyWeight = 1 / (state.history.length - state.history.lastIndexOf(key) + 1);
+              const frequencyWeight = total / (state.wins + state.losses + 1);
+              const score = recencyWeight * frequencyWeight * (n / 6);
+              
+              const confidence = Math.round(100 * Math.max(p / total, b / total));
+              const predict = p > b ? 'P' : 'B';
+              
+              if (score > bestPrediction.score && confidence > threshold) {
+                bestPrediction = { predict, confidence, score };
+              }
+            }
+          }
+        }
+      }
+      
+      return bestPrediction;
+    }
+
+    function grokPrediction() {
+      let bestPrediction = { predict: 'P', confidence: 50, score: 0 };
+      const threshold = getDynamicConfidenceThreshold();
+      const shoeType = getShoeType();
+      const trueCount = calculateTrueCount();
+      
+      let baseP = 0.4462;
+      let baseB = 0.4586;
+      if (shoeType === 'Streak' && state.history.length > 0) {
+        if (state.history[state.history.length - 1] === 'P') baseP *= 1.3;
+        else if (state.history[state.history.length - 1] === 'B') baseB *= 1.3;
+      } else if (shoeType === 'Chop') {
+        if (state.history[state.history.length - 1] === 'P') baseB *= 1.3;
+        else if (state.history[state.history.length - 1] === 'B') baseP *= 1.3;
+      }
+      if (trueCount > 1) baseB += 0.03 * trueCount;
+      else if (trueCount < -1) baseP += 0.03 * Math.abs(trueCount);
+      
+      const total = baseP + baseB;
+      baseP /= total;
+      baseB /= total;
+      
+      for (let n = 5; n >= 2; n--) {
+        if (state.history.length >= n) {
+          const key = state.history.slice(-n + 1).join('');
+          if (state.patternMemory[key]) {
+            let p = state.patternMemory[key].P || 0;
+            let b = state.patternMemory[key].B || 0;
+            const totalCounts = p + b;
+            if (totalCounts > 0) {
+              p = (p + 1 * baseP) / (totalCounts + 1);
+              b = (b + 1 * baseB) / (totalCounts + 1);
+              const confidence = Math.round(100 * Math.max(p, b));
+              const predict = p > b ? 'P' : 'B';
+              const score = (n / 5) * (totalCounts / (state.wins + state.losses + 1));
+              
+              if (score > bestPrediction.score && confidence > threshold) {
+                bestPrediction = { predict, confidence, score };
+              }
+            }
+          }
+        }
+      }
+      
+      return bestPrediction;
+    }
+
+    function selectPredictionAlgorithm() {
+      const recentAccuracy = calculateRecentAccuracy();
+      if (state.accuracyWindow.length >= 10 && recentAccuracy < 0.4) {
+        state.useAltAlgo = true;
+        state.altAlgoCount++;
+        state.altAlgoType = state.altAlgoCount % 2 === 0 ? 'chatgpt' : 'grok';
+      } else if (state.useAltAlgo && (recentAccuracy > 0.6 || state.altAlgoCount >= 5)) {
+        state.useAltAlgo = false;
+        state.altAlgoCount = 0;
+      }
+      
+      if (state.useAltAlgo) {
+        return state.altAlgoType === 'chatgpt' ? chatGPTPrediction() : grokPrediction();
+      }
+      return bayesianPrediction();
+    }
+
     function recordResult(result) {
       if (!state.baseUnit || !state.startBankroll) {
         showMessage('Set bankroll/unit first');
         return;
       }
-      const prediction = bayesianPrediction();
+      const prediction = selectPredictionAlgorithm();
       snapshots.push(JSON.parse(JSON.stringify(state)));
       
       // Automatic card counting
@@ -755,6 +861,9 @@
       learnPattern(result);
       const outcome = result === prediction.predict ? 'win' : 'loss';
       state.outcomes.push(outcome === 'win' ? 'W' : 'L');
+      state.accuracyWindow.push(outcome === 'win' ? 'W' : 'L');
+      if (state.accuracyWindow.length > 10) state.accuracyWindow.shift();
+      
       if (outcome === 'win') {
         handleWin();
         state.wins++;
@@ -791,6 +900,10 @@
         state.patternMemory = {};
         state.predictionPerformance = { 2: { correct: 0, total: 0 }, 3: { correct: 0, total: 0 }, 4: { correct: 0, total: 0 }, 5: { correct: 0, total: 0 } };
         state.cardCounts = { low: 0, high: 0, totalCards: 0, decks: 8 };
+        state.accuracyWindow = [];
+        state.altAlgoCount = 0;
+        state.useAltAlgo = false;
+        state.altAlgoType = 'chatgpt';
         saveMemoryFast();
         document.getElementById('prediction').innerText = 'Waiting for input...';
         document.getElementById('shoeType').innerText = 'Detected Pattern: N/A';
@@ -806,6 +919,10 @@
         state.wins = 0;
         state.losses = 0;
         state.outcomes = [];
+        state.accuracyWindow = [];
+        state.altAlgoCount = 0;
+        state.useAltAlgo = false;
+        state.altAlgoType = 'chatgpt';
         saveMemoryFast();
         updateDisplay();
       }
@@ -816,6 +933,10 @@
         snapshots.push(JSON.parse(JSON.stringify(state)));
         state.patternMemory = {};
         state.predictionPerformance = { 2: { correct: 0, total: 0 }, 3: { correct: 0, total: 0 }, 4: { correct: 0, total: 0 }, 5: { correct: 0, total: 0 } };
+        state.accuracyWindow = [];
+        state.altAlgoCount = 0;
+        state.useAltAlgo = false;
+        state.altAlgoType = 'chatgpt';
         saveMemoryFast();
         updateDisplay();
       }
@@ -848,6 +969,10 @@
       state.patternMemory = {};
       state.predictionPerformance = { 2: { correct: 0, total: 0 }, 3: { correct: 0, total: 0 }, 4: { correct: 0, total: 0 }, 5: { correct: 0, total: 0 } };
       state.cardCounts = { low: 0, high: 0, totalCards: 0, decks: 8 };
+      state.accuracyWindow = [];
+      state.altAlgoCount = 0;
+      state.useAltAlgo = false;
+      state.altAlgoType = 'chatgpt';
       saveMemoryFast();
       updateDisplay();
       updateCardCountDisplay();
@@ -916,7 +1041,7 @@
         }
         historyDiv.appendChild(cell);
       });
-      const prediction = bayesianPrediction();
+      const prediction = selectPredictionAlgorithm();
       if (prediction.confidence <= getDynamicConfidenceThreshold()) {
         predDiv.innerText = `Waiting for strong signal (threshold: ${getDynamicConfidenceThreshold()}%)...`;
         shoeDiv.innerText = 'Detected Pattern: N/A';
@@ -934,7 +1059,8 @@
       }
       const accuracy = state.predictionPerformance[sequenceLength].total > 0 ? 
         ((state.predictionPerformance[sequenceLength].correct / state.predictionPerformance[sequenceLength].total) * 100).toFixed(1) : 'N/A';
-      predDiv.innerText = `Prediction: ${prediction.predict === 'P' ? 'Player' : 'Banker'} (${prediction.confidence}%) [Seq: ${sequenceLength}, Acc: ${accuracy}%]`;
+      const algoName = state.useAltAlgo ? (state.altAlgoType === 'chatgpt' ? 'ChatGPT Algorithm' : 'Grok Algorithm') : 'Bayesian Algorithm';
+      predDiv.innerText = `Prediction: ${prediction.predict === 'P' ? 'Player' : 'Banker'} (${prediction.confidence}%) [Seq: ${sequenceLength}, Acc: ${accuracy}%] Using ${algoName}`;
       let streaks = 0;
       for (let i = 1; i < state.history.length; i++) {
         if (state.history[i] === state.history[i - 1]) streaks++;
@@ -1016,6 +1142,10 @@
             state.patternMemory = saved.patternMemory || {};
             state.predictionPerformance = saved.predictionPerformance || { 2: { correct: 0, total: 0 }, 3: { correct: 0, total: 0 }, 4: { correct: 0, total: 0 }, 5: { correct: 0, total: 0 } };
             state.cardCounts = saved.cardCounts || { low: 0, high: 0, totalCards: 0, decks: 8 };
+            state.accuracyWindow = Array.isArray(saved.accuracyWindow) ? saved.accuracyWindow : [];
+            state.altAlgoCount = Number(saved.altAlgoCount) || 0;
+            state.useAltAlgo = saved.useAltAlgo || false;
+            state.altAlgoType = saved.altAlgoType || 'chatgpt';
             const subscriptionEnd = Number.isInteger(userDoc.data().subscriptionEnd) ? userDoc.data().subscriptionEnd : null;
             document.getElementById('subscriptionStatus').innerText = subscriptionEnd ? 
               `Subscription: Active until ${DateTime.fromMillis(subscriptionEnd, { zone: 'Asia/Manila' }).toLocaleString(DateTime.DATETIME_FULL)}` : 
