@@ -729,6 +729,25 @@
       return { predict: 'P', confidence: 50 };
     }
 
+    function generateLossSuggestions() {
+      const recentOutcomes = state.outcomes.slice(-3);
+      const isLosingStreak = recentOutcomes.length >= 3 && recentOutcomes.every(o => o === 'L');
+      const cycleProfit = state.betState.cycleProfit;
+      if (isLosingStreak || cycleProfit < -2) {
+        const suggestions = [];
+        suggestions.push("Consider pausing to reassess the game pattern.");
+        if (state.betState.currentBetUnits > 1) {
+          suggestions.push("Try resetting your bet to the base unit to minimize risk (click Reset Bet).");
+        }
+        if (state.baseUnit > state.startBankroll * 0.01) {
+          suggestions.push("Reduce your base unit to manage losses in the Bet Controls.");
+        }
+        suggestions.push("Wait for a stronger signal (check Detected Pattern below).");
+        return suggestions.join(" ");
+      }
+      return "";
+    }
+
     function recordResult(result) {
       const errorMessage = document.getElementById('errorMessage');
       errorMessage.innerText = '';
@@ -773,9 +792,14 @@
       if (outcome === 'win') {
         handleWin();
         state.wins++;
+        errorMessage.innerText = ''; // Clear suggestions on win
       } else {
         handleLoss();
         state.losses++;
+        const suggestions = generateLossSuggestions();
+        if (suggestions) {
+          errorMessage.innerText = suggestions;
+        }
       }
       if (state.stopProfitEffective > 0 && state.currentBankroll - state.startBankroll >= state.stopProfitEffective) {
         state.stopProfitReached = true;
@@ -1093,7 +1117,7 @@
         }
       }
       if (prediction.confidence <= gameConfig.confidenceThreshold) {
-        predDiv.innerText = ''; // Clear prediction display
+        predDiv.innerText = '';
         predDiv.classList.remove('player', 'banker');
         shoeDiv.innerText = 'Detected Pattern: N/A';
       } else {
