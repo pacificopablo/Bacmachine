@@ -201,7 +201,7 @@
   </style>
 </head>
 <body>
-  <div class="container" id="appContainer">
+  <div class="container hidden" id="appContainer">
     <h1>BFC VIP</h1>
     <div class="section" id="subscriptionStatus">Subscription: -</div>
     <div class="error" id="errorMessage"></div>
@@ -1095,12 +1095,26 @@
     }
 
     function clearAll() {
-      if (confirm('Reset all data for new shoe?')) {
+      if (confirm('Reset memory for new shoe? Bankroll, wager, profit, and money management will be preserved.')) {
         snapshots.push(JSON.parse(JSON.stringify(state)));
+        // Preserve financial and betting-related state
+        const preservedState = {
+          currentBankroll: state.currentBankroll,
+          startBankroll: state.startBankroll,
+          baseUnit: state.baseUnit,
+          betState: { ...state.betState },
+          mmSystem: state.mmSystem,
+          stopProfitType: state.stopProfitType,
+          stopProfitValue: state.stopProfitValue,
+          stopProfitEffective: state.stopProfitEffective,
+          stopProfitReached: state.stopProfitReached,
+          wins: state.wins,
+          losses: state.losses,
+          selectedAlgorithms: state.selectedAlgorithms // Preserve for admins
+        };
+        // Reset memory-related state
         state.history = [];
         state.outcomes = [];
-        state.wins = 0;
-        state.losses = 0;
         state.patternMemory = {};
         state.predictionPerformance = { 2: { correct: 0, total: 0 }, 3: { correct: 0, total: 0 }, 4: { correct: 0, total: 0 }, 5: { correct: 0, total: 0 } };
         state.cardCounts = { low: 0, high: 0, totalCards: 0, decks: 8 };
@@ -1108,6 +1122,8 @@
         state.altAlgoCount = 0;
         state.useAltAlgo = false;
         state.altAlgoType = 'chatgpt';
+        // Restore preserved state
+        Object.assign(state, preservedState);
         saveMemoryFast();
         document.getElementById('prediction').innerText = 'Waiting for input...';
         document.getElementById('shoeType').innerText = 'Detected Pattern: N/A';
