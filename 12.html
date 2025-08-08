@@ -177,10 +177,6 @@
     .admin-panel button {
       background-color: #dc3545;
     }
-    #cardInputSection {
-      justify-content: center;
-      margin-top: 10px;
-    }
     #cardCountDisplay {
       text-align: center;
       font-size: 1rem;
@@ -215,42 +211,6 @@
     <div class="shoe-type" id="cardCountDisplay">Card Count: N/A</div>
     <div class="section">Showing last 10 results</div>
     <div class="history" id="historyDisplay"></div>
-
-    <div class="section">Enter Card Values</div>
-    <div class="flex-row collapsible" id="cardInputSection">
-      <label><span>Player Points</span>
-        <select id="playerPoints" aria-label="Player hand points">
-          <option value="">Select</option>
-          <option value="0">0</option>
-          <option value="1">1</option>
-          <option value="2">2</option>
-          <option value="3">3</option>
-          <option value="4">4</option>
-          <option value="5">5</option>
-          <option value="6">6</option>
-          <option value="7">7</option>
-          <option value="8">8</option>
-          <option value="9">9</option>
-        </select>
-      </label>
-      <label><span>Banker Points</span>
-        <select id="bankerPoints" aria-label="Banker hand points">
-          <option value="">Select</option>
-          <option value="0">0</option>
-          <option value="1">1</option>
-          <option value="2">2</option>
-          <option value="3">3</option>
-          <option value="4">4</option>
-          <option value="5">5</option>
-          <option value="6">6</option>
-          <option value="7">7</option>
-          <option value="8">8</option>
-          <option value="9">9</option>
-        </select>
-      </label>
-      <button class="set-bet" onclick="recordCards()" aria-label="Record card points">Record Cards</button>
-    </div>
-    <button class="toggle-section" onclick="toggleCardInput()" aria-label="Toggle card input section">Show Card Input</button>
 
     <div class="stats">
       <div class="section" id="currentWager">💵 Current Bet: 0</div>
@@ -654,6 +614,33 @@
       return runningCount / remainingDecks;
     }
 
+    function estimateCardsDrawn(result) {
+      let low = 0, high = 0, total = 4; // Default: 2 cards each for Player and Banker
+      if (result === 'P') {
+        // Player wins often involve low points (0-4), suggesting low cards
+        low += 1; // Assume one low card for Player
+        high += 0.5; // Assume half a high card for Banker
+        if (Math.random() < 0.4) total = 6; // ~40% chance of third card
+      } else if (result === 'B') {
+        // Banker wins often involve high points (6-9), suggesting high cards
+        high += 1; // Assume one high card for Banker
+        low += 0.5; // Assume half a low card for Player
+        if (Math.random() < 0.4) total = 6; // ~40% chance of third card
+      } else if (result === 'T') {
+        // Ties often involve mid-range cards (6-8) or high cards
+        high += 1; // Assume one high card
+        total = Math.random() < 0.3 ? 6 : 4; // ~30% chance of third card
+      }
+      return { low, high, total };
+    }
+
+    function updateCardCountDisplay() {
+      const trueCount = calculateTrueCount();
+      const remainingDecks = (state.cardCounts.decks * 52 - state.cardCounts.totalCards) / 52;
+      document.getElementById('cardCountDisplay').innerText = 
+        `Card Count: Low=${state.cardCounts.low.toFixed(1)}, High=${state.cardCounts.high.toFixed(1)}, True Count=${trueCount.toFixed(2)}, Decks Remaining=${remainingDecks.toFixed(1)}`;
+    }
+
     function bayesianPrediction() {
       let bestPrediction = { predict: 'P', confidence: 50, score: 0 };
       const threshold = getDynamicConfidenceThreshold();
@@ -718,45 +705,6 @@
       return bestPrediction;
     }
 
-    function recordCards() {
-      const playerPoints = parseInt(document.getElementById('playerPoints').value);
-      const bankerPoints = parseInt(document.getElementById('bankerPoints').value);
-      if (isNaN(playerPoints) || isNaN(bankerPoints)) {
-        showMessage('Please select valid Player and Banker points');
-        return;
-      }
-      snapshots.push(JSON.parse(JSON.stringify(state)));
-      
-      const cardsDrawn = estimateCardsDrawn(playerPoints, bankerPoints);
-      state.cardCounts.low += cardsDrawn.low;
-      state.cardCounts.high += cardsDrawn.high;
-      state.cardCounts.totalCards += cardsDrawn.total;
-      
-      saveMemoryFast();
-      updateCardCountDisplay();
-      document.getElementById('playerPoints').value = '';
-      document.getElementById('bankerPoints').value = '';
-    }
-
-    function estimateCardsDrawn(playerPoints, bankerPoints) {
-      let low = 0, high = 0, total = 4;
-      if (playerPoints <= 5 || bankerPoints <= 5) total = 6;
-      
-      if (playerPoints <= 4) low += 1;
-      else if (playerPoints >= 5) high += 1;
-      if (bankerPoints <= 4) low += 1;
-      else if (bankerPoints >= 5) high += 1;
-      
-      return { low, high, total };
-    }
-
-    function updateCardCountDisplay() {
-      const trueCount = calculateTrueCount();
-      const remainingDecks = (state.cardCounts.decks * 52 - state.cardCounts.totalCards) / 52;
-      document.getElementById('cardCountDisplay').innerText = 
-        `Card Count: Low=${state.cardCounts.low}, High=${state.cardCounts.high}, True Count=${trueCount.toFixed(2)}, Decks Remaining=${remainingDecks.toFixed(1)}`;
-    }
-
     function recordResult(result) {
       if (!state.baseUnit || !state.startBankroll) {
         showMessage('Set bankroll/unit first');
@@ -765,11 +713,17 @@
       const prediction = bayesianPrediction();
       snapshots.push(JSON.parse(JSON.stringify(state)));
       
+      // Automatic card counting
+      const cardsDrawn = estimateCardsDrawn(result);
+      state.cardCounts.low += cardsDrawn.low;
+      state.cardCounts.high += cardsDrawn.high;
+      state.cardCounts.totalCards += cardsDrawn.total;
+      updateCardCountDisplay();
+      
       if (result === 'T') {
         state.history.push('T');
         learnPattern('T');
-        showMessage('Tie recorded. No wager placed. Enter card points.');
-        toggleCardInput(true);
+        showMessage('Tie recorded. No wager placed.');
         saveMemoryFast();
         updateDisplay();
         return;
@@ -778,8 +732,7 @@
       if (prediction.confidence <= getDynamicConfidenceThreshold()) {
         state.history.push(result);
         learnPattern(result);
-        showMessage(`No strong prediction (confidence ≤ ${getDynamicConfidenceThreshold()}%). No wager placed. Enter card points.`);
-        toggleCardInput(true);
+        showMessage(`No strong prediction (confidence ≤ ${getDynamicConfidenceThreshold()}%). No wager placed.`);
         saveMemoryFast();
         updateDisplay();
         return;
@@ -813,7 +766,6 @@
         state.stopProfitReached = true;
       }
       
-      toggleCardInput(true);
       saveMemoryFast();
       updateDisplay();
     }
@@ -1084,18 +1036,6 @@
       button.innerText = section.classList.contains('show') ? 'Hide Advanced' : 'Show Advanced';
     }
 
-    function toggleCardInput(show = false) {
-      const section = document.getElementById('cardInputSection');
-      const button = document.querySelector('.toggle-section[onclick="toggleCardInput()"]');
-      if (show) {
-        section.classList.add('show');
-        button.innerText = 'Hide Card Input';
-      } else {
-        section.classList.toggle('show');
-        button.innerText = section.classList.contains('show') ? 'Hide Card Input' : 'Show Card Input';
-      }
-    }
-
     window.signOutUser = signOutUser;
     window.createUser = createUser;
     window.updateUserSubscription = updateUserSubscription;
@@ -1104,7 +1044,6 @@
     window.extendSubscriptionFor = extendSubscriptionFor;
     window.deleteUser = deleteUser;
     window.recordResult = recordResult;
-    window.recordCards = recordCards;
     window.undo = undo;
     window.clearAll = clearAll;
     window.resetStats = resetStats;
@@ -1114,7 +1053,6 @@
     window.saveMemory = saveMemory;
     window.loadMemory = loadMemory;
     window.toggleAdvanced = toggleAdvanced;
-    window.toggleCardInput = toggleCardInput;
   </script>
 </body>
 </html>
