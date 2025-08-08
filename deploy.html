@@ -359,6 +359,12 @@
     const db = getFirestore(app);
     const analytics = getAnalytics(app);
 
+    let globalSelectedAlgorithms = ['bayesian']; // Default to Bayesian
+    let isAdmin = false;
+    let onlineUsersUnsubscribe = null;
+    let accuracyUnsubscribe = null;
+    let globalSettingsUnsubscribe = null;
+
     function showMessage(message) {
       const errorMessage = document.getElementById('errorMessage');
       errorMessage.innerText = message;
@@ -416,7 +422,7 @@
             useAltAlgo: false,
             altAlgoType: 'chatgpt',
             mmSystem: 'default',
-            selectedAlgorithms: []
+            selectedAlgorithms: [] // Not used for non-admins
           }
         });
         showMessage('User created successfully');
@@ -598,7 +604,6 @@
             const accuracyWindow = state.accuracyWindow || [];
             const altAlgoType = state.altAlgoType || 'chatgpt';
 
-            // Bayesian accuracy: aggregate across sequence lengths
             let bayesianCorrect = 0, bayesianTotal = 0;
             for (let n = 2; n <= 5; n++) {
               bayesianCorrect += predictionPerformance[n]?.correct || 0;
@@ -606,7 +611,6 @@
             }
             const bayesianAccuracy = bayesianTotal > 0 ? (bayesianCorrect / bayesianTotal * 100).toFixed(1) + '%' : 'N/A';
 
-            // ChatGPT and Grok accuracy: estimate from accuracyWindow when altAlgoType matches
             let chatgptCorrect = 0, chatgptTotal = 0, grokCorrect = 0, grokTotal = 0;
             let currentAlgo = 'bayesian';
             accuracyWindow.forEach(outcome => {
@@ -642,9 +646,26 @@
       }
     }
 
-    let isAdmin = false;
-    let onlineUsersUnsubscribe = null;
-    let accuracyUnsubscribe = null;
+    function loadGlobalSettings() {
+      try {
+        const unsubscribe = onSnapshot(doc(db, 'settings', 'global'), (docSnapshot) => {
+          if (docSnapshot.exists()) {
+            globalSelectedAlgorithms = docSnapshot.data().selectedAlgorithms || ['bayesian'];
+          } else {
+            globalSelectedAlgorithms = ['bayesian'];
+            setDoc(doc(db, 'settings', 'global'), { selectedAlgorithms: globalSelectedAlgorithms }, { merge: true });
+          }
+          if (!isAdmin) {
+            updatePrediction();
+          }
+        });
+        return unsubscribe;
+      } catch (error) {
+        showMessage('Error loading global settings: ' + error.message);
+        globalSelectedAlgorithms = ['bayesian'];
+      }
+    }
+
     onAuthStateChanged(auth, async user => {
       const errorMessage = document.getElementById('errorMessage');
       errorMessage.innerText = '';
@@ -666,11 +687,12 @@
                 loadUsers();
                 onlineUsersUnsubscribe = loadOnlineUsers();
                 accuracyUnsubscribe = loadAlgorithmAccuracy();
-                const selectedAlgorithms = userData.state?.selectedAlgorithms || [];
+                const selectedAlgorithms = userData.state?.selectedAlgorithms || globalSelectedAlgorithms;
                 document.getElementById('bayesianCheckbox').checked = selectedAlgorithms.includes('bayesian');
                 document.getElementById('chatgptCheckbox').checked = selectedAlgorithms.includes('chatgpt');
                 document.getElementById('grokCheckbox').checked = selectedAlgorithms.includes('grok');
               }
+              globalSettingsUnsubscribe = loadGlobalSettings();
               loadMemory();
             } else {
               await setDoc(doc(db, 'users', user.uid), { isOnline: false }, { merge: true });
@@ -695,6 +717,10 @@
         if (accuracyUnsubscribe) {
           accuracyUnsubscribe();
           accuracyUnsubscribe = null;
+        }
+        if (globalSettingsUnsubscribe) {
+          globalSettingsUnsubscribe();
+          globalSettingsUnsubscribe = null;
         }
         window.location.href = 'login.html';
       }
@@ -728,7 +754,7 @@
       useAltAlgo: false,
       altAlgoType: 'chatgpt',
       mmSystem: 'default',
-      selectedAlgorithms: []
+      selectedAlgorithms: [] // Only used for admins
     };
     let snapshots = [];
     let saveTimeout = null;
@@ -790,18 +816,18 @@
     }
 
     function estimateCardsDrawn(result) {
-      let low = 0, high = 0, total = 4; // Default: 2 cards each for Player and Banker
+      let low = 0, high = 0, total = 4;
       if (result === 'P') {
-        low += 1; // Assume one low card for Player
-        high += 0.5; // Assume half a high card for Banker
-        if (Math.random() < 0.4) total = 6; // ~40% chance of third card
+        low += 1;
+        high += 0.5;
+        if (Math.random() < 0.4) total = 6;
       } else if (result === 'B') {
-        high += 1; // Assume one high card for Banker
-        low += 0.5; // Assume half a low card for Player
-        if (Math.random() < 0.4) total = 6; // ~40% chance of third card
+        high += 1;
+        low += 0.5;
+        if (Math.random() < 0.4) total = 6;
       } else if (result === 'T') {
-        high += 1; // Assume one high card
-        total = Math.random() < 0.3 ? 6 : 4; // ~30% chance of third card
+        high += 1;
+        total = Math.random() < 0.3 ? 6 : 4;
       }
       return { low, high, total };
     }
@@ -963,45 +989,33 @@
     }
 
     function selectPredictionAlgorithm() {
-      if (isAdmin && state.selectedAlgorithms.length > 0) {
-        const predictions = [];
-        if (state.selectedAlgorithms.includes('bayesian')) predictions.push(bayesianPrediction());
-        if (state.selectedAlgorithms.includes('chatgpt')) predictions.push(chatGPTPrediction());
-        if (state.selectedAlgorithms.includes('grok')) predictions.push(grokPrediction());
-        return predictions.reduce((best, current) => 
-          current.confidence > best.confidence ? current : best, 
-          { predict: 'P', confidence: 0, score: 0, algo: 'bayesian' }
-        );
-      }
-      const recentAccuracy = calculateRecentAccuracy();
-      if (state.accuracyWindow.length >= 10 && recentAccuracy < 0.4) {
-        state.useAltAlgo = true;
-        state.altAlgoCount++;
-        state.altAlgoType = state.altAlgoCount % 2 === 0 ? 'chatgpt' : 'grok';
-      } else if (state.useAltAlgo && (recentAccuracy > 0.6 || state.altAlgoCount >= 5)) {
-        state.useAltAlgo = false;
-        state.altAlgoCount = 0;
-      }
-      
-      if (state.useAltAlgo) {
-        const pred = state.altAlgoType === 'chatgpt' ? chatGPTPrediction() : grokPrediction();
-        pred.algo = state.altAlgoType;
-        return pred;
-      }
-      return bayesianPrediction();
+      const algorithms = isAdmin ? (state.selectedAlgorithms.length > 0 ? state.selectedAlgorithms : ['bayesian']) : globalSelectedAlgorithms;
+      const predictions = [];
+      if (algorithms.includes('bayesian')) predictions.push(bayesianPrediction());
+      if (algorithms.includes('chatgpt')) predictions.push(chatGPTPrediction());
+      if (algorithms.includes('grok')) predictions.push(grokPrediction());
+      return predictions.reduce((best, current) => 
+        current.confidence > best.confidence ? current : best, 
+        { predict: 'P', confidence: 0, score: 0, algo: 'bayesian' }
+      );
     }
 
-    function setAlgorithms() {
+    async function setAlgorithms() {
       if (!isAdmin) return;
       const selectedAlgorithms = [];
       if (document.getElementById('bayesianCheckbox').checked) selectedAlgorithms.push('bayesian');
       if (document.getElementById('chatgptCheckbox').checked) selectedAlgorithms.push('chatgpt');
       if (document.getElementById('grokCheckbox').checked) selectedAlgorithms.push('grok');
       state.selectedAlgorithms = selectedAlgorithms;
-      saveMemoryFast();
-      updatePrediction();
-      showMessage(`Selected algorithms: ${selectedAlgorithms.length > 0 ? selectedAlgorithms.join(', ') : 'None (Auto)'}`);
-      logEvent(analytics, 'set_algorithms', { algorithms: selectedAlgorithms });
+      try {
+        await setDoc(doc(db, 'settings', 'global'), { selectedAlgorithms: selectedAlgorithms.length > 0 ? selectedAlgorithms : ['bayesian'] }, { merge: true });
+        saveMemoryFast();
+        updatePrediction();
+        showMessage(`Selected algorithms: ${selectedAlgorithms.length > 0 ? selectedAlgorithms.join(', ') : 'Bayesian (default)'}`);
+        logEvent(analytics, 'set_algorithms', { algorithms: selectedAlgorithms });
+      } catch (error) {
+        showMessage('Error saving algorithm selection: ' + error.message);
+      }
     }
 
     function recordResult(result) {
@@ -1012,7 +1026,6 @@
       const prediction = selectPredictionAlgorithm();
       snapshots.push(JSON.parse(JSON.stringify(state)));
       
-      // Automatic card counting
       const cardsDrawn = estimateCardsDrawn(result);
       state.cardCounts.low += cardsDrawn.low;
       state.cardCounts.high += cardsDrawn.high;
@@ -1171,7 +1184,7 @@
 
     function calculatePlusX(number) {
       if (number < 10) return 1;
-      return parseInt(String(number).slice(0, -1)) || 1; // Remove last digit
+      return parseInt(String(number).slice(0, -1)) || 1;
     }
 
     function handleWin() {
@@ -1188,7 +1201,7 @@
           state.betState.previousLosses = [];
         } else {
           if (state.betState.previousLosses.length > 0) {
-            state.betState.previousLosses.shift(); // Cross off the first loss
+            state.betState.previousLosses.shift();
           }
           const lastLoss = state.betState.previousLosses.length > 0 ? state.betState.previousLosses[0] : 1;
           state.betState.currentBetUnits = lastLoss + calculatePlusX(lastLoss);
@@ -1197,7 +1210,7 @@
         state.betState.totalProfit += state.betState.currentBetUnits;
         state.betState.cycleProfit += state.betState.currentBetUnits;
         if (state.betState.previousLosses.length > 0) {
-          state.betState.previousLosses.shift(); // Cross off the first loss
+          state.betState.previousLosses.shift();
         }
         if (state.betState.cycleProfit >= 1) {
           state.betState.currentBetUnits = 1;
@@ -1223,7 +1236,7 @@
         state.betState.totalProfit -= state.betState.currentBetUnits;
         state.betState.cycleProfit -= state.betState.currentBetUnits;
         if (state.betState.previousLosses.length === 0) {
-          state.betState.previousLosses.push(state.baseUnit / state.baseUnit); // Use base bet in units
+          state.betState.previousLosses.push(state.baseUnit / state.baseUnit);
         } else {
           const nextLoss = state.betState.previousLosses[0];
           const x = calculatePlusX(nextLoss);
@@ -1295,9 +1308,7 @@
         }
         const accuracy = state.predictionPerformance[sequenceLength].total > 0 ? 
           ((state.predictionPerformance[sequenceLength].correct / state.predictionPerformance[sequenceLength].total) * 100).toFixed(1) : 'N/A';
-        const algoName = state.selectedAlgorithms.length > 0 ? 
-          (prediction.algo.charAt(0).toUpperCase() + prediction.algo.slice(1) + ' Algorithm') : 
-          (state.useAltAlgo ? (state.altAlgoType === 'chatgpt' ? 'ChatGPT Algorithm' : 'Grok Algorithm') : 'Bayesian Algorithm');
+        const algoName = prediction.algo.charAt(0).toUpperCase() + prediction.algo.slice(1) + ' Algorithm';
         predDiv.innerText = `Prediction: ${prediction.predict === 'P' ? 'Player' : 'Banker'} (${prediction.confidence}%) [Seq: ${sequenceLength}, Acc: ${accuracy}%] Using ${algoName}`;
         let streaks = 0;
         for (let i = 1; i < state.history.length; i++) {
@@ -1384,14 +1395,14 @@
             state.history = Array.isArray(saved.history) ? saved.history : [];
             state.outcomes = Array.isArray(saved.outcomes) ? saved.outcomes : [];
             state.patternMemory = saved.patternMemory || {};
-            state.predictionPerformance = saved.patternMemory || { 2: { correct: 0, total: 0 }, 3: { correct: 0, total: 0 }, 4: { correct: 0, total: 0 }, 5: { correct: 0, total: 0 } };
+            state.predictionPerformance = saved.predictionPerformance || { 2: { correct: 0, total: 0 }, 3: { correct: 0, total: 0 }, 4: { correct: 0, total: 0 }, 5: { correct: 0, total: 0 } };
             state.cardCounts = saved.cardCounts || { low: 0, high: 0, totalCards: 0, decks: 8 };
             state.accuracyWindow = Array.isArray(saved.accuracyWindow) ? saved.accuracyWindow : [];
             state.altAlgoCount = Number(saved.altAlgoCount) || 0;
             state.useAltAlgo = saved.useAltAlgo || false;
             state.altAlgoType = saved.altAlgoType || 'chatgpt';
             state.mmSystem = saved.mmSystem || 'default';
-            state.selectedAlgorithms = Array.isArray(saved.selectedAlgorithms) ? saved.selectedAlgorithms : [];
+            state.selectedAlgorithms = isAdmin ? (Array.isArray(saved.selectedAlgorithms) ? saved.selectedAlgorithms : []) : [];
             const subscriptionEnd = Number.isInteger(userDoc.data().subscriptionEnd) ? userDoc.data().subscriptionEnd : null;
             document.getElementById('subscriptionStatus').innerText = subscriptionEnd ? 
               `Subscription: Active until ${DateTime.fromMillis(subscriptionEnd, { zone: 'Asia/Manila' }).toLocaleString(DateTime.DATETIME_FULL)}` : 
