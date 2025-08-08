@@ -186,9 +186,16 @@
     }
     .online { background-color: #28a745; }
     .offline { background-color: #dc3545; }
+    .algorithm-checkboxes {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 15px;
+      justify-content: center;
+    }
     @media (max-width: 500px) {
       .flex-row { flex-direction: column; align-items: stretch; }
       .bet-controls { flex-direction: column; align-items: stretch; }
+      .algorithm-checkboxes { flex-direction: column; align-items: center; }
       input[type=number], input[type=datetime-local], select, input[type=email], input[type=password] { width: 100%; }
     }
   </style>
@@ -294,16 +301,10 @@
       </div>
       <div class="section">
         <h3>Algorithm Selection</h3>
-        <div class="flex-row">
-          <label>
-            <span>Prediction Algorithm</span>
-            <select id="algorithmSelect" onchange="setAlgorithm()" aria-label="Select prediction algorithm">
-              <option value="auto">Auto</option>
-              <option value="bayesian">Bayesian</option>
-              <option value="chatgpt">ChatGPT</option>
-              <option value="grok">Grok</option>
-            </select>
-          </label>
+        <div class="flex-row algorithm-checkboxes">
+          <label><input type="checkbox" id="bayesianCheckbox" onchange="setAlgorithms()" aria-label="Use Bayesian algorithm">Bayesian</label>
+          <label><input type="checkbox" id="chatgptCheckbox" onchange="setAlgorithms()" aria-label="Use ChatGPT algorithm">ChatGPT</label>
+          <label><input type="checkbox" id="grokCheckbox" onchange="setAlgorithms()" aria-label="Use Grok algorithm">Grok</label>
         </div>
       </div>
       <div class="section">
@@ -401,7 +402,7 @@
             useAltAlgo: false,
             altAlgoType: 'chatgpt',
             mmSystem: 'default',
-            selectedAlgorithm: 'auto'
+            selectedAlgorithms: []
           }
         });
         showMessage('User created successfully');
@@ -590,7 +591,10 @@
               if (isAdmin) {
                 loadUsers();
                 onlineUsersUnsubscribe = loadOnlineUsers();
-                document.getElementById('algorithmSelect').value = userData.state?.selectedAlgorithm || 'auto';
+                const selectedAlgorithms = userData.state?.selectedAlgorithms || [];
+                document.getElementById('bayesianCheckbox').checked = selectedAlgorithms.includes('bayesian');
+                document.getElementById('chatgptCheckbox').checked = selectedAlgorithms.includes('chatgpt');
+                document.getElementById('grokCheckbox').checked = selectedAlgorithms.includes('grok');
               }
               loadMemory();
             } else {
@@ -645,7 +649,7 @@
       useAltAlgo: false,
       altAlgoType: 'chatgpt',
       mmSystem: 'default',
-      selectedAlgorithm: 'auto'
+      selectedAlgorithms: []
     };
     let snapshots = [];
     let saveTimeout = null;
@@ -739,7 +743,7 @@
     }
 
     function bayesianPrediction() {
-      let bestPrediction = { predict: 'P', confidence: 50, score: 0 };
+      let bestPrediction = { predict: 'P', confidence: 50, score: 0, algo: 'bayesian' };
       const threshold = getDynamicConfidenceThreshold();
       const priorP = 0.4462;
       const priorB = 0.4586;
@@ -792,7 +796,7 @@
               const predict = posteriorP > posteriorB ? 'P' : 'B';
               
               if (score > bestPrediction.score && confidence > threshold) {
-                bestPrediction = { predict, confidence, score };
+                bestPrediction = { predict, confidence, score, algo: 'bayesian' };
               }
             }
           }
@@ -803,7 +807,7 @@
     }
 
     function chatGPTPrediction() {
-      let bestPrediction = { predict: 'P', confidence: 50, score: 0 };
+      let bestPrediction = { predict: 'P', confidence: 50, score: 0, algo: 'chatgpt' };
       const threshold = getDynamicConfidenceThreshold();
       
       for (let n = 6; n >= 2; n--) {
@@ -822,7 +826,7 @@
               const predict = p > b ? 'P' : 'B';
               
               if (score > bestPrediction.score && confidence > threshold) {
-                bestPrediction = { predict, confidence, score };
+                bestPrediction = { predict, confidence, score, algo: 'chatgpt' };
               }
             }
           }
@@ -833,7 +837,7 @@
     }
 
     function grokPrediction() {
-      let bestPrediction = { predict: 'P', confidence: 50, score: 0 };
+      let bestPrediction = { predict: 'P', confidence: 50, score: 0, algo: 'grok' };
       const threshold = getDynamicConfidenceThreshold();
       const shoeType = getShoeType();
       const trueCount = calculateTrueCount();
@@ -869,7 +873,7 @@
               const score = (n / 5) * (totalCounts / (state.wins + state.losses + 1));
               
               if (score > bestPrediction.score && confidence > threshold) {
-                bestPrediction = { predict, confidence, score };
+                bestPrediction = { predict, confidence, score, algo: 'grok' };
               }
             }
           }
@@ -880,10 +884,15 @@
     }
 
     function selectPredictionAlgorithm() {
-      if (isAdmin && state.selectedAlgorithm !== 'auto') {
-        if (state.selectedAlgorithm === 'bayesian') return bayesianPrediction();
-        if (state.selectedAlgorithm === 'chatgpt') return chatGPTPrediction();
-        if (state.selectedAlgorithm === 'grok') return grokPrediction();
+      if (isAdmin && state.selectedAlgorithms.length > 0) {
+        const predictions = [];
+        if (state.selectedAlgorithms.includes('bayesian')) predictions.push(bayesianPrediction());
+        if (state.selectedAlgorithms.includes('chatgpt')) predictions.push(chatGPTPrediction());
+        if (state.selectedAlgorithms.includes('grok')) predictions.push(grokPrediction());
+        return predictions.reduce((best, current) => 
+          current.confidence > best.confidence ? current : best, 
+          { predict: 'P', confidence: 0, score: 0, algo: 'bayesian' }
+        );
       }
       const recentAccuracy = calculateRecentAccuracy();
       if (state.accuracyWindow.length >= 10 && recentAccuracy < 0.4) {
@@ -896,18 +905,24 @@
       }
       
       if (state.useAltAlgo) {
-        return state.altAlgoType === 'chatgpt' ? chatGPTPrediction() : grokPrediction();
+        const pred = state.altAlgoType === 'chatgpt' ? chatGPTPrediction() : grokPrediction();
+        pred.algo = state.altAlgoType;
+        return pred;
       }
       return bayesianPrediction();
     }
 
-    function setAlgorithm() {
+    function setAlgorithms() {
       if (!isAdmin) return;
-      state.selectedAlgorithm = document.getElementById('algorithmSelect').value;
+      const selectedAlgorithms = [];
+      if (document.getElementById('bayesianCheckbox').checked) selectedAlgorithms.push('bayesian');
+      if (document.getElementById('chatgptCheckbox').checked) selectedAlgorithms.push('chatgpt');
+      if (document.getElementById('grokCheckbox').checked) selectedAlgorithms.push('grok');
+      state.selectedAlgorithms = selectedAlgorithms;
       saveMemoryFast();
       updatePrediction();
-      showMessage(`Prediction algorithm set to ${state.selectedAlgorithm}`);
-      logEvent(analytics, 'set_algorithm', { algorithm: state.selectedAlgorithm });
+      showMessage(`Selected algorithms: ${selectedAlgorithms.length > 0 ? selectedAlgorithms.join(', ') : 'None (Auto)'}`);
+      logEvent(analytics, 'set_algorithms', { algorithms: selectedAlgorithms });
     }
 
     function recordResult(result) {
@@ -1105,12 +1120,14 @@
         if (state.betState.previousLosses.length > 0) {
           state.betState.previousLosses.shift(); // Cross off the first loss
         }
-        if (state.betState.previousLosses.length === 0) {
-          state.betState.currentBetUnits = 1; // Reset to base bet
+        if (state.betState.cycleProfit >= 1) {
+          state.betState.currentBetUnits = 1;
           state.betState.cycleProfit = 0;
-        } else {
+        } else if (state.betState.previousLosses.length > 0) {
           const nextLoss = state.betState.previousLosses[0];
           state.betState.currentBetUnits = nextLoss + calculatePlusX(nextLoss);
+        } else {
+          state.betState.currentBetUnits = 1;
         }
       }
     }
@@ -1135,6 +1152,10 @@
         }
         const nextBet = state.betState.previousLosses[0];
         state.betState.currentBetUnits = nextBet + calculatePlusX(nextBet);
+        if (state.betState.cycleProfit >= 1) {
+          state.betState.currentBetUnits = 1;
+          state.betState.cycleProfit = 0;
+        }
       }
     }
 
@@ -1195,8 +1216,8 @@
         }
         const accuracy = state.predictionPerformance[sequenceLength].total > 0 ? 
           ((state.predictionPerformance[sequenceLength].correct / state.predictionPerformance[sequenceLength].total) * 100).toFixed(1) : 'N/A';
-        const algoName = state.selectedAlgorithm !== 'auto' ? 
-          state.selectedAlgorithm.charAt(0).toUpperCase() + state.selectedAlgorithm.slice(1) + ' Algorithm' : 
+        const algoName = state.selectedAlgorithms.length > 0 ? 
+          (prediction.algo.charAt(0).toUpperCase() + prediction.algo.slice(1) + ' Algorithm') : 
           (state.useAltAlgo ? (state.altAlgoType === 'chatgpt' ? 'ChatGPT Algorithm' : 'Grok Algorithm') : 'Bayesian Algorithm');
         predDiv.innerText = `Prediction: ${prediction.predict === 'P' ? 'Player' : 'Banker'} (${prediction.confidence}%) [Seq: ${sequenceLength}, Acc: ${accuracy}%] Using ${algoName}`;
         let streaks = 0;
@@ -1291,13 +1312,15 @@
             state.useAltAlgo = saved.useAltAlgo || false;
             state.altAlgoType = saved.altAlgoType || 'chatgpt';
             state.mmSystem = saved.mmSystem || 'default';
-            state.selectedAlgorithm = saved.selectedAlgorithm || 'auto';
+            state.selectedAlgorithms = Array.isArray(saved.selectedAlgorithms) ? saved.selectedAlgorithms : [];
             const subscriptionEnd = Number.isInteger(userDoc.data().subscriptionEnd) ? userDoc.data().subscriptionEnd : null;
             document.getElementById('subscriptionStatus').innerText = subscriptionEnd ? 
               `Subscription: Active until ${DateTime.fromMillis(subscriptionEnd, { zone: 'Asia/Manila' }).toLocaleString(DateTime.DATETIME_FULL)}` : 
               'Subscription: Invalid or not set';
             if (isAdmin) {
-              document.getElementById('algorithmSelect').value = state.selectedAlgorithm;
+              document.getElementById('bayesianCheckbox').checked = state.selectedAlgorithms.includes('bayesian');
+              document.getElementById('chatgptCheckbox').checked = state.selectedAlgorithms.includes('chatgpt');
+              document.getElementById('grokCheckbox').checked = state.selectedAlgorithms.includes('grok');
             }
             updateDisplay();
           }
@@ -1336,7 +1359,7 @@
     window.saveMemory = saveMemory;
     window.loadMemory = loadMemory;
     window.toggleAdvanced = toggleAdvanced;
-    window.setAlgorithm = setAlgorithm;
+    window.setAlgorithms = setAlgorithms;
   </script>
 </body>
 </html>
