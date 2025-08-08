@@ -240,7 +240,7 @@
       <button class="undo" onclick="undo()" aria-label="Undo last action">Undo</button>
     </div>
 
-    <div class="prediction" id="prediction">Waiting for input...</div>
+    <div class="prediction" id="prediction"></div>
     <div class="shoe-type" id="shoeType">Detected Pattern: N/A</div>
     <div class="section">Showing last 10 results</div>
     <div class="history" id="historyDisplay"></div>
@@ -807,7 +807,7 @@
       state.patternMemory = {};
       document.getElementById('errorMessage').innerText = '';
       saveMemoryFast();
-      document.getElementById('prediction').innerText = 'Waiting for input...';
+      document.getElementById('prediction').innerText = '';
       document.getElementById('prediction').classList.remove('player', 'banker');
       document.getElementById('shoeType').innerText = 'Detected Pattern: N/A';
       document.getElementById('historyDisplay').innerHTML = '';
@@ -1093,11 +1093,11 @@
         }
       }
       if (prediction.confidence <= gameConfig.confidenceThreshold) {
-        predDiv.innerText = 'Waiting for strong signal...';
+        predDiv.innerText = ''; // Clear prediction display
         predDiv.classList.remove('player', 'banker');
         shoeDiv.innerText = 'Detected Pattern: N/A';
       } else {
-        predDiv.innerHTML = `Prediction: ${prediction.predict === 'P' ? 'PLAYER' : 'BANKER'} (${prediction.confidence}%)<br><small>${patternInfo}</small>`;
+        predDiv.innerText = prediction.predict === 'P' ? 'PLAYER' : 'BANKER';
         predDiv.classList.remove('player', 'banker');
         predDiv.classList.add(prediction.predict === 'P' ? 'player' : 'banker');
         let streaks = 0;
