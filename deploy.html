@@ -200,7 +200,7 @@
       <button class="undo" onclick="undo()" aria-label="Undo last action">Undo</button>
     </div>
 
-    <div class="prediction" id="prediction">Always bet Banker</div>
+    <div class="prediction" id="prediction">Waiting for input...</div>
     <div class="shoe-type admin-only" id="shoeType">Detected Pattern: N/A</div>
     <div class="card-count admin-only" id="cardCountDisplay">Card Count: N/A</div>
     <div class="section">Showing last 10 results</div>
@@ -800,9 +800,6 @@
     }
 
     function selectPredictionAlgorithm() {
-      if (state.mmSystem === 'plus1') {
-        return { predict: 'B', confidence: 100, score: 1 }; // Always bet Banker for Plus 1
-      }
       const recentAccuracy = calculateRecentAccuracy();
       if (state.accuracyWindow.length >= 10 && recentAccuracy < 0.4) {
         state.useAltAlgo = true;
@@ -842,7 +839,7 @@
         return;
       }
       
-      if (state.mmSystem !== 'plus1' && prediction.confidence <= getDynamicConfidenceThreshold()) {
+      if (prediction.confidence <= getDynamicConfidenceThreshold()) {
         state.history.push(result);
         learnPattern(result);
         showMessage(`No strong prediction (confidence ≤ ${getDynamicConfidenceThreshold()}%). No wager placed.`);
@@ -911,7 +908,7 @@
         state.useAltAlgo = false;
         state.altAlgoType = 'chatgpt';
         saveMemoryFast();
-        document.getElementById('prediction').innerText = state.mmSystem === 'plus1' ? 'Always bet Banker' : 'Waiting for input...';
+        document.getElementById('prediction').innerText = 'Waiting for input...';
         document.getElementById('shoeType').innerText = 'Detected Pattern: N/A';
         document.getElementById('historyDisplay').innerHTML = '';
         if (isAdmin) updateCardCountDisplay();
@@ -1083,13 +1080,6 @@
         }
         historyDiv.appendChild(cell);
       });
-      if (state.mmSystem === 'plus1') {
-        predDiv.innerText = 'Always bet Banker';
-        if (isAdmin) {
-          document.getElementById('shoeType').innerText = 'Detected Pattern: N/A';
-        }
-        return;
-      }
       const prediction = selectPredictionAlgorithm();
       if (prediction.confidence <= getDynamicConfidenceThreshold()) {
         predDiv.innerText = `Waiting for strong signal (threshold: ${getDynamicConfidenceThreshold()}%)...`;
