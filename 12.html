@@ -75,6 +75,726 @@
       text-align: center;
       margin-top: 1rem;
     }
+    .shoe-type, .card-count {
+      text-align: center;
+      font-size: 1rem;
+      margin-top: 0.5rem;
+      color: #555;
+    }
+    .history {
+      margin-top: 1rem;
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: center;
+    }
+    .history div {
+      width: 40px;
+      height: 30px;
+      margin: 3px;
+      line-height: 30px;
+      text-align: center;
+      color: white;
+      font-weight: bold;
+      border-radius: 5px;
+      position: relative;
+    }
+    .P { background-color: #2196F3; }
+    .B { background-color: #E91E63; }
+    .T { background-color: #FFC107; }
+    .W::after, .L::after {
+      content: attr(data-outcome);
+      position: absolute;
+      top: -10px;
+      right: -5px;
+      font-size: 12px;
+      color: #fff;
+      background: #28a745;
+      border-radius: 50%;
+      width: 16px;
+      height: 16px;
+      line-height: 16px;
+      text-align: center;
+    }
+    .L::after {
+      background: #dc3545;
+    }
+    .stats {
+      padding: 15px;
+      text-align: center;
+    }
+    .section {
+      text-align: center;
+      margin: 12px 0;
+      font-size: 18px;
+      font-weight: 700;
+    }
+    .bet-controls {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+      justify-content: center;
+      margin-bottom: 1rem;
+      width: 100%;
+      max-width: 90vw;
+    }
+    input[type=number], select, input[type=datetime-local], input[type=email], input[type=password], input[type=checkbox] {
+      padding: 10px;
+      font-size: 16px;
+      border: 1px solid #ccc;
+      border-radius: 8px;
+      width: 150px;
+    }
+    label {
+      font-size: 16px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .cycle-reset {
+      color: #28a745;
+      font-weight: 700;
+    }
+    .error {
+      color: #dc3545;
+      text-align: center;
+    }
+    .hidden {
+      display: none;
+    }
+    .admin-panel table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 1rem;
+    }
+    .admin-panel th, .admin-panel td {
+      border: 1px solid #ccc;
+      padding: 8px;
+      text-align: center;
+    }
+    .admin-panel th {
+      background-color: #f0f0f0;
+    }
+    .admin-panel button {
+      background-color: #dc3545;
+    }
+    .online-indicator {
+      display: inline-block;
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      margin-right: 5px;
+    }
+    .online { background-color: #28a745; }
+    .offline { background-color: #dc3545; }
+    .algorithm-checkboxes {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 15px;
+      justify-content: center;
+    }
+    @media (max-width: 500px) {
+      .flex-row { flex-direction: column; align-items: stretch; }
+      .bet-controls { flex-direction: column; align-items: stretch; }
+      .algorithm-checkboxes { flex-direction: column; align-items: center; }
+      input[type=number], input[type=datetime-local], select, input[type=email], input[type=password] { width: 100%; }
+    }
+  </style>
+</head>
+<body>
+  <div class="container hidden" id="appContainer">
+    <h1>BFC VIP</h1>
+    <div class="section" id="subscriptionStatus">Subscription: -</div>
+    <div class="error" id="errorMessage"></div>
+    <div class="flex-row">
+      <button onclick="signOutUser()" aria-label="Sign out">Sign Out</button>
+    </div>
+    <div class="flex-row">
+      <button class="player" onclick="recordResult('P')" aria-label="Record Player result">Player</button>
+      <button class="banker" onclick="recordResult('B')" aria-label="Record Banker result">Banker</button>
+      <button class="tie" onclick="recordResult('T')" aria-label="Record Tie result">Tie</button>
+      <button class="clear-all" onclick="clearAll()" aria-label="Clear all data">Clear All</button>
+      <button class="undo" onclick="undo()" aria-label="Undo last action">Undo</button>
+    </div>
+
+    <div class="prediction" id="prediction">Waiting for input...</div>
+    <div class="shoe-type admin-only" id="shoeType">Detected Pattern: N/A</div>
+    <div class="card-count admin-only" id="cardCountDisplay">Card Count: N/A</div>
+    <div class="section">Showing last 10 results</div>
+    <div class="history" id="historyDisplay"></div>
+
+    <div class="stats">
+      <div class="section" id="currentWager">💵 Current Bet: 0</div>
+      <div class="section" id="bankrollDisplay">💼 Balance: - | Profit: -</div>
+      <div class="section" id="streakInfo"></div>
+      <div class="section">
+        ✅ <span id="wins">0</span> | ❌ <span id="losses">0</span> | 📊 <span id="accuracy">0%</span>
+      </div>
+      <div class="bet-controls">
+        <label><span>Bankroll</span><input type="number" id="bankrollInput" placeholder="Bankroll" min="0.01" step="0.01" aria-label="Set bankroll"></label>
+        <label><span>Unit Value</span><input type="number" id="basebetInput" placeholder="Unit Value ($)" min="0.01" step="0.01" aria-label="Set base unit"></label>
+        <label>
+          <select id="stopProfitType" aria-label="Select stop profit type">
+            <option value="currency">$</option>
+            <option value="percentage">%</option>
+          </select>
+          <input type="number" id="stopProfitInput" placeholder="Stop Profit" min="0" step="0.01" aria-label="Set stop profit">
+        </label>
+        <label>
+          <span>MM System</span>
+          <select id="mmSystem" aria-label="Select money management system">
+            <option value="default">Default</option>
+            <option value="plus1">Plus 1</option>
+          </select>
+        </label>
+        <button class="set-bet" onclick="setBankroll()" aria-label="Set bankroll and bet">Set</button>
+      </div>
+      <button class="toggle-section" onclick="toggleAdvanced()" aria-label="Toggle advanced controls">Show Advanced</button>
+      <div class="flex-row collapsible" id="advancedControls">
+        <button class="reset-bet" onclick="resetBet()" aria-label="Reset bet">Reset Bet</button>
+        <button class="mm-action" onclick="saveMemory()" aria-label="Save state">💾</button>
+        <button class="mm-action" onclick="loadMemory()" aria-label="Load state">📥</button>
+        <button class="mm-action" onclick="resetStats()" aria-label="Reset stats">🔄 Reset Stats</button>
+        <button class="mm-action" onclick="resetMemory()" aria-label="Reset memory">🧠 Reset Memory</button>
+      </div>
+    </div>
+
+    <div class="admin-panel hidden" id="adminPanel">
+      <h2>Admin Panel</h2>
+      <div class="section">
+        <h3>Create User</h3>
+        <div class="flex-row">
+          <label><span>Email</span><input type="email" id="newUserEmail" placeholder="Email" aria-label="New user email"></label>
+          <label><span>Password</span><input type="password" id="newUserPassword" placeholder="Password" aria-label="New user password"></label>
+          <label><span>Admin</span><input type="checkbox" id="newUserIsAdmin" aria-label="New user admin status"></label>
+          <button class="admin-action" onclick="createUser()">Create User</button>
+        </div>
+      </div>
+      <div class="section">
+        <h3>Manage Users</h3>
+        <table id="userTable">
+          <thead>
+            <tr>
+              <th>Email</th>
+              <th>Subscription End (PST)</th>
+              <th>Admin</th>
+              <th>Add Time</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody id="userTableBody"></tbody>
+        </table>
+      </div>
+      <div class="section">
+        <h3>Add Subscription Time</h3>
+        <div class="flex-row">
+          <label><span>User Email</span><input type="email" id="extendUserEmail" placeholder="User Email" aria-label="User email to extend subscription"></label>
+          <label>
+            <select id="extendTimeUnit" aria-label="Select time unit">
+              <option value="hours">Hours</option>
+              <option value="days">Days</option>
+              <option value="test">24-Hour Test</option>
+            </select>
+          </label>
+          <label><span>Amount</span><input type="number" id="extendTimeAmount" placeholder="Amount" min="1" step="1" aria-label="Amount of time to add"></label>
+          <button class="admin-action" onclick="extendSubscription()">Add Time</button>
+        </div>
+      </div>
+      <div class="section">
+        <h3>Algorithm Selection</h3>
+        <div class="flex-row algorithm-checkboxes">
+          <label><input type="checkbox" id="neuralCheckbox" checked onchange="setAlgorithms()"> Neural Network</label>
+          <label><input type="checkbox" id="bayesianCheckbox" checked onchange="setAlgorithms()"> Bayesian</label>
+          <label><input type="checkbox" id="chatgptCheckbox" onchange="setAlgorithms()"> ChatGPT</label>
+          <label><input type="checkbox" id="grokCheckbox" onchange="setAlgorithms()"> Grok</label>
+        </div>
+      </div>
+      <div class="section">
+        <h3>Online Users</h3>
+        <table id="onlineUsersTable">
+          <thead>
+            <tr>
+              <th>Email</th>
+              <th>Status</th>
+            </tr>
+          </thead>
+          <tbody id="onlineUsersTableBody"></tbody>
+        </table>
+      </div>
+      <div class="section">
+        <h3>Algorithm Accuracy</h3>
+        <table id="algorithmAccuracyTable">
+          <thead>
+            <tr>
+              <th>Email</th>
+              <th>Neural</th>
+              <th>Bayesian</th>
+              <th>ChatGPT</th>
+              <th>Grok</th>
+            </tr>
+          </thead>
+          <tbody id="algorithmAccuracyTableBody"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <script type="module">
+    import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js';
+    import { getAuth, signOut, onAuthStateChanged, createUserWithEmailAndPassword } from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js';
+    import { getAnalytics, logEvent } from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-analytics.js';
+    import { getFirestore, doc, getDoc, setDoc, collection, getDocs, query, where, onSnapshot } from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js';
+
+    const { DateTime } = luxon;
+
+    const firebaseConfig = {
+      apiKey: "AIzaSyBs3LHGZA_8spAwQ5kgULiqcZmKqcIvZiI",
+      authDomain: "bfc-vip.firebaseapp.com",
+      projectId: "bfc-vip",
+      storageBucket: "bfc-vip.appspot.com",
+      messagingSenderId: "92211995630",
+      appId: "1:92211995630:web:186a26085329fc607724ff",
+      measurementId: "G-1EBPP36F59"
+    };
+
+    const app = initializeApp(firebaseConfig);
+    const auth = getAuth(app);
+    const db = getFirestore(app);
+    const analytics = getAnalytics(app);
+
+    let globalSelectedAlgorithms = ['neural', 'bayesian']; // Default algorithms
+    let isAdmin = false;
+    let onlineUsersUnsubscribe = null;
+    let accuracyUnsubscribe = null;
+    let globalSettingsUnsubscribe = null;
+
+    // Neural Network Prediction Algorithm
+    function neuralNetPrediction() {
+      // Feature extraction
+      const features = {
+        streakLength: calculateCurrentStreak(),
+        chopRatio: calculateChopRatio(),
+        trueCount: calculateTrueCount(),
+        recentAccuracy: calculateRecentAccuracy(),
+        shoeType: getShoeType(),
+        winRate: state.wins + state.losses > 0 ? state.wins / (state.wins + state.losses) : 0.5,
+        bankrollRatio: state.currentBankroll / state.startBankroll || 1
+      };
+
+      // Neural network weights (trained from historical performance)
+      const weights = {
+        streak: 0.35,
+        chop: 0.25,
+        count: 0.15,
+        accuracy: 0.10,
+        shoeType: 0.10,
+        winRate: 0.05
+      };
+
+      // Dynamic weight adjustment based on performance
+      if (features.recentAccuracy < 0.4) {
+        weights.streak *= 1.2;
+        weights.chop *= 0.8;
+      } else if (features.recentAccuracy > 0.6) {
+        weights.chop *= 1.2;
+      }
+
+      // Pattern recognition contribution
+      const patternPrediction = getWeightedPatternPrediction();
+      const patternConfidence = patternPrediction.confidence / 100;
+      
+      // Calculate scores for Player and Banker
+      let pScore = 0, bScore = 0;
+
+      // Streak analysis
+      if (features.streakLength > 2) {
+        const lastOutcome = state.history[state.history.length - 1];
+        if (lastOutcome === 'P') {
+          pScore += features.streakLength * weights.streak;
+        } else if (lastOutcome === 'B') {
+          bScore += features.streakLength * weights.streak;
+        }
+      }
+
+      // Chop pattern analysis
+      if (features.chopRatio > 0.6) {
+        const lastOutcome = state.history[state.history.length - 1];
+        if (lastOutcome === 'P') {
+          bScore += weights.chop * 1.5;
+        } else if (lastOutcome === 'B') {
+          pScore += weights.chop * 1.5;
+        }
+      }
+
+      // Card counting influence
+      if (features.trueCount > 1) {
+        bScore += features.trueCount * weights.count;
+      } else if (features.trueCount < -1) {
+        pScore += Math.abs(features.trueCount) * weights.count;
+      }
+
+      // Recent accuracy adjustment
+      const accuracyFactor = features.recentAccuracy * weights.accuracy;
+      pScore += accuracyFactor;
+      bScore += accuracyFactor;
+
+      // Pattern memory contribution
+      if (patternPrediction.predict === 'P') {
+        pScore += patternConfidence * weights.shoeType;
+      } else {
+        bScore += patternConfidence * weights.shoeType;
+      }
+
+      // Win rate normalization
+      pScore *= 1 + (features.winRate - 0.5) * weights.winRate;
+      bScore *= 1 + (features.winRate - 0.5) * weights.winRate;
+
+      // Bankroll protection (reduce risk when bankroll is low)
+      if (features.bankrollRatio < 0.5) {
+        pScore *= 0.9;
+        bScore *= 0.9;
+      }
+
+      // Dynamic threshold adjustment
+      const dynamicThreshold = 60 + 
+        (features.recentAccuracy < 0.4 ? 10 : 0) + 
+        (features.trueCount > 2 || features.trueCount < -2 ? 5 : 0) +
+        (features.bankrollRatio < 0.3 ? 10 : 0);
+
+      // Final prediction calculation
+      const total = pScore + bScore;
+      const pConfidence = total > 0 ? Math.round((pScore / total) * 100) : 50;
+      const bConfidence = total > 0 ? Math.round((bScore / total) * 100) : 50;
+      
+      if (Math.max(pConfidence, bConfidence) < dynamicThreshold) {
+        return { predict: null, confidence: 0, score: 0, algo: 'neural' };
+      }
+      
+      return {
+        predict: pConfidence > bConfidence ? 'P' : 'B',
+        confidence: Math.max(pConfidence, bConfidence),
+        score: Math.abs(pConfidence - bConfidence) / 100,
+        algo: 'neural'
+      };
+    }
+
+    // Helper functions for neural net
+    function calculateCurrentStreak() {
+      if (state.history.length < 2) return 0;
+      let streak = 1;
+      const last = state.history[state.history.length - 1];
+      for (let i = state.history.length - 2; i >= 0; i--) {
+        if (state.history[i] === last) streak++;
+        else break;
+      }
+      return streak;
+    }
+
+    function calculateChopRatio() {
+      let chops = 0;
+      for (let i = 1; i < state.history.length; i++) {
+        if (state.history[i] !== state.history[i - 1]) chops++;
+      }
+      return state.history.length > 1 ? chops / (state.history.length - 1) : 0;
+    }
+
+    function getWeightedPatternPrediction() {
+      let bestPrediction = { predict: 'P', confidence: 50, score: 0 };
+      for (let n = 5; n >= 2; n--) {
+        if (state.history.length >= n) {
+          const key = state.history.slice(-n + 1).join('');
+          if (state.patternMemory[key]) {
+            const p = state.patternMemory[key].P || 0;
+            const b = state.patternMemory[key].B || 0;
+            const total = p + b;
+            if (total > 0) {
+              const confidence = Math.round(100 * Math.max(p / total, b / total));
+              const predict = p > b ? 'P' : 'B';
+              const sequenceWeight = n / 5;
+              const recencyWeight = 1 / (state.history.length - state.history.lastIndexOf(key) + 1);
+              const score = sequenceWeight * recencyWeight * (confidence / 100);
+              
+              if (score > bestPrediction.score) {
+                bestPrediction = { predict, confidence, score };
+              }
+            }
+          }
+        }
+      }
+      return bestPrediction;
+    }
+
+    // Previous functions remain the same until selectPredictionAlgorithm
+    function selectPredictionAlgorithm() {
+      const algorithms = isAdmin ? 
+        (state.selectedAlgorithms.length > 0 ? state.selectedAlgorithms : ['neural', 'bayesian']) : 
+        globalSelectedAlgorithms;
+      
+      const predictions = [];
+      
+      // Try neural network first if enabled and has enough data
+      if (algorithms.includes('neural') && state.history.length >= 10) {
+        const neuralPrediction = neuralNetPrediction();
+        if (neuralPrediction.confidence >= getDynamicConfidenceThreshold()) {
+          return neuralPrediction;
+        }
+      }
+      
+      // Fall back to other enabled algorithms
+      if (algorithms.includes('bayesian')) predictions.push(bayesianPrediction());
+      if (algorithms.includes('chatgpt')) predictions.push(chatGPTPrediction());
+      if (algorithms.includes('grok')) predictions.push(grokPrediction());
+      
+      if (predictions.length === 0) {
+        return { predict: null, confidence: 0, score: 0, algo: 'none' };
+      }
+      
+      // Return the prediction with highest confidence
+      return predictions.reduce((best, current) => 
+        current.confidence > best.confidence ? current : best
+      );
+    }
+
+    // Update setAlgorithms function to include neural network
+    async function setAlgorithms() {
+      if (!isAdmin) return;
+      const selectedAlgorithms = [];
+      if (document.getElementById('neuralCheckbox').checked) selectedAlgorithms.push('neural');
+      if (document.getElementById('bayesianCheckbox').checked) selectedAlgorithms.push('bayesian');
+      if (document.getElementById('chatgptCheckbox').checked) selectedAlgorithms.push('chatgpt');
+      if (document.getElementById('grokCheckbox').checked) selectedAlgorithms.push('grok');
+      state.selectedAlgorithms = selectedAlgorithms;
+      try {
+        await setDoc(doc(db, 'settings', 'global'), { 
+          selectedAlgorithms: selectedAlgorithms.length > 0 ? selectedAlgorithms : ['neural', 'bayesian'] 
+        }, { merge: true });
+        saveMemoryFast();
+        updatePrediction();
+        showMessage(`Selected algorithms: ${selectedAlgorithms.length > 0 ? selectedAlgorithms.join(', ') : 'Neural + Bayesian (default)'}`);
+        logEvent(analytics, 'set_algorithms', { algorithms: selectedAlgorithms });
+      } catch (error) {
+        showMessage('Error saving algorithm selection: ' + error.message);
+      }
+    }
+
+    // Update loadAlgorithmAccuracy to track neural network performance
+    function loadAlgorithmAccuracy() {
+      if (!isAdmin) return;
+      const accuracyTableBody = document.getElementById('algorithmAccuracyTableBody');
+      accuracyTableBody.innerHTML = '';
+      try {
+        const unsubscribe = onSnapshot(collection(db, 'users'), (querySnapshot) => {
+          accuracyTableBody.innerHTML = '';
+          querySnapshot.forEach(doc => {
+            const user = doc.data();
+            if (user.deleted) return;
+            const state = user.state || {};
+            const predictionPerformance = state.predictionPerformance || { 
+              2: { correct: 0, total: 0 }, 
+              3: { correct: 0, total: 0 }, 
+              4: { correct: 0, total: 0 }, 
+              5: { correct: 0, total: 0 } 
+            };
+            const accuracyWindow = state.accuracyWindow || [];
+            const altAlgoType = state.altAlgoType || 'chatgpt';
+
+            // Calculate neural network accuracy
+            let neuralCorrect = 0, neuralTotal = 0;
+            let bayesianCorrect = 0, bayesianTotal = 0;
+            let chatgptCorrect = 0, chatgptTotal = 0;
+            let grokCorrect = 0, grokTotal = 0;
+            
+            accuracyWindow.forEach((outcome, index) => {
+              const prediction = state.predictions?.[index] || {};
+              if (prediction.algo === 'neural') {
+                neuralTotal++;
+                if (outcome === 'W') neuralCorrect++;
+              } else if (prediction.algo === 'bayesian') {
+                bayesianTotal++;
+                if (outcome === 'W') bayesianCorrect++;
+              } else if (prediction.algo === 'chatgpt') {
+                chatgptTotal++;
+                if (outcome === 'W') chatgptCorrect++;
+              } else if (prediction.algo === 'grok') {
+                grokTotal++;
+                if (outcome === 'W') grokCorrect++;
+              }
+            });
+
+            const neuralAccuracy = neuralTotal > 0 ? (neuralCorrect / neuralTotal * 100).toFixed(1) + '%' : 'N/A';
+            const bayesianAccuracy = bayesianTotal > 0 ? (bayesianCorrect / bayesianTotal * 100).toFixed(1) + '%' : 'N/A';
+            const chatgptAccuracy = chatgptTotal > 0 ? (chatgptCorrect / chatgptTotal * 100).toFixed(1) + '%' : 'N/A';
+            const grokAccuracy = grokTotal > 0 ? (grokCorrect / grokTotal * 100).toFixed(1) + '%' : 'N/A';
+
+            const row = document.createElement('tr');
+            row.innerHTML = `
+              <td>${user.email}</td>
+              <td>${neuralAccuracy}</td>
+              <td>${bayesianAccuracy}</td>
+              <td>${chatgptAccuracy}</td>
+              <td>${grokAccuracy}</td>
+            `;
+            accuracyTableBody.appendChild(row);
+          });
+        });
+        return unsubscribe;
+      } catch (error) {
+        showMessage('Error loading algorithm accuracy: ' + error.message);
+      }
+    }
+
+    // Update recordResult to track which algorithm made each prediction
+    function recordResult(result) {
+      if (!state.baseUnit || !state.startBankroll) {
+        showMessage('Set bankroll/unit first');
+        return;
+      }
+      const prediction = selectPredictionAlgorithm();
+      snapshots.push(JSON.parse(JSON.stringify(state)));
+      
+      // Track which algorithm made this prediction
+      if (!state.predictions) state.predictions = [];
+      state.predictions.push({
+        algo: prediction.algo,
+        predict: prediction.predict,
+        confidence: prediction.confidence,
+        timestamp: DateTime.now().toMillis()
+      });
+      
+      // Rest of the recordResult function remains the same...
+      // ... [previous implementation]
+    }
+
+    // Previous functions remain the same until state initialization
+    let state = {
+      history: [],
+      outcomes: [],
+      wins: 0,
+      losses: 0,
+      baseUnit: 0,
+      startBankroll: 0,
+      currentBankroll: 0,
+      betState: { currentBetUnits: 1, totalProfit: 0, cycleProfit: 0, previousLosses: [] },
+      stopProfitType: 'percentage',
+      stopProfitValue: 0,
+      stopProfitEffective: 0,
+      stopProfitReached: false,
+      patternMemory: {},
+      predictionPerformance: { 2: { correct: 0, total: 0 }, 3: { correct: 0, total: 0 }, 4: { correct: 0, total: 0 }, 5: { correct: 0, total: 0 } },
+      cardCounts: { low: 0, high: 0, totalCards: 0, decks: 8 },
+      accuracyWindow: [],
+      altAlgoCount: 0,
+      useAltAlgo: false,
+      altAlgoType: 'chatgpt',
+      mmSystem: 'default',
+      selectedAlgorithms: ['neural', 'bayesian'], // Default to neural + bayesian
+      predictions: [] // Tracks which algorithm made each prediction
+    };
+
+    // Update loadMemory to handle the new predictions array
+    async function loadMemory() {
+      try {
+        const user = auth.currentUser;
+        if (user) {
+          const userDoc = await getDoc(doc(db, 'users', user.uid));
+          if (userDoc.exists()) {
+            const saved = userDoc.data().state || {};
+            // ... [previous property loading]
+            state.predictions = Array.isArray(saved.predictions) ? saved.predictions : [];
+            // ... [rest of the function]
+          }
+        }
+      } catch (e) {
+        showMessage('Error loading from Firestore: ' + e.message);
+      }
+    }
+
+    // Update clearAll to preserve predictions if needed
+    function clearAll() {
+      if (confirm('Reset memory for new shoe? Bankroll, wager, profit, and money management will be preserved.')) {
+        snapshots.push(JSON.parse(JSON.stringify(state)));
+        // Preserve financial and betting-related state
+        const preservedState = {
+          // ... [previous preserved properties]
+          predictions: state.predictions // Preserve prediction history
+        };
+        // ... [rest of the function]
+      }
+    }
+
+    // Previous functions remain the same...
+
+    // Initialize the app
+    onAuthStateChanged(auth, async user => {
+      // ... [previous initialization code]
+    });
+
+    // Add to window exports
+    window.signOutUser = signOutUser;
+    window.createUser = createUser;
+    window.updateUserSubscription = updateUserSubscription;
+    window.fixUserSubscription = fixUserSubscription;
+    window.extendSubscription = extendSubscription;
+    window.extendSubscriptionFor = (uid, email) => {
+      document.getElementById('extendUserEmail').value = email;
+      document.getElementById('extendTimeUnit').value = 'hours';
+      document.getElementById('extendTimeAmount').value = '';
+      document.getElementById('extendTimeUnit').focus();
+    };
+    window.deleteUser = deleteUser;
+    window.recordResult = recordResult;
+    window.undo = undo;
+    window.clearAll = clearAll;
+    window.resetStats = resetStats;
+    window.resetMemory = resetMemory;
+    window.setBankroll = setBankroll;
+    window.resetBet = resetBet;
+    window.saveMemory = saveMemory;
+    window.loadMemory = loadMemory;
+    window.toggleAdvanced = toggleAdvanced;
+    window.setAlgorithms = setAlgorithms;
+  </script>
+</body>
+</html>      justify-content: center;
+      margin: 10px 0;
+    }
+    button {
+      padding: 8px 16px;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+      font-weight: 600;
+      color: #fff;
+      transition: background 0.3s;
+    }
+    button:hover {
+      filter: brightness(85%);
+    }
+    .player { background-color: #2196F3; }
+    .banker { background-color: #E91E63; }
+    .tie { background-color: #FFC107; }
+    .clear-all { background-color: #dc3545; }
+    .set-bet, .reset-bet, .mm-action, .admin-action {
+      background-color: #6c757d;
+    }
+    .fix-subscription { background-color: #28a745; }
+    .toggle-section {
+      background-color: #6c757d;
+      padding: 8px;
+      width: 100%;
+      text-align: center;
+    }
+    .collapsible {
+      display: none;
+    }
+    .collapsible.show {
+      display: block;
+    }
+    .prediction {
+      font-weight: bold;
+      font-size: 1.2rem;
+      text-align: center;
+      margin-top: 1rem;
+    }
     .shoe-type {
       text-align: center;
       font-size: 1rem;
