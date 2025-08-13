@@ -297,7 +297,7 @@
       apiKey: "AIzaSyBs3LHGZA_8spAwQ5kgULiqcZmKqcIvZiI",
       authDomain: "bfc-vip.firebaseapp.com",
       projectId: "bfc-vip",
-      storageBucket: "bfc-vip.firebasestorage.app",
+      storageBucket: "bfc-vip.appspot.com",
       messagingSenderId: "92211995630",
       appId: "1:92211995630:web:186a26085329fc607724ff",
       measurementId: "G-1EBPP36F59"
@@ -358,7 +358,15 @@
             accuracyWindow: [],
             altAlgoCount: 0,
             useAltAlgo: false,
-            altAlgoType: 'chatgpt'
+            altAlgoType: 'chatgpt',
+            neuralWeights: {
+              streak: 0.35,
+              chop: 0.25,
+              count: 0.15,
+              accuracy: 0.10,
+              shoeType: 0.10,
+              winRate: 0.05
+            }
           }
         });
         showMessage('User created successfully');
@@ -561,10 +569,137 @@
       accuracyWindow: [],
       altAlgoCount: 0,
       useAltAlgo: false,
-      altAlgoType: 'chatgpt'
+      altAlgoType: 'chatgpt',
+      neuralWeights: {
+        streak: 0.35,
+        chop: 0.25,
+        count: 0.15,
+        accuracy: 0.10,
+        shoeType: 0.10,
+        winRate: 0.05
+      }
     };
     let snapshots = [];
     let saveTimeout = null;
+
+    // NEW NEURAL NETWORK PREDICTION ALGORITHM
+    function neuralNetPrediction() {
+      // 1. Feature extraction from game history
+      const features = {
+        streakLength: calculateCurrentStreak(),
+        chopRatio: calculateChopRatio(),
+        trueCount: calculateTrueCount(),
+        recentAccuracy: calculateRecentAccuracy(),
+        shoeType: getShoeType(),
+        patternConfidence: getWeightedPatternPrediction().confidence / 100,
+        winRate: state.wins / (state.wins + state.losses) || 0.5
+      };
+
+      // 2. Neural network weights
+      const weights = state.neuralWeights;
+
+      // 3. Pattern recognition from memory
+      const patternPrediction = getWeightedPatternPrediction();
+      
+      // 4. Calculate neural net output
+      let pScore = 0, bScore = 0;
+      
+      // Streak analysis
+      if (features.streakLength > 2) {
+        const lastOutcome = state.history[state.history.length - 1];
+        pScore += (lastOutcome === 'P') ? features.streakLength * weights.streak : 0;
+        bScore += (lastOutcome === 'B') ? features.streakLength * weights.streak : 0;
+      }
+      
+      // Chop analysis
+      pScore += (features.chopRatio > 0.6 && features.shoeType === 'Chop') ? 
+        (state.history[state.history.length - 1] === 'B' ? weights.chop : 0) : 0;
+      bScore += (features.chopRatio > 0.6 && features.shoeType === 'Chop') ? 
+        (state.history[state.history.length - 1] === 'P' ? weights.chop : 0) : 0;
+      
+      // Card counting influence
+      pScore += (features.trueCount < -1) ? Math.abs(features.trueCount) * weights.count : 0;
+      bScore += (features.trueCount > 1) ? features.trueCount * weights.count : 0;
+      
+      // Recent accuracy adjustment
+      const accuracyFactor = features.recentAccuracy * weights.accuracy;
+      pScore += accuracyFactor;
+      bScore += accuracyFactor;
+      
+      // Pattern memory contribution
+      pScore += patternPrediction.predict === 'P' ? patternPrediction.confidence/100 * weights.shoeType : 0;
+      bScore += patternPrediction.predict === 'B' ? patternPrediction.confidence/100 * weights.shoeType : 0;
+      
+      // Win rate normalization
+      pScore *= 1 + (features.winRate - 0.5) * weights.winRate;
+      bScore *= 1 + (features.winRate - 0.5) * weights.winRate;
+
+      // 5. Dynamic threshold adjustment
+      const dynamicThreshold = 60 + 
+        (features.recentAccuracy < 0.4 ? 10 : 0) + 
+        (features.trueCount > 2 || features.trueCount < -2 ? 5 : 0);
+      
+      // 6. Final prediction
+      const total = pScore + bScore;
+      const pConfidence = total > 0 ? Math.round((pScore / total) * 100) : 50;
+      const bConfidence = total > 0 ? Math.round((bScore / total) * 100) : 50;
+      
+      if (Math.max(pConfidence, bConfidence) < dynamicThreshold) {
+        return { predict: null, confidence: 0, score: 0 };
+      }
+      
+      return {
+        predict: pConfidence > bConfidence ? 'P' : 'B',
+        confidence: Math.max(pConfidence, bConfidence),
+        score: Math.abs(pConfidence - bConfidence) / 100
+      };
+    }
+
+    // Helper functions for neural net
+    function calculateCurrentStreak() {
+      if (state.history.length < 2) return 0;
+      let streak = 1;
+      const last = state.history[state.history.length - 1];
+      for (let i = state.history.length - 2; i >= 0; i--) {
+        if (state.history[i] === last) streak++;
+        else break;
+      }
+      return streak;
+    }
+
+    function calculateChopRatio() {
+      let chops = 0;
+      for (let i = 1; i < state.history.length; i++) {
+        if (state.history[i] !== state.history[i - 1]) chops++;
+      }
+      return state.history.length > 1 ? chops / (state.history.length - 1) : 0;
+    }
+
+    function getWeightedPatternPrediction() {
+      let bestPrediction = { predict: 'P', confidence: 50, score: 0 };
+      for (let n = 5; n >= 2; n--) {
+        if (state.history.length >= n) {
+          const key = state.history.slice(-n + 1).join('');
+          if (state.patternMemory[key]) {
+            const p = state.patternMemory[key].P || 0;
+            const b = state.patternMemory[key].B || 0;
+            const total = p + b;
+            if (total > 0) {
+              const confidence = Math.round(100 * Math.max(p / total, b / total));
+              const predict = p > b ? 'P' : 'B';
+              const sequenceWeight = n / 5; // Longer sequences weigh more
+              const recencyWeight = 1 / (state.history.length - state.history.lastIndexOf(key) + 1);
+              const score = sequenceWeight * recencyWeight * (confidence / 100);
+              
+              if (score > bestPrediction.score) {
+                bestPrediction = { predict, confidence, score };
+              }
+            }
+          }
+        }
+      }
+      return bestPrediction;
+    }
 
     function learnPattern(latest) {
       for (let n = 2; n <= 5; n++) {
@@ -796,6 +931,16 @@
 
     function selectPredictionAlgorithm() {
       const recentAccuracy = calculateRecentAccuracy();
+      
+      // Try neural network first if we have enough data
+      if (state.history.length >= 10) {
+        const neuralPrediction = neuralNetPrediction();
+        if (neuralPrediction.predict && neuralPrediction.confidence >= getDynamicConfidenceThreshold()) {
+          return neuralPrediction;
+        }
+      }
+      
+      // Fall back to other algorithms
       if (state.accuracyWindow.length >= 10 && recentAccuracy < 0.4) {
         state.useAltAlgo = true;
         state.altAlgoCount++;
@@ -1059,7 +1204,8 @@
       }
       const accuracy = state.predictionPerformance[sequenceLength].total > 0 ? 
         ((state.predictionPerformance[sequenceLength].correct / state.predictionPerformance[sequenceLength].total) * 100).toFixed(1) : 'N/A';
-      const algoName = state.useAltAlgo ? (state.altAlgoType === 'chatgpt' ? 'ChatGPT Algorithm' : 'Grok Algorithm') : 'Bayesian Algorithm';
+      const algoName = prediction === neuralNetPrediction() ? 'Neural Network' : 
+        state.useAltAlgo ? (state.altAlgoType === 'chatgpt' ? 'ChatGPT Algorithm' : 'Grok Algorithm') : 'Bayesian Algorithm';
       predDiv.innerText = `Prediction: ${prediction.predict === 'P' ? 'Player' : 'Banker'} (${prediction.confidence}%) [Seq: ${sequenceLength}, Acc: ${accuracy}%] Using ${algoName}`;
       let streaks = 0;
       for (let i = 1; i < state.history.length; i++) {
@@ -1146,6 +1292,14 @@
             state.altAlgoCount = Number(saved.altAlgoCount) || 0;
             state.useAltAlgo = saved.useAltAlgo || false;
             state.altAlgoType = saved.altAlgoType || 'chatgpt';
+            state.neuralWeights = saved.neuralWeights || {
+              streak: 0.35,
+              chop: 0.25,
+              count: 0.15,
+              accuracy: 0.10,
+              shoeType: 0.10,
+              winRate: 0.05
+            };
             const subscriptionEnd = Number.isInteger(userDoc.data().subscriptionEnd) ? userDoc.data().subscriptionEnd : null;
             document.getElementById('subscriptionStatus').innerText = subscriptionEnd ? 
               `Subscription: Active until ${DateTime.fromMillis(subscriptionEnd, { zone: 'Asia/Manila' }).toLocaleString(DateTime.DATETIME_FULL)}` : 
