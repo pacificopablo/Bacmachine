@@ -201,16 +201,6 @@
   </style>
 </head>
 <body>
-  <div id="loading" style="text-align: center; padding: 20px; font-family: 'Segoe UI', Arial, sans-serif;">Loading...</div>
-  <div id="loginForm" class="container">
-    <h2>Sign In</h2>
-    <div class="flex-row">
-      <label><span>Email</span><input type="email" id="emailInput" placeholder="Email" aria-label="Email"></label>
-      <label><span>Password</span><input type="password" id="passwordInput" placeholder="Password" aria-label="Password"></label>
-      <button onclick="signIn()" aria-label="Sign in">Sign In</button>
-    </div>
-    <div class="error" id="loginError"></div>
-  </div>
   <div class="container hidden" id="appContainer">
     <h1>BFC VIP</h1>
     <div class="section" id="subscriptionStatus">Subscription: -</div>
@@ -225,11 +215,13 @@
       <button class="clear-all" onclick="clearAll()" aria-label="Clear all data">Clear All</button>
       <button class="undo" onclick="undo()" aria-label="Undo last action">Undo</button>
     </div>
+
     <div class="prediction" id="prediction">Waiting for input...</div>
     <div class="shoe-type admin-only" id="shoeType">Detected Pattern: N/A</div>
     <div class="card-count admin-only" id="cardCountDisplay">Card Count: N/A</div>
     <div class="section">Showing last 10 results</div>
     <div class="history" id="historyDisplay"></div>
+
     <div class="stats">
       <div class="section" id="currentWager">💵 Current Bet: 0</div>
       <div class="section" id="bankrollDisplay">💼 Balance: - | Profit: -</div>
@@ -265,6 +257,7 @@
         <button class="mm-action" onclick="resetMemory()" aria-label="Reset memory">🧠 Reset Memory</button>
       </div>
     </div>
+
     <div class="admin-panel hidden" id="adminPanel">
       <h2>Admin Panel</h2>
       <div class="section">
@@ -309,10 +302,10 @@
       <div class="section">
         <h3>Algorithm Selection</h3>
         <div class="flex-row algorithm-checkboxes">
-          <label><input type="checkbox" id="neuralCheckbox" checked onchange="setAlgorithms()"> Neural Network</label>
-          <label><input type="checkbox" id="bayesianCheckbox" checked onchange="setAlgorithms()"> Bayesian</label>
-          <label><input type="checkbox" id="chatgptCheckbox" onchange="setAlgorithms()"> ChatGPT</label>
-          <label><input type="checkbox" id="grokCheckbox" onchange="setAlgorithms()"> Grok</label>
+          <label><input type="checkbox" id="bayesianCheckbox" onchange="setAlgorithms()" aria-label="Use Bayesian algorithm">Bayesian</label>
+          <label><input type="checkbox" id="chatgptCheckbox" onchange="setAlgorithms()" aria-label="Use ChatGPT algorithm">ChatGPT</label>
+          <label><input type="checkbox" id="grokCheckbox" onchange="setAlgorithms()" aria-label="Use Grok algorithm">Grok</label>
+          <label><input type="checkbox" id="neuralnetCheckbox" onchange="setAlgorithms()" aria-label="Use Neural Network algorithm">Neural Network</label>
         </div>
       </div>
       <div class="section">
@@ -328,15 +321,15 @@
         </table>
       </div>
       <div class="section">
-        <h3>Algorithm Accuracy</h3>
+        <h3>Non-Admin Algorithm Accuracy</h3>
         <table id="algorithmAccuracyTable">
           <thead>
             <tr>
               <th>Email</th>
-              <th>Neural</th>
               <th>Bayesian</th>
               <th>ChatGPT</th>
               <th>Grok</th>
+              <th>Neural Net</th>
             </tr>
           </thead>
           <tbody id="algorithmAccuracyTableBody"></tbody>
@@ -344,9 +337,10 @@
       </div>
     </div>
   </div>
+
   <script type="module">
     import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js';
-    import { getAuth, signOut, onAuthStateChanged, createUserWithEmailAndPassword, signInWithEmailAndPassword } from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js';
+    import { getAuth, signOut, onAuthStateChanged, createUserWithEmailAndPassword } from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js';
     import { getAnalytics, logEvent } from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-analytics.js';
     import { getFirestore, doc, getDoc, setDoc, collection, getDocs, query, where, onSnapshot } from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js';
 
@@ -362,23 +356,390 @@
       measurementId: "G-1EBPP36F59"
     };
 
-    try {
-      console.log('Initializing Firebase');
-      const app = initializeApp(firebaseConfig);
-      console.log('Firebase initialized');
-    } catch (error) {
-      console.error('Firebase init error:', error);
-    }
-
+    const app = initializeApp(firebaseConfig);
     const auth = getAuth(app);
     const db = getFirestore(app);
     const analytics = getAnalytics(app);
 
-    let globalSelectedAlgorithms = ['neural', 'bayesian'];
+    let globalSelectedAlgorithms = ['bayesian']; // Default to Bayesian
     let isAdmin = false;
     let onlineUsersUnsubscribe = null;
     let accuracyUnsubscribe = null;
     let globalSettingsUnsubscribe = null;
+
+    function showMessage(message) {
+      const errorMessage = document.getElementById('errorMessage');
+      errorMessage.innerText = message;
+      setTimeout(() => { errorMessage.innerText = ''; }, 5000);
+    }
+
+    function signOutUser() {
+      const user = auth.currentUser;
+      if (user) {
+        setDoc(doc(db, 'users', user.uid), { isOnline: false }, { merge: true });
+      }
+      signOut(auth).then(() => {
+        window.location.href = 'login.html';
+      });
+    }
+
+    async function createUser() {
+      const email = document.getElementById('newUserEmail').value;
+      const password = document.getElementById('newUserPassword').value;
+      const isAdmin = document.getElementById('newUserIsAdmin').checked;
+      const errorMessage = document.getElementById('errorMessage');
+      errorMessage.innerText = '';
+
+      if (!email || !password) {
+        showMessage('Please fill in email and password');
+        return;
+      }
+
+      try {
+        const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+        const subscriptionEnd = DateTime.now().setZone('Asia/Manila').plus({ days: 60 }).toMillis();
+        await setDoc(doc(db, 'users', userCredential.user.uid), {
+          email: userCredential.user.email,
+          subscriptionEnd,
+          isAdmin,
+          isOnline: false,
+          state: {
+            history: [],
+            outcomes: [],
+            wins: 0,
+            losses: 0,
+            baseUnit: 0,
+            startBankroll: 0,
+            currentBankroll: 0,
+            betState: { currentBetUnits: 1, totalProfit: 0, cycleProfit: 0, previousLosses: [] },
+            stopProfitType: 'percentage',
+            stopProfitValue: 0,
+            stopProfitEffective: 0,
+            stopProfitReached: false,
+            patternMemory: {},
+            predictionPerformance: { 2: { correct: 0, total: 0 }, 3: { correct: 0, total: 0 }, 4: { correct: 0, total: 0 }, 5: { correct: 0, total: 0 } },
+            cardCounts: { low: 0, high: 0, totalCards: 0, decks: 8 },
+            accuracyWindow: [],
+            altAlgoCount: 0,
+            useAltAlgo: false,
+            altAlgoType: 'chatgpt',
+            mmSystem: 'default',
+            selectedAlgorithms: []
+          }
+        });
+        showMessage('User created successfully');
+        logEvent(analytics, 'create_user', { email, isAdmin });
+        document.getElementById('newUserEmail').value = '';
+        document.getElementById('newUserPassword').value = '';
+        document.getElementById('newUserIsAdmin').checked = false;
+        loadUsers();
+      } catch (error) {
+        showMessage('Error creating user: ' + error.message);
+        logEvent(analytics, 'create_user', { email, success: false, error: error.code });
+      }
+    }
+
+    async function updateUserSubscription(uid) {
+      const subscriptionEndInput = document.getElementById(`subscriptionEnd_${uid}`).value;
+      const errorMessage = document.getElementById('errorMessage');
+      if (!subscriptionEndInput) {
+        showMessage('Please select a valid subscription date');
+        return;
+      }
+      const subscriptionEnd = DateTime.fromISO(subscriptionEndInput, { zone: 'Asia/Manila' }).toMillis();
+      if (isNaN(subscriptionEnd)) {
+        showMessage('Invalid subscription date');
+        return;
+      }
+      try {
+        await setDoc(doc(db, 'users', uid), { subscriptionEnd }, { merge: true });
+        showMessage('Subscription updated');
+        logEvent(analytics, 'update_subscription', { uid });
+        loadUsers();
+      } catch (error) {
+        showMessage('Error updating subscription: ' + error.message);
+      }
+    }
+
+    async function fixUserSubscription(uid) {
+      try {
+        const subscriptionEnd = DateTime.now().setZone('Asia/Manila').plus({ days: 60 }).toMillis();
+        await setDoc(doc(db, 'users', uid), { subscriptionEnd }, { merge: true });
+        showMessage('Subscription fixed to 60 days from now');
+        logEvent(analytics, 'fix_subscription', { uid });
+        loadUsers();
+      } catch (error) {
+        showMessage('Error fixing subscription: ' + error.message);
+      }
+    }
+
+    async function extendSubscription() {
+      const email = document.getElementById('extendUserEmail').value;
+      const timeUnit = document.getElementById('extendTimeUnit').value;
+      const timeAmount = parseInt(document.getElementById('extendTimeAmount').value);
+      const errorMessage = document.getElementById('errorMessage');
+      errorMessage.innerText = '';
+
+      if (!email) {
+        showMessage('Please enter a user email');
+        return;
+      }
+      if (timeUnit !== 'test' && (!timeAmount || timeAmount < 1)) {
+        showMessage('Please enter a valid time amount');
+        return;
+      }
+
+      try {
+        const userQuery = query(collection(db, 'users'), where('email', '==', email));
+        const querySnapshot = await getDocs(userQuery);
+        if (querySnapshot.empty) {
+          showMessage('User not found');
+          return;
+        }
+        const userDoc = querySnapshot.docs[0];
+        const uid = userDoc.id;
+        const currentSubscriptionEnd = Number.isInteger(userDoc.data().subscriptionEnd) ? userDoc.data().subscriptionEnd : DateTime.now().setZone('Asia/Manila').toMillis();
+        const currentTime = DateTime.now().setZone('Asia/Manila').toMillis();
+        const effectiveStart = Math.max(currentSubscriptionEnd, currentTime);
+        let additionalTime;
+
+        if (timeUnit === 'test') {
+          additionalTime = 24 * 60 * 60 * 1000;
+        } else if (timeUnit === 'hours') {
+          additionalTime = timeAmount * 60 * 60 * 1000;
+        } else {
+          additionalTime = timeAmount * 24 * 60 * 60 * 1000;
+        }
+
+        const newSubscriptionEnd = effectiveStart + additionalTime;
+        await setDoc(doc(db, 'users', uid), { subscriptionEnd: newSubscriptionEnd }, { merge: true });
+        showMessage(`Subscription extended to ${DateTime.fromMillis(newSubscriptionEnd, { zone: 'Asia/Manila' }).toLocaleString(DateTime.DATETIME_FULL)}`);
+        logEvent(analytics, 'extend_subscription', { email, timeUnit, timeAmount });
+        document.getElementById('extendUserEmail').value = '';
+        document.getElementById('extendTimeUnit').value = 'hours';
+        document.getElementById('extendTimeAmount').value = '';
+        loadUsers();
+      } catch (error) {
+        showMessage('Error extending subscription: ' + error.message);
+        logEvent(analytics, 'extend_subscription', { email, success: false, error: error.code });
+      }
+    }
+
+    async function deleteUser(uid) {
+      if (!confirm('Are you sure you want to delete this user?')) return;
+      try {
+        await setDoc(doc(db, 'users', uid), { deleted: true, isOnline: false }, { merge: true });
+        showMessage('User marked as deleted (use Admin SDK for full deletion)');
+        logEvent(analytics, 'delete_user', { uid });
+        loadUsers();
+      } catch (error) {
+        showMessage('Error deleting user: ' + error.message);
+      }
+    }
+
+    async function loadUsers() {
+      const userTableBody = document.getElementById('userTableBody');
+      userTableBody.innerHTML = '';
+      try {
+        const querySnapshot = await getDocs(collection(db, 'users'));
+        querySnapshot.forEach(doc => {
+          const user = doc.data();
+          if (user.deleted) return;
+          const row = document.createElement('tr');
+          const subscriptionEnd = Number.isInteger(user.subscriptionEnd) ? user.subscriptionEnd : null;
+          const dateValue = subscriptionEnd ? DateTime.fromMillis(subscriptionEnd, { zone: 'Asia/Manila' }).toFormat('yyyy-MM-dd\'T\'HH:mm') : '';
+          row.innerHTML = `
+            <td>${user.email}</td>
+            <td>${subscriptionEnd ? `<input type="datetime-local" id="subscriptionEnd_${doc.id}" value="${dateValue}" aria-label="Subscription end date for ${user.email}">` : 'Not Set'}</td>
+            <td>${user.isAdmin ? 'Yes' : 'No'}</td>
+            <td><button class="admin-action" onclick="extendSubscriptionFor('${doc.id}', '${user.email}')">Add Time</button></td>
+            <td>
+              ${subscriptionEnd ? `<button class="admin-action" onclick="updateUserSubscription('${doc.id}')">Update</button>` : `<button class="fix-subscription" onclick="fixUserSubscription('${doc.id}')">Fix</button>`}
+              <button class="admin-action" onclick="deleteUser('${doc.id}')">Delete</button>
+            </td>
+          `;
+          userTableBody.appendChild(row);
+        });
+      } catch (error) {
+        showMessage('Error loading users: ' + error.message);
+      }
+    }
+
+    function loadOnlineUsers() {
+      if (!isAdmin) return;
+      const onlineUsersTableBody = document.getElementById('onlineUsersTableBody');
+      onlineUsersTableBody.innerHTML = '';
+      try {
+        const unsubscribe = onSnapshot(collection(db, 'users'), (querySnapshot) => {
+          onlineUsersTableBody.innerHTML = '';
+          querySnapshot.forEach(doc => {
+            const user = doc.data();
+            if (user.deleted) return;
+            const row = document.createElement('tr');
+            const status = user.isOnline ? 'Online' : 'Offline';
+            const statusClass = user.isOnline ? 'online' : 'offline';
+            row.innerHTML = `
+              <td>${user.email}</td>
+              <td><span class="online-indicator ${statusClass}"></span>${status}</td>
+            `;
+            onlineUsersTableBody.appendChild(row);
+          });
+        });
+        return unsubscribe;
+      } catch (error) {
+        showMessage('Error loading online users: ' + error.message);
+      }
+    }
+
+    function loadAlgorithmAccuracy() {
+      if (!isAdmin) return;
+      const accuracyTableBody = document.getElementById('algorithmAccuracyTableBody');
+      accuracyTableBody.innerHTML = '';
+      try {
+        const unsubscribe = onSnapshot(collection(db, 'users'), (querySnapshot) => {
+          accuracyTableBody.innerHTML = '';
+          querySnapshot.forEach(doc => {
+            const user = doc.data();
+            if (user.deleted || user.isAdmin) return;
+            const state = user.state || {};
+            const predictionPerformance = state.predictionPerformance || { 2: { correct: 0, total: 0 }, 3: { correct: 0, total: 0 }, 4: { correct: 0, total: 0 }, 5: { correct: 0, total: 0 } };
+            const accuracyWindow = state.accuracyWindow || [];
+            const altAlgoType = state.altAlgoType || 'chatgpt';
+
+            let bayesianCorrect = 0, bayesianTotal = 0;
+            for (let n = 2; n <= 5; n++) {
+              bayesianCorrect += predictionPerformance[n]?.correct || 0;
+              bayesianTotal += predictionPerformance[n]?.total || 0;
+            }
+            const bayesianAccuracy = bayesianTotal > 0 ? (bayesianCorrect / bayesianTotal * 100).toFixed(1) + '%' : 'N/A';
+
+            let chatgptCorrect = 0, chatgptTotal = 0, grokCorrect = 0, grokTotal = 0, neuralnetCorrect = 0, neuralnetTotal = 0;
+            let currentAlgo = 'bayesian';
+            accuracyWindow.forEach(outcome => {
+              if (state.useAltAlgo && state.altAlgoCount > 0) {
+                currentAlgo = altAlgoType;
+              } else {
+                currentAlgo = 'bayesian';
+              }
+              if (currentAlgo === 'chatgpt') {
+                chatgptTotal++;
+                if (outcome === 'W') chatgptCorrect++;
+              } else if (currentAlgo === 'grok') {
+                grokTotal++;
+                if (outcome === 'W') grokCorrect++;
+              } else if (currentAlgo === 'neuralnet') {
+                neuralnetTotal++;
+                if (outcome === 'W') neuralnetCorrect++;
+              }
+            });
+            const chatgptAccuracy = chatgptTotal > 0 ? (chatgptCorrect / chatgptTotal * 100).toFixed(1) + '%' : 'N/A';
+            const grokAccuracy = grokTotal > 0 ? (grokCorrect / grokTotal * 100).toFixed(1) + '%' : 'N/A';
+            const neuralnetAccuracy = neuralnetTotal > 0 ? (neuralnetCorrect / neuralnetTotal * 100).toFixed(1) + '%' : 'N/A';
+
+            const row = document.createElement('tr');
+            row.innerHTML = `
+              <td>${user.email}</td>
+              <td>${bayesianAccuracy}</td>
+              <td>${chatgptAccuracy}</td>
+              <td>${grokAccuracy}</td>
+              <td>${neuralnetAccuracy}</td>
+            `;
+            accuracyTableBody.appendChild(row);
+          });
+        });
+        return unsubscribe;
+      } catch (error) {
+        showMessage('Error loading algorithm accuracy: ' + error.message);
+      }
+    }
+
+    function loadGlobalSettings() {
+      try {
+        const unsubscribe = onSnapshot(doc(db, 'settings', 'global'), (docSnapshot) => {
+          if (docSnapshot.exists()) {
+            globalSelectedAlgorithms = docSnapshot.data().selectedAlgorithms || ['bayesian'];
+          } else {
+            globalSelectedAlgorithms = ['bayesian'];
+            setDoc(doc(db, 'settings', 'global'), { selectedAlgorithms: globalSelectedAlgorithms }, { merge: true });
+          }
+          if (!isAdmin) {
+            updatePrediction();
+          }
+        });
+        return unsubscribe;
+      } catch (error) {
+        showMessage('Error loading global settings: ' + error.message);
+        globalSelectedAlgorithms = ['bayesian'];
+      }
+    }
+
+    onAuthStateChanged(auth, async user => {
+      const errorMessage = document.getElementById('errorMessage');
+      errorMessage.innerText = '';
+      if (user) {
+        try {
+          const userDoc = await getDoc(doc(db, 'users', user.uid));
+          if (userDoc.exists()) {
+            const userData = userDoc.data();
+            isAdmin = userData.isAdmin || false;
+            const subscriptionEnd = Number.isInteger(userData.subscriptionEnd) ? userData.subscriptionEnd : null;
+            const currentTime = DateTime.now().setZone('Asia/Manila').toMillis();
+            if (subscriptionEnd && currentTime < subscriptionEnd) {
+              await setDoc(doc(db, 'users', user.uid), { isOnline: true }, { merge: true });
+              document.getElementById('appContainer').classList.remove('hidden');
+              document.getElementById('subscriptionStatus').innerText = `Subscription: Active until ${DateTime.fromMillis(subscriptionEnd, { zone: 'Asia/Manila' }).toLocaleString(DateTime.DATETIME_FULL)}`;
+              document.getElementById('adminPanel').classList.toggle('hidden', !isAdmin);
+              document.querySelectorAll('.admin-only').forEach(el => el.classList.toggle('hidden', !isAdmin));
+              if (isAdmin) {
+                loadUsers();
+                onlineUsersUnsubscribe = loadOnlineUsers();
+                accuracyUnsubscribe = loadAlgorithmAccuracy();
+                const selectedAlgorithms = userData.state?.selectedAlgorithms || globalSelectedAlgorithms;
+                document.getElementById('bayesianCheckbox').checked = selectedAlgorithms.includes('bayesian');
+                document.getElementById('chatgptCheckbox').checked = selectedAlgorithms.includes('chatgpt');
+                document.getElementById('grokCheckbox').checked = selectedAlgorithms.includes('grok');
+                document.getElementById('neuralnetCheckbox').checked = selectedAlgorithms.includes('neuralnet');
+              }
+              globalSettingsUnsubscribe = loadGlobalSettings();
+              loadMemory();
+            } else {
+              await setDoc(doc(db, 'users', user.uid), { isOnline: false }, { merge: true });
+              showMessage('Your subscription has expired or is invalid. Contact admin to renew.');
+              signOut(auth);
+            }
+          } else {
+            showMessage('User data not found. Contact admin.');
+            signOut(auth);
+          }
+        } catch (error) {
+          console.error('Error:', error);
+          showMessage('Error checking subscription: ' + error.message);
+          await setDoc(doc(db, 'users', user.uid), { isOnline: false }, { merge: true });
+          signOut(auth);
+        }
+      } else {
+        if (onlineUsersUnsubscribe) {
+          onlineUsersUnsubscribe();
+          onlineUsersUnsubscribe = null;
+        }
+        if (accuracyUnsubscribe) {
+          accuracyUnsubscribe();
+          accuracyUnsubscribe = null;
+        }
+        if (globalSettingsUnsubscribe) {
+          globalSettingsUnsubscribe();
+          globalSettingsUnsubscribe = null;
+        }
+        window.location.href = 'login.html';
+      }
+    });
+
+    window.addEventListener('beforeunload', () => {
+      const user = auth.currentUser;
+      if (user) {
+        setDoc(doc(db, 'users', user.uid), { isOnline: false }, { merge: true });
+      }
+    });
 
     let state = {
       history: [],
@@ -401,384 +762,733 @@
       useAltAlgo: false,
       altAlgoType: 'chatgpt',
       mmSystem: 'default',
-      selectedAlgorithms: ['neural', 'bayesian'],
-      predictions: []
+      selectedAlgorithms: []
     };
-
     let snapshots = [];
+    let saveTimeout = null;
 
-    function showMessage(message, isLoginError = false) {
-      const errorElement = isLoginError ? document.getElementById('loginError') : document.getElementById('errorMessage');
-      errorElement.textContent = message;
-      errorElement.style.display = 'block';
+    function learnPattern(latest) {
+      for (let n = 2; n <= 5; n++) {
+        if (state.history.length >= n) {
+          const seq = state.history.slice(-n).join('');
+          const key = seq.slice(0, -1);
+          const next = seq.slice(-1);
+          if (next !== 'T') {
+            if (!state.patternMemory[key]) state.patternMemory[key] = { P: 0, B: 0 };
+            const recencyWeight = 1 + 0.1 * (state.history.length - state.history.lastIndexOf(seq));
+            state.patternMemory[key][next] += recencyWeight;
+          }
+        }
+      }
+    }
+
+    function unlearnPattern(latest) {
+      for (let n = 2; n <= 5; n++) {
+        if (state.history.length >= n) {
+          const seq = state.history.slice(-n).join('');
+          const key = seq.slice(0, -1);
+          const next = seq.slice(-1);
+          if (next !== 'T' && state.patternMemory[key]) {
+            const recencyWeight = 1 + 0.1 * (state.history.length - state.history.lastIndexOf(seq));
+            state.patternMemory[key][next] = Math.max(0, state.patternMemory[key][next] - recencyWeight);
+          }
+        }
+      }
+    }
+
+    function getDynamicConfidenceThreshold() {
+      const winRate = state.wins + state.losses > 0 ? state.wins / (state.wins + state.losses) : 0.5;
+      const bankrollRatio = state.currentBankroll / state.startBankroll;
+      const baseThreshold = 60;
+      const streakPenalty = state.outcomes.slice(-3).every(v => v === 'L') ? 10 : 0;
+      const bankrollPenalty = bankrollRatio < 0.5 ? 10 : 0;
+      return baseThreshold + streakPenalty + bankrollPenalty;
+    }
+
+    function getShoeType() {
+      let streaks = 0;
+      for (let i = 1; i < state.history.length; i++) {
+        if (state.history[i] === state.history[i - 1]) streaks++;
+      }
+      const chopScore = state.history.length > 1 ? state.history.length - 1 - streaks : 0;
+      const chopRatio = state.history.length > 1 ? chopScore / (state.history.length - 1) : 0;
+      if (chopRatio > 0.7) return 'Chop';
+      if (chopRatio < 0.3) return 'Streak';
+      return 'Balanced';
     }
 
     function calculateTrueCount() {
       const runningCount = state.cardCounts.high - state.cardCounts.low;
-      const decksRemaining = Math.max(0.5, state.cardCounts.decks - state.cardCounts.totalCards / 52);
-      return runningCount / decksRemaining;
+      const remainingDecks = Math.max(0.1, (state.cardCounts.decks * 52 - state.cardCounts.totalCards) / 52);
+      return runningCount / remainingDecks;
     }
 
-    function getShoeType() {
-      const history = state.history.slice(-10);
-      const chops = history.filter((h, i) => i > 0 && h !== history[i-1]).length;
-      const chopRatio = history.length > 1 ? chops / (history.length - 1) : 0;
-      return chopRatio > 0.6 ? 'Choppy' : history.length > 3 && history.slice(-4).every(h => h === history[history.length-1]) ? 'Streaky' : 'Balanced';
-    }
-
-    function calculateCurrentStreak() {
-      if (state.history.length < 2) return 0;
-      let streak = 1;
-      const last = state.history[state.history.length - 1];
-      for (let i = state.history.length - 2; i >= 0; i--) {
-        if (state.history[i] === last) streak++;
-        else break;
+    function estimateCardsDrawn(result) {
+      let low = 0, high = 0, total = 4;
+      if (result === 'P') {
+        low += 1;
+        high += 0.5;
+        if (Math.random() < 0.4) total = 6;
+      } else if (result === 'B') {
+        high += 1;
+        low += 0.5;
+        if (Math.random() < 0.4) total = 6;
+      } else if (result === 'T') {
+        high += 1;
+        total = Math.random() < 0.3 ? 6 : 4;
       }
-      return streak;
-    }
-
-    function calculateChopRatio() {
-      let chops = 0;
-      for (let i = 1; i < state.history.length; i++) {
-        if (state.history[i] !== state.history[i - 1]) chops++;
-      }
-      return state.history.length > 1 ? chops / (state.history.length - 1) : 0;
+      return { low, high, total };
     }
 
     function calculateRecentAccuracy() {
-      const windowSize = Math.min(state.accuracyWindow.length, 10);
-      if (windowSize === 0) return 0.5;
-      const recentWins = state.accuracyWindow.slice(-windowSize).filter(o => o === 'W').length;
-      return recentWins / windowSize;
+      if (state.accuracyWindow.length === 0) return 1.0;
+      const wins = state.accuracyWindow.filter(o => o === 'W').length;
+      return wins / state.accuracyWindow.length;
     }
 
-    function getWeightedPatternPrediction() {
-      let bestPrediction = { predict: 'P', confidence: 50, score: 0 };
+    function updateCardCountDisplay() {
+      if (!isAdmin) return;
+      const trueCount = calculateTrueCount();
+      const remainingDecks = (state.cardCounts.decks * 52 - state.cardCounts.totalCards) / 52;
+      const recentAccuracy = (calculateRecentAccuracy() * 100).toFixed(1);
+      document.getElementById('cardCountDisplay').innerText = 
+        `Card Count: Low=${state.cardCounts.low.toFixed(1)}, High=${state.cardCounts.high.toFixed(1)}, True Count=${trueCount.toFixed(2)}, Decks Remaining=${remainingDecks.toFixed(1)}, Recent Accuracy=${recentAccuracy}%`;
+    }
+
+    function bayesianPrediction() {
+      let bestPrediction = { predict: 'P', confidence: 50, score: 0, algo: 'bayesian' };
+      const threshold = getDynamicConfidenceThreshold();
+      const priorP = 0.4462;
+      const priorB = 0.4586;
+      const priorT = 0.0952;
+      const shoeType = getShoeType();
+      const trueCount = calculateTrueCount();
+      
+      let adjustedPriorP = priorP;
+      let adjustedPriorB = priorB;
+      if (trueCount > 1) {
+        adjustedPriorB += 0.02 * trueCount;
+        adjustedPriorP -= 0.01 * trueCount;
+      } else if (trueCount < -1) {
+        adjustedPriorP += 0.02 * Math.abs(trueCount);
+        adjustedPriorB -= 0.01 * Math.abs(trueCount);
+      }
+      const totalPrior = adjustedPriorP + adjustedPriorB + priorT;
+      adjustedPriorP /= totalPrior;
+      adjustedPriorB /= totalPrior;
+      
       for (let n = 5; n >= 2; n--) {
         if (state.history.length >= n) {
           const key = state.history.slice(-n + 1).join('');
           if (state.patternMemory[key]) {
-            const p = state.patternMemory[key].P || 0;
-            const b = state.patternMemory[key].B || 0;
+            let p = state.patternMemory[key].P || 0;
+            let b = state.patternMemory[key].B || 0;
             const total = p + b;
             if (total > 0) {
-              const confidence = Math.round(100 * Math.max(p / total, b / total));
-              const predict = p > b ? 'P' : 'B';
-              const sequenceWeight = n / 5;
+              if (shoeType === 'Streak' && state.history[state.history.length - 1] === 'P') {
+                p *= 1.2;
+              } else if (shoeType === 'Streak' && state.history[state.history.length - 1] === 'B') {
+                b *= 1.2;
+              } else if (shoeType === 'Chop') {
+                p *= state.history[state.history.length - 1] === 'B' ? 1.2 : 0.8;
+                b *= state.history[state.history.length - 1] === 'P' ? 1.2 : 0.8;
+              }
+              
+              const alpha = 2;
+              const posteriorP = (p + alpha * adjustedPriorP) / (total + alpha);
+              const posteriorB = (b + alpha * adjustedPriorB) / (total + alpha);
+              
+              const frequencyWeight = total / (state.wins + state.losses + 1);
+              const lengthWeight = n / 5;
               const recencyWeight = 1 / (state.history.length - state.history.lastIndexOf(key) + 1);
-              const score = sequenceWeight * recencyWeight * (confidence / 100);
-              if (score > bestPrediction.score) {
-                bestPrediction = { predict, confidence, score };
+              const perfWeight = state.predictionPerformance[n].total > 0 ? 
+                state.predictionPerformance[n].correct / state.predictionPerformance[n].total : 1;
+              const score = frequencyWeight * lengthWeight * recencyWeight * perfWeight;
+              
+              const confidence = Math.round(100 * Math.max(posteriorP, posteriorB));
+              const predict = posteriorP > posteriorB ? 'P' : 'B';
+              
+              if (score > bestPrediction.score && confidence > threshold) {
+                bestPrediction = { predict, confidence, score, algo: 'bayesian' };
               }
             }
           }
         }
       }
+      
+      return bestPrediction;
+    }
+
+    function chatGPTPrediction() {
+      let bestPrediction = { predict: 'P', confidence: 50, score: 0, algo: 'chatgpt' };
+      const threshold = getDynamicConfidenceThreshold();
+      
+      for (let n = 6; n >= 2; n--) {
+        if (state.history.length >= n) {
+          const key = state.history.slice(-n + 1).join('');
+          if (state.patternMemory[key]) {
+            let p = state.patternMemory[key].P || 0;
+            let b = state.patternMemory[key].B || 0;
+            const total = p + b;
+            if (total > 0) {
+              const recencyWeight = 1 / (state.history.length - state.history.lastIndexOf(key) + 1);
+              const frequencyWeight = total / (state.wins + state.losses + 1);
+              const score = recencyWeight * frequencyWeight * (n / 6);
+              
+              const confidence = Math.round(100 * Math.max(p / total, b / total));
+              const predict = p > b ? 'P' : 'B';
+              
+              if (score > bestPrediction.score && confidence > threshold) {
+                bestPrediction = { predict, confidence, score, algo: 'chatgpt' };
+              }
+            }
+          }
+        }
+      }
+      
+      return bestPrediction;
+    }
+
+    function grokPrediction() {
+      let bestPrediction = { predict: 'P', confidence: 50, score: 0, algo: 'grok' };
+      const threshold = getDynamicConfidenceThreshold();
+      const shoeType = getShoeType();
+      const trueCount = calculateTrueCount();
+      
+      let baseP = 0.4462;
+      let baseB = 0.4586;
+      if (shoeType === 'Streak' && state.history.length > 0) {
+        if (state.history[state.history.length - 1] === 'P') baseP *= 1.3;
+        else if (state.history[state.history.length - 1] === 'B') baseB *= 1.3;
+      } else if (shoeType === 'Chop') {
+        if (state.history[state.history.length - 1] === 'P') baseB *= 1.3;
+        else if (state.history[state.history.length - 1] === 'B') baseP *= 1.3;
+      }
+      if (trueCount > 1) baseB += 0.03 * trueCount;
+      else if (trueCount < -1) baseP += 0.03 * Math.abs(trueCount);
+      
+      const total = baseP + baseB;
+      baseP /= total;
+      baseB /= total;
+      
+      for (let n = 5; n >= 2; n--) {
+        if (state.history.length >= n) {
+          const key = state.history.slice(-n + 1).join('');
+          if (state.patternMemory[key]) {
+            let p = state.patternMemory[key].P || 0;
+            let b = state.patternMemory[key].B || 0;
+            const totalCounts = p + b;
+            if (totalCounts > 0) {
+              p = (p + 1 * baseP) / (totalCounts + 1);
+              b = (b + 1 * baseB) / (totalCounts + 1);
+              const confidence = Math.round(100 * Math.max(p, b));
+              const predict = p > b ? 'P' : 'B';
+              const score = (n / 5) * (totalCounts / (state.wins + state.losses + 1));
+              
+              if (score > bestPrediction.score && confidence > threshold) {
+                bestPrediction = { predict, confidence, score, algo: 'grok' };
+              }
+            }
+          }
+        }
+      }
+      
       return bestPrediction;
     }
 
     function neuralNetPrediction() {
-      const features = {
-        streakLength: calculateCurrentStreak(),
-        chopRatio: calculateChopRatio(),
-        trueCount: calculateTrueCount(),
-        recentAccuracy: calculateRecentAccuracy(),
-        shoeType: getShoeType(),
-        winRate: state.wins + state.losses > 0 ? state.wins / (state.wins + state.losses) : 0.5,
-        bankrollRatio: state.currentBankroll / state.startBankroll || 1
-      };
-
+      let bestPrediction = { predict: 'P', confidence: 50, score: 0, algo: 'neuralnet' };
+      const threshold = getDynamicConfidenceThreshold();
+      const shoeType = getShoeType();
+      const trueCount = calculateTrueCount();
+      
+      // Neural network weights (these would normally be trained)
       const weights = {
-        streak: 0.35,
-        chop: 0.25,
-        count: 0.15,
-        accuracy: 0.10,
-        shoeType: 0.10,
-        winRate: 0.05
+        sequenceWeight: 0.4,
+        shoeTypeWeight: 0.3,
+        trueCountWeight: 0.2,
+        recentAccuracyWeight: 0.1
       };
-
-      if (features.recentAccuracy < 0.4) {
-        weights.streak *= 1.2;
-        weights.chop *= 0.8;
-      } else if (features.recentAccuracy > 0.6) {
-        weights.chop *= 1.2;
-      }
-
-      const patternPrediction = getWeightedPatternPrediction();
-      const patternConfidence = patternPrediction.confidence / 100;
-
-      let pScore = 0, bScore = 0;
-
-      if (features.streakLength > 2) {
-        const lastOutcome = state.history[state.history.length - 1];
-        if (lastOutcome === 'P') {
-          pScore += features.streakLength * weights.streak;
-        } else if (lastOutcome === 'B') {
-          bScore += features.streakLength * weights.streak;
+      
+      // Get recent accuracy
+      const recentAccuracy = calculateRecentAccuracy();
+      
+      for (let n = 5; n >= 2; n--) {
+        if (state.history.length >= n) {
+          const key = state.history.slice(-n + 1).join('');
+          if (state.patternMemory[key]) {
+            let p = state.patternMemory[key].P || 0;
+            let b = state.patternMemory[key].B || 0;
+            const total = p + b;
+            
+            if (total > 0) {
+              // Base probabilities from sequence
+              const sequenceProbP = p / total;
+              const sequenceProbB = b / total;
+              
+              // Shoe type adjustment
+              let shoeTypeAdjustmentP = 0;
+              let shoeTypeAdjustmentB = 0;
+              if (shoeType === 'Streak') {
+                shoeTypeAdjustmentP = state.history[state.history.length - 1] === 'P' ? 0.15 : -0.05;
+                shoeTypeAdjustmentB = state.history[state.history.length - 1] === 'B' ? 0.15 : -0.05;
+              } else if (shoeType === 'Chop') {
+                shoeTypeAdjustmentP = state.history[state.history.length - 1] === 'B' ? 0.1 : -0.1;
+                shoeTypeAdjustmentB = state.history[state.history.length - 1] === 'P' ? 0.1 : -0.1;
+              }
+              
+              // True count adjustment
+              let trueCountAdjustmentP = 0;
+              let trueCountAdjustmentB = 0;
+              if (trueCount > 1) {
+                trueCountAdjustmentB = 0.05 * trueCount;
+                trueCountAdjustmentP = -0.025 * trueCount;
+              } else if (trueCount < -1) {
+                trueCountAdjustmentP = 0.05 * Math.abs(trueCount);
+                trueCountAdjustmentB = -0.025 * Math.abs(trueCount);
+              }
+              
+              // Recent accuracy adjustment
+              const accuracyAdjustment = (recentAccuracy - 0.5) * 0.1;
+              
+              // Combine all factors
+              const finalP = (sequenceProbP * weights.sequenceWeight) + 
+                             (shoeTypeAdjustmentP * weights.shoeTypeWeight) + 
+                             (trueCountAdjustmentP * weights.trueCountWeight) + 
+                             (accuracyAdjustment * weights.recentAccuracyWeight);
+              
+              const finalB = (sequenceProbB * weights.sequenceWeight) + 
+                             (shoeTypeAdjustmentB * weights.shoeTypeWeight) + 
+                             (trueCountAdjustmentB * weights.trueCountWeight) + 
+                             (-accuracyAdjustment * weights.recentAccuracyWeight);
+              
+              // Normalize
+              const totalFinal = finalP + finalB;
+              const normalizedP = totalFinal > 0 ? finalP / totalFinal : 0.5;
+              const normalizedB = totalFinal > 0 ? finalB / totalFinal : 0.5;
+              
+              const confidence = Math.round(100 * Math.max(normalizedP, normalizedB));
+              const predict = normalizedP > normalizedB ? 'P' : 'B';
+              
+              // Score based on sequence length and frequency
+              const frequencyWeight = total / (state.wins + state.losses + 1);
+              const lengthWeight = n / 5;
+              const recencyWeight = 1 / (state.history.length - state.history.lastIndexOf(key) + 1);
+              const score = frequencyWeight * lengthWeight * recencyWeight;
+              
+              if (score > bestPrediction.score && confidence > threshold) {
+                bestPrediction = { predict, confidence, score, algo: 'neuralnet' };
+              }
+            }
+          }
         }
       }
-
-      if (features.chopRatio > 0.6) {
-        const lastOutcome = state.history[state.history.length - 1];
-        if (lastOutcome === 'P') {
-          bScore += weights.chop * 1.5;
-        } else if (lastOutcome === 'B') {
-          pScore += weights.chop * 1.5;
-        }
-      }
-
-      if (features.trueCount > 1) {
-        bScore += features.trueCount * weights.count;
-      } else if (features.trueCount < -1) {
-        pScore += Math.abs(features.trueCount) * weights.count;
-      }
-
-      const accuracyFactor = features.recentAccuracy * weights.accuracy;
-      pScore += accuracyFactor;
-      bScore += accuracyFactor;
-
-      if (patternPrediction.predict === 'P') {
-        pScore += patternConfidence * weights.shoeType;
-      } else {
-        bScore += patternConfidence * weights.shoeType;
-      }
-
-      pScore *= 1 + (features.winRate - 0.5) * weights.winRate;
-      bScore *= 1 + (features.winRate - 0.5) * weights.winRate;
-
-      if (features.bankrollRatio < 0.5) {
-        pScore *= 0.9;
-        bScore *= 0.9;
-      }
-
-      const dynamicThreshold = 60 + 
-        (features.recentAccuracy < 0.4 ? 10 : 0) + 
-        (features.trueCount > 2 || features.trueCount < -2 ? 5 : 0) +
-        (features.bankrollRatio < 0.3 ? 10 : 0);
-
-      const total = pScore + bScore;
-      const pConfidence = total > 0 ? Math.round((pScore / total) * 100) : 50;
-      const bConfidence = total > 0 ? Math.round((bScore / total) * 100) : 50;
-
-      if (Math.max(pConfidence, bConfidence) < dynamicThreshold) {
-        return { predict: null, confidence: 0, score: 0, algo: 'neural' };
-      }
-
-      return {
-        predict: pConfidence > bConfidence ? 'P' : 'B',
-        confidence: Math.max(pConfidence, bConfidence),
-        score: Math.abs(pConfidence - bConfidence) / 100,
-        algo: 'neural'
-      };
-    }
-
-    function bayesianPrediction() {
-      const history = state.history.slice(-10);
-      const pCount = history.filter(h => h === 'P').length;
-      const bCount = history.filter(h => h === 'B').length;
-      const total = pCount + bCount;
-      if (total === 0) return { predict: 'P', confidence: 50, score: 0, algo: 'bayesian' };
-      const pProb = pCount / total;
-      const bProb = bCount / total;
-      return {
-        predict: pProb > bProb ? 'P' : 'B',
-        confidence: Math.round(Math.max(pProb, bProb) * 100),
-        score: Math.abs(pProb - bProb),
-        algo: 'bayesian'
-      };
-    }
-
-    function chatGPTPrediction() {
-      // Placeholder: Replace with actual API call to ChatGPT if needed
-      const recent = state.history.slice(-5);
-      const last = recent[recent.length - 1];
-      return {
-        predict: last === 'P' ? 'B' : 'P', // Simple alternating pattern
-        confidence: 60,
-        score: 0.2,
-        algo: 'chatgpt'
-      };
-    }
-
-    function grokPrediction() {
-      // Placeholder: Replace with actual API call to Grok if needed
-      const streak = calculateCurrentStreak();
-      return {
-        predict: streak > 2 ? state.history[state.history.length - 1] : state.history[state.history.length - 1] === 'P' ? 'B' : 'P',
-        confidence: streak > 2 ? 70 : 55,
-        score: streak > 2 ? 0.3 : 0.1,
-        algo: 'grok'
-      };
-    }
-
-    function getDynamicConfidenceThreshold() {
-      return 60 + (state.accuracyWindow.length > 10 ? state.accuracyWindow.slice(-10).filter(o => o === 'W').length / 10 * 10 : 0);
+      
+      return bestPrediction;
     }
 
     function selectPredictionAlgorithm() {
-      const algorithms = isAdmin ? 
-        (state.selectedAlgorithms.length > 0 ? state.selectedAlgorithms : ['neural', 'bayesian']) : 
-        globalSelectedAlgorithms;
-
+      const algorithms = isAdmin ? (state.selectedAlgorithms.length > 0 ? state.selectedAlgorithms : ['bayesian']) : globalSelectedAlgorithms;
       const predictions = [];
-
-      if (algorithms.includes('neural') && state.history.length >= 10) {
-        const neuralPrediction = neuralNetPrediction();
-        if (neuralPrediction.confidence >= getDynamicConfidenceThreshold()) {
-          return neuralPrediction;
-        }
-      }
-
       if (algorithms.includes('bayesian')) predictions.push(bayesianPrediction());
       if (algorithms.includes('chatgpt')) predictions.push(chatGPTPrediction());
       if (algorithms.includes('grok')) predictions.push(grokPrediction());
-
-      if (predictions.length === 0) {
-        return { predict: null, confidence: 0, score: 0, algo: 'none' };
-      }
-
+      if (algorithms.includes('neuralnet')) predictions.push(neuralNetPrediction());
       return predictions.reduce((best, current) => 
-        current.confidence > best.confidence ? current : best
+        current.confidence > best.confidence ? current : best, 
+        { predict: 'P', confidence: 0, score: 0, algo: 'bayesian' }
       );
     }
 
     async function setAlgorithms() {
       if (!isAdmin) return;
       const selectedAlgorithms = [];
-      if (document.getElementById('neuralCheckbox').checked) selectedAlgorithms.push('neural');
       if (document.getElementById('bayesianCheckbox').checked) selectedAlgorithms.push('bayesian');
       if (document.getElementById('chatgptCheckbox').checked) selectedAlgorithms.push('chatgpt');
       if (document.getElementById('grokCheckbox').checked) selectedAlgorithms.push('grok');
+      if (document.getElementById('neuralnetCheckbox').checked) selectedAlgorithms.push('neuralnet');
       state.selectedAlgorithms = selectedAlgorithms;
       try {
-        await setDoc(doc(db, 'settings', 'global'), { 
-          selectedAlgorithms: selectedAlgorithms.length > 0 ? selectedAlgorithms : ['neural', 'bayesian'] 
-        }, { merge: true });
+        await setDoc(doc(db, 'settings', 'global'), { selectedAlgorithms: selectedAlgorithms.length > 0 ? selectedAlgorithms : ['bayesian'] }, { merge: true });
         saveMemoryFast();
         updatePrediction();
-        showMessage(`Selected algorithms: ${selectedAlgorithms.length > 0 ? selectedAlgorithms.join(', ') : 'Neural + Bayesian (default)'}`);
+        showMessage(`Selected algorithms: ${selectedAlgorithms.length > 0 ? selectedAlgorithms.join(', ') : 'Bayesian (default)'}`);
         logEvent(analytics, 'set_algorithms', { algorithms: selectedAlgorithms });
       } catch (error) {
         showMessage('Error saving algorithm selection: ' + error.message);
       }
     }
 
-    function loadAlgorithmAccuracy() {
-      if (!isAdmin) return;
-      const accuracyTableBody = document.getElementById('algorithmAccuracyTableBody');
-      accuracyTableBody.innerHTML = '';
-      try {
-        const unsubscribe = onSnapshot(collection(db, 'users'), (querySnapshot) => {
-          accuracyTableBody.innerHTML = '';
-          querySnapshot.forEach(doc => {
-            const user = doc.data();
-            if (user.deleted) return;
-            const state = user.state || {};
-            const predictionPerformance = state.predictionPerformance || { 
-              2: { correct: 0, total: 0 }, 
-              3: { correct: 0, total: 0 }, 
-              4: { correct: 0, total: 0 }, 
-              5: { correct: 0, total: 0 } 
-            };
-            const accuracyWindow = state.accuracyWindow || [];
-            const altAlgoType = state.altAlgoType || 'chatgpt';
+    function recordResult(result) {
+      if (!state.baseUnit || !state.startBankroll) {
+        showMessage('Set bankroll/unit first');
+        return;
+      }
+      const prediction = selectPredictionAlgorithm();
+      snapshots.push(JSON.parse(JSON.stringify(state)));
+      
+      const cardsDrawn = estimateCardsDrawn(result);
+      state.cardCounts.low += cardsDrawn.low;
+      state.cardCounts.high += cardsDrawn.high;
+      state.cardCounts.totalCards += cardsDrawn.total;
+      
+      if (result === 'T') {
+        state.history.push('T');
+        learnPattern('T');
+        showMessage('Tie recorded. No wager placed.');
+        saveMemoryFast();
+        updateDisplay();
+        return;
+      }
+      
+      if (prediction.confidence <= getDynamicConfidenceThreshold()) {
+        state.history.push(result);
+        learnPattern(result);
+        showMessage(`No strong prediction (confidence ≤ ${getDynamicConfidenceThreshold()}%). No wager placed.`);
+        saveMemoryFast();
+        updateDisplay();
+        return;
+      }
+      
+      for (let n = 5; n >= 2; n--) {
+        if (state.history.length >= n - 1) {
+          const key = state.history.slice(-n + 1).join('');
+          if (state.patternMemory[key] && prediction.predict === (state.patternMemory[key].P > state.patternMemory[key].B ? 'P' : 'B')) {
+            state.predictionPerformance[n].total++;
+            if (result === prediction.predict) {
+              state.predictionPerformance[n].correct++;
+            }
+            break;
+          }
+        }
+      }
+      
+      state.history.push(result);
+      learnPattern(result);
+      const outcome = result === prediction.predict ? 'win' : 'loss';
+      state.outcomes.push(outcome === 'win' ? 'W' : 'L');
+      state.accuracyWindow.push(outcome === 'win' ? 'W' : 'L');
+      if (state.accuracyWindow.length > 10) state.accuracyWindow.shift();
+      
+      if (outcome === 'win') {
+        handleWin();
+        state.wins++;
+      } else {
+        handleLoss();
+        state.losses++;
+      }
+      if (state.stopProfitEffective > 0 && state.currentBankroll - state.startBankroll >= state.stopProfitEffective) {
+        state.stopProfitReached = true;
+      }
+      
+      saveMemoryFast();
+      updateDisplay();
+    }
 
-            let neuralCorrect = 0, neuralTotal = 0;
-            let bayesianCorrect = 0, bayesianTotal = 0;
-            let chatgptCorrect = 0, chatgptTotal = 0;
-            let grokCorrect = 0, grokTotal = 0;
-
-            accuracyWindow.forEach((outcome, index) => {
-              const prediction = state.predictions?.[index] || {};
-              if (prediction.algo === 'neural') {
-                neuralTotal++;
-                if (outcome === 'W') neuralCorrect++;
-              } else if (prediction.algo === 'bayesian') {
-                bayesianTotal++;
-                if (outcome === 'W') bayesianCorrect++;
-              } else if (prediction.algo === 'chatgpt') {
-                chatgptTotal++;
-                if (outcome === 'W') chatgptCorrect++;
-              } else if (prediction.algo === 'grok') {
-                grokTotal++;
-                if (outcome === 'W') grokCorrect++;
-              }
-            });
-
-            const neuralAccuracy = neuralTotal > 0 ? (neuralCorrect / neuralTotal * 100).toFixed(1) + '%' : 'N/A';
-            const bayesianAccuracy = bayesianTotal > 0 ? (bayesianCorrect / bayesianTotal * 100).toFixed(1) + '%' : 'N/A';
-            const chatgptAccuracy = chatgptTotal > 0 ? (chatgptCorrect / chatgptTotal * 100).toFixed(1) + '%' : 'N/A';
-            const grokAccuracy = grokTotal > 0 ? (grokCorrect / grokTotal * 100).toFixed(1) + '%' : 'N/A';
-
-            const row = document.createElement('tr');
-            row.innerHTML = `
-              <td>${user.email}</td>
-              <td>${neuralAccuracy}</td>
-              <td>${bayesianAccuracy}</td>
-              <td>${chatgptAccuracy}</td>
-              <td>${grokAccuracy}</td>
-            `;
-            accuracyTableBody.appendChild(row);
-          });
-        });
-        return unsubscribe;
-      } catch (error) {
-        showMessage('Error loading algorithm accuracy: ' + error.message);
+    function undo() {
+      if (snapshots.length) {
+        const prevState = snapshots.pop();
+        unlearnPattern(state.history[state.history.length - 1]);
+        state = prevState;
+        saveMemoryFast();
+        updateDisplay();
       }
     }
 
-    function loadOnlineUsers() {
-      if (!isAdmin) return;
-      const onlineUsersTableBody = document.getElementById('onlineUsersTableBody');
-      onlineUsersTableBody.innerHTML = '';
-      try {
-        const unsubscribe = onSnapshot(collection(db, 'users'), (querySnapshot) => {
-          onlineUsersTableBody.innerHTML = '';
-          querySnapshot.forEach(doc => {
-            const user = doc.data();
-            if (user.deleted) return;
-            const isOnline = user.lastActive && DateTime.now().toMillis() - user.lastActive < 5 * 60 * 1000;
-            const row = document.createElement('tr');
-            row.innerHTML = `
-              <td>${user.email}</td>
-              <td><span class="online-indicator ${isOnline ? 'online' : 'offline'}"></span>${isOnline ? 'Online' : 'Offline'}</td>
-            `;
-            onlineUsersTableBody.appendChild(row);
-          });
-        });
-        return unsubscribe;
-      } catch (error) {
-        showMessage('Error loading online users: ' + error.message);
+    function clearAll() {
+      if (confirm('Reset memory for new shoe? Bankroll, wager, profit, and money management will be preserved.')) {
+        snapshots.push(JSON.parse(JSON.stringify(state)));
+        // Preserve financial and betting-related state
+        const preservedState = {
+          currentBankroll: state.currentBankroll,
+          startBankroll: state.startBankroll,
+          baseUnit: state.baseUnit,
+          betState: { ...state.betState },
+          mmSystem: state.mmSystem,
+          stopProfitType: state.stopProfitType,
+          stopProfitValue: state.stopProfitValue,
+          stopProfitEffective: state.stopProfitEffective,
+          stopProfitReached: state.stopProfitReached,
+          wins: state.wins,
+          losses: state.losses,
+          selectedAlgorithms: state.selectedAlgorithms // Preserve for admins
+        };
+        // Reset memory-related state
+        state.history = [];
+        state.outcomes = [];
+        state.patternMemory = {};
+        state.predictionPerformance = { 2: { correct: 0, total: 0 }, 3: { correct: 0, total: 0 }, 4: { correct: 0, total: 0 }, 5: { correct: 0, total: 0 } };
+        state.cardCounts = { low: 0, high: 0, totalCards: 0, decks: 8 };
+        state.accuracyWindow = [];
+        state.altAlgoCount = 0;
+        state.useAltAlgo = false;
+        state.altAlgoType = 'chatgpt';
+        // Restore preserved state
+        Object.assign(state, preservedState);
+        saveMemoryFast();
+        document.getElementById('prediction').innerText = 'Waiting for input...';
+        document.getElementById('shoeType').innerText = 'Detected Pattern: N/A';
+        document.getElementById('historyDisplay').innerHTML = '';
+        if (isAdmin) updateCardCountDisplay();
+        updateMMDisplay();
       }
     }
 
-    function loadUsers() {
-      if (!isAdmin) return;
-      const userTableBody = document.getElementById('userTableBody');
-      userTableBody.innerHTML = '';
+    function resetStats() {
+      if (confirm('Reset stats (wins, losses, outcomes)?')) {
+        snapshots.push(JSON.parse(JSON.stringify(state)));
+        state.wins = 0;
+        state.losses = 0;
+        state.outcomes = [];
+        state.accuracyWindow = [];
+        state.altAlgoCount = 0;
+        state.useAltAlgo = false;
+        state.altAlgoType = 'chatgpt';
+        saveMemoryFast();
+        updateDisplay();
+      }
+    }
+
+    function resetMemory() {
+      if (confirm('Reset learned patterns?')) {
+        snapshots.push(JSON.parse(JSON.stringify(state)));
+        state.patternMemory = {};
+        state.predictionPerformance = { 2: { correct: 0, total: 0 }, 3: { correct: 0, total: 0 }, 4: { correct: 0, total: 0 }, 5: { correct: 0, total: 0 } };
+        state.accuracyWindow = [];
+        state.altAlgoCount = 0;
+        state.useAltAlgo = false;
+        state.altAlgoType = 'chatgpt';
+        saveMemoryFast();
+        updateDisplay();
+      }
+    }
+
+    function setBankroll() {
+      const bankroll = parseFloat(document.getElementById('bankrollInput').value);
+      const unit = parseFloat(document.getElementById('basebetInput').value);
+      const stopProfit = parseFloat(document.getElementById('stopProfitInput').value) || 0;
+      state.stopProfitType = document.getElementById('stopProfitType').value;
+      state.mmSystem = document.getElementById('mmSystem').value;
+      if (isNaN(bankroll) || bankroll <= 0 || isNaN(unit) || unit <= 0) {
+        showMessage('Invalid bankroll or unit value');
+        return;
+      }
+      if (stopProfit < 0) {
+        showMessage('Invalid stop profit');
+        return;
+      }
+      snapshots.push(JSON.parse(JSON.stringify(state)));
+      state.startBankroll = bankroll;
+      state.baseUnit = unit;
+      state.currentBankroll = bankroll;
+      state.stopProfitValue = stopProfit;
+      state.stopProfitEffective = state.stopProfitType === 'percentage' ? stopProfit / 100 * bankroll : stopProfit;
+      state.stopProfitReached = false;
+      state.betState = { currentBetUnits: 1, totalProfit: 0, cycleProfit: 0, previousLosses: [] };
+      state.wins = 0;
+      state.losses = 0;
+      state.outcomes = [];
+      state.patternMemory = {};
+      state.predictionPerformance = { 2: { correct: 0, total: 0 }, 3: { correct: 0, total: 0 }, 4: { correct: 0, total: 0 }, 5: { correct: 0, total: 0 } };
+      state.cardCounts = { low: 0, high: 0, totalCards: 0, decks: 8 };
+      state.accuracyWindow = [];
+      state.altAlgoCount = 0;
+      state.useAltAlgo = false;
+      state.altAlgoType = 'chatgpt';
+      saveMemoryFast();
+      updateDisplay();
+    }
+
+    function calculatePlusX(number) {
+      if (number < 10) return 1;
+      return parseInt(String(number).slice(0, -1)) || 1;
+    }
+
+    function handleWin() {
+      const wager = state.baseUnit * state.betState.currentBetUnits;
+      const payout = state.history[state.history.length - 1] === 'B' ? wager * 0.95 : wager;
+      state.currentBankroll += payout;
+
+      if (state.mmSystem === 'default') {
+        state.betState.totalProfit += state.betState.currentBetUnits;
+        state.betState.cycleProfit += state.betState.currentBetUnits;
+        if (state.betState.cycleProfit >= 1) {
+          state.betState.currentBetUnits = 1;
+          state.betState.cycleProfit = 0;
+          state.betState.previousLosses = [];
+        } else {
+          if (state.betState.previousLosses.length > 0) {
+            state.betState.previousLosses.shift();
+          }
+          const lastLoss = state.betState.previousLosses.length > 0 ? state.betState.previousLosses[0] : 1;
+          state.betState.currentBetUnits = lastLoss + calculatePlusX(lastLoss);
+        }
+      } else if (state.mmSystem === 'plus1') {
+        state.betState.totalProfit += state.betState.currentBetUnits;
+        state.betState.cycleProfit += state.betState.currentBetUnits;
+        if (state.betState.previousLosses.length > 0) {
+          state.betState.previousLosses.shift();
+        }
+        if (state.betState.cycleProfit >= 1) {
+          state.betState.currentBetUnits = 1;
+          state.betState.cycleProfit = 0;
+        } else if (state.betState.previousLosses.length > 0) {
+          const nextLoss = state.betState.previousLosses[0];
+          state.betState.currentBetUnits = nextLoss + calculatePlusX(nextLoss);
+        } else {
+          state.betState.currentBetUnits = 1;
+        }
+      }
+    }
+
+    function handleLoss() {
+      const wager = state.baseUnit * state.betState.currentBetUnits;
+      state.currentBankroll -= wager;
+
+      if (state.mmSystem === 'default') {
+        state.betState.totalProfit -= state.betState.currentBetUnits;
+        state.betState.cycleProfit -= state.betState.currentBetUnits;
+        state.betState.previousLosses.push(state.betState.currentBetUnits);
+      } else if (state.mmSystem === 'plus1') {
+        state.betState.totalProfit -= state.betState.currentBetUnits;
+        state.betState.cycleProfit -= state.betState.currentBetUnits;
+        if (state.betState.previousLosses.length === 0) {
+          state.betState.previousLosses.push(state.baseUnit / state.baseUnit);
+        } else {
+          const nextLoss = state.betState.previousLosses[0];
+          const x = calculatePlusX(nextLoss);
+          state.betState.previousLosses.push(nextLoss + x);
+        }
+        const nextBet = state.betState.previousLosses[0];
+        state.betState.currentBetUnits = nextBet + calculatePlusX(nextBet);
+        if (state.betState.cycleProfit >= 1) {
+          state.betState.currentBetUnits = 1;
+          state.betState.cycleProfit = 0;
+        }
+      }
+    }
+
+    function resetBet() {
+      if (confirm('Reset bet?')) {
+        snapshots.push(JSON.parse(JSON.stringify(state)));
+        state.betState = { currentBetUnits: 1, totalProfit: 0, cycleProfit: 0, previousLosses: [] };
+        saveMemoryFast();
+        updateDisplay();
+      }
+    }
+
+    function getWager() {
+      if (!state.baseUnit || state.stopProfitReached) return 0;
+      return Math.min(state.betState.currentBetUnits * state.baseUnit, state.currentBankroll);
+    }
+
+    function updateDisplay() {
+      updatePrediction();
+      updateMMDisplay();
+      if (isAdmin) updateCardCountDisplay();
+    }
+
+    function updatePrediction() {
+      const predDiv = document.getElementById('prediction');
+      const historyDiv = document.getElementById('historyDisplay');
+      historyDiv.innerHTML = '';
+      const displayHistory = state.history.slice(-10);
+      displayHistory.forEach((item, index) => {
+        const actualIndex = state.history.length - displayHistory.length + index;
+        const cell = document.createElement('div');
+        cell.innerText = item;
+        cell.className = item;
+        if (state.outcomes[actualIndex]) {
+          cell.classList.add(state.outcomes[actualIndex]);
+          cell.setAttribute('data-outcome', state.outcomes[actualIndex]);
+        }
+        historyDiv.appendChild(cell);
+      });
+      const prediction = selectPredictionAlgorithm();
+      if (prediction.confidence <= getDynamicConfidenceThreshold()) {
+        predDiv.innerText = `Waiting for strong signal (threshold: ${getDynamicConfidenceThreshold()}%)...`;
+        if (isAdmin) {
+          document.getElementById('shoeType').innerText = 'Detected Pattern: N/A';
+        }
+        return;
+      }
+      if (isAdmin) {
+        let sequenceLength = 0;
+        for (let n = 5; n >= 2; n--) {
+          if (state.history.length >= n) {
+            const key = state.history.slice(-n + 1).join('');
+            if (state.patternMemory[key] && prediction.predict === (state.patternMemory[key].P > state.patternMemory[key].B ? 'P' : 'B')) {
+              sequenceLength = n;
+              break;
+            }
+          }
+        }
+        const accuracy = state.predictionPerformance[sequenceLength].total > 0 ? 
+          ((state.predictionPerformance[sequenceLength].correct / state.predictionPerformance[sequenceLength].total) * 100).toFixed(1) : 'N/A';
+        const algoName = prediction.algo.charAt(0).toUpperCase() + prediction.algo.slice(1) + ' Algorithm';
+        predDiv.innerText = `Prediction: ${prediction.predict === 'P' ? 'Player' : 'Banker'} (${prediction.confidence}%) [Seq: ${sequenceLength}, Acc: ${accuracy}%] Using ${algoName}`;
+        let streaks = 0;
+        for (let i = 1; i < state.history.length; i++) {
+          if (state.history[i] === state.history[i - 1]) streaks++;
+        }
+        const chopScore = state.history.length > 1 ? state.history.length - 1 - streaks : 0;
+        const chopRatio = state.history.length > 1 ? chopScore / (state.history.length - 1) : 0;
+        let pattern = 'Balanced';
+        if (chopRatio > 0.7) pattern = 'Chop';
+        else if (chopRatio < 0.3) pattern = 'Streak';
+        document.getElementById('shoeType').innerText = `Detected Pattern: ${pattern}`;
+      } else {
+        predDiv.innerText = `Prediction: ${prediction.predict === 'P' ? 'Player' : 'Banker'} (${prediction.confidence}%)`;
+      }
+    }
+
+    function updateMMDisplay() {
+      document.getElementById('streakInfo').innerText = state.stopProfitReached ? '' : 
+        state.outcomes.slice(-3).every(v => v === 'L') ? `🧊 Cold Streak - Losses: ${state.betState.previousLosses.length}` :
+        state.outcomes.slice(-3).every(v => v === 'W') ? `🔥 Hot Streak` : '';
+      document.getElementById('currentWager').innerText = `💵 Current Bet: ${getWager().toFixed(2)}`;
+      document.getElementById('wins').innerText = state.wins;
+      document.getElementById('losses').innerText = state.losses;
+      document.getElementById('accuracy').innerText = state.wins + state.losses ? ((state.wins / (state.wins + state.losses)) * 100).toFixed(1) + '%' : '0%';
+      const previousLosses = state.betState.previousLosses.length > 0 ? state.betState.previousLosses.join(', ') : 'None';
+      const stopProfitDisplay = state.stopProfitValue > 0 ? 
+        state.stopProfitType === 'percentage' ? `${state.stopProfitValue}% ($${state.stopProfitEffective.toFixed(2)})` : 
+        `$${state.stopProfitValue.toFixed(2)}` : 'Not Set';
+      document.getElementById('bankrollDisplay').innerHTML = state.startBankroll ? 
+        `💼 Balance: ${state.currentBankroll.toFixed(2)} | Profit: ${(state.currentBankroll - state.startBankroll).toFixed(2)}<br>` +
+        `Bet: $${(state.betState.currentBetUnits * state.baseUnit).toFixed(2)} (${state.betState.currentBetUnits} units)<br>` +
+        `Losses: ${previousLosses}<br>` +
+        `<span class="${state.betState.cycleProfit >= 1 ? 'cycle-reset' : ''}">Cycle: $${(state.betState.cycleProfit * state.baseUnit).toFixed(2)}</span><br>` +
+        `Total: $${(state.betState.totalProfit * state.baseUnit).toFixed(2)}<br>` +
+        `Stop: ${stopProfitDisplay} | ${state.stopProfitReached ? '🚨 Reached' : 'Active'}<br>` +
+        `MM: ${state.mmSystem === 'plus1' ? 'Plus 1' : 'Default'}` : 
+        '💼 Balance: - | Profit: -';
+      document.getElementById('bankrollInput').value = state.startBankroll || '';
+      document.getElementById('basebetInput').value = state.baseUnit || '';
+      document.getElementById('stopProfitType').value = state.stopProfitType;
+      document.getElementById('stopProfitInput').value = state.stopProfitValue || '';
+      document.getElementById('mmSystem').value = state.mmSystem;
+    }
+
+    function saveMemoryFast() {
+      clearTimeout(saveTimeout);
+      saveTimeout = setTimeout(saveMemory, 300);
+    }
+
+    async function saveMemory() {
       try {
-        const unsubscribe = onSnapshot(collection(db, 'users'), (querySnapshot) => {
-          userTableBody.innerHTML = '';
-          querySnapshot.forEach(doc => {
-            const user = doc.data();
-            if (user.deleted) return;
-            const row = document.createElement('tr');
-            row.innerHTML = `
-              <td>${user.email}</td>
-              <td>${user.subscriptionEnd ? DateTime.fromMillis(user.subscriptionEnd).toLocaleString(DateTime.DATETIME_SHORT) : 'N/A'}</td>
-              <td>${user.isAdmin ? 'Yes' : 'No'}</td>
-              <td><button onclick="updateUserSubscription('${doc.id}', '${user.email}')" aria-label="Extend subscription">Add</button></td>
-              <td>
-                <button class="fix-subscription" onclick="fixUserSubscription('${doc.id}')" aria-label="Fix subscription">Fix</button>
-                <button onclick="deleteUser('${doc.id}')" aria-label="Delete user">Delete</button>
-              </td>
-            `;
-            userTableBody.appendChild(row);
-          });
-        });
-        return unsubscribe;
-      } catch (error) {
-        showMessage('Error loading users: ' + error.message);
+        const user = auth.currentUser;
+        if (user) {
+          await setDoc(doc(db, 'users', user.uid), {
+            email: user.email,
+            subscriptionEnd: (await getDoc(doc(db, 'users', user.uid))).data().subscriptionEnd,
+            isAdmin: (await getDoc(doc(db, 'users', user.uid))).data().isAdmin || false,
+            isOnline: true,
+            state: state
+          }, { merge: true });
+        }
+      } catch (e) {
+        showMessage('Error saving to Firestore: ' + e.message);
       }
     }
 
@@ -789,17 +1499,38 @@
           const userDoc = await getDoc(doc(db, 'users', user.uid));
           if (userDoc.exists()) {
             const saved = userDoc.data().state || {};
-            state = {
-              ...state,
-              ...saved,
-              predictions: Array.isArray(saved.predictions) ? saved.predictions : [],
-              history: Array.isArray(saved.history) ? saved.history : [],
-              outcomes: Array.isArray(saved.outcomes) ? saved.outcomes : [],
-              accuracyWindow: Array.isArray(saved.accuracyWindow) ? saved.accuracyWindow : []
-            };
-            updateUI();
-            updatePrediction();
-            updateShoeInfo();
+            state.wins = Number(saved.wins) || 0;
+            state.losses = Number(saved.losses) || 0;
+            state.baseUnit = Number(saved.baseUnit) || 0;
+            state.startBankroll = Number(saved.startBankroll) || 0;
+            state.currentBankroll = Number(saved.currentBankroll) || 0;
+            state.stopProfitType = saved.stopProfitType || 'percentage';
+            state.stopProfitValue = Number(saved.stopProfitValue) || 0;
+            state.stopProfitEffective = Number(saved.stopProfitEffective) || 0;
+            state.stopProfitReached = saved.stopProfitReached || false;
+            state.betState = saved.betState || { currentBetUnits: 1, totalProfit: 0, cycleProfit: 0, previousLosses: [] };
+            state.history = Array.isArray(saved.history) ? saved.history : [];
+            state.outcomes = Array.isArray(saved.outcomes) ? saved.outcomes : [];
+            state.patternMemory = saved.patternMemory || {};
+            state.predictionPerformance = saved.predictionPerformance || { 2: { correct: 0, total: 0 }, 3: { correct: 0, total: 0 }, 4: { correct: 0, total: 0 }, 5: { correct: 0, total: 0 } };
+            state.cardCounts = saved.cardCounts || { low: 0, high: 0, totalCards: 0, decks: 8 };
+            state.accuracyWindow = Array.isArray(saved.accuracyWindow) ? saved.accuracyWindow : [];
+            state.altAlgoCount = Number(saved.altAlgoCount) || 0;
+            state.useAltAlgo = saved.useAltAlgo || false;
+            state.altAlgoType = saved.altAlgoType || 'chatgpt';
+            state.mmSystem = saved.mmSystem || 'default';
+            state.selectedAlgorithms = isAdmin ? (Array.isArray(saved.selectedAlgorithms) ? saved.selectedAlgorithms : []) : [];
+            const subscriptionEnd = Number.isInteger(userDoc.data().subscriptionEnd) ? userDoc.data().subscriptionEnd : null;
+            document.getElementById('subscriptionStatus').innerText = subscriptionEnd ? 
+              `Subscription: Active until ${DateTime.fromMillis(subscriptionEnd, { zone: 'Asia/Manila' }).toLocaleString(DateTime.DATETIME_FULL)}` : 
+              'Subscription: Invalid or not set';
+            if (isAdmin) {
+              document.getElementById('bayesianCheckbox').checked = state.selectedAlgorithms.includes('bayesian');
+              document.getElementById('chatgptCheckbox').checked = state.selectedAlgorithms.includes('chatgpt');
+              document.getElementById('grokCheckbox').checked = state.selectedAlgorithms.includes('grok');
+              document.getElementById('neuralnetCheckbox').checked = state.selectedAlgorithms.includes('neuralnet');
+            }
+            updateDisplay();
           }
         }
       } catch (e) {
@@ -807,409 +1538,24 @@
       }
     }
 
-    async function saveMemoryFast() {
-      try {
-        const user = auth.currentUser;
-        if (user) {
-          await setDoc(doc(db, 'users', user.uid), {
-            state,
-            lastActive: DateTime.now().toMillis()
-          }, { merge: true });
-        }
-      } catch (e) {
-        console.error('Error saving to Firestore:', e);
-      }
-    }
-
-    function updatePrediction() {
-      const prediction = selectPredictionAlgorithm();
-      document.getElementById('prediction').textContent = prediction.predict 
-        ? `Prediction: ${prediction.predict} (${prediction.confidence}% - ${prediction.algo})` 
-        : 'Waiting for input...';
-    }
-
-    function updateShoeInfo() {
-      document.getElementById('shoeType').textContent = `Detected Pattern: ${getShoeType()}`;
-      document.getElementById('cardCountDisplay').textContent = `Card Count: ${calculateTrueCount().toFixed(2)}`;
-    }
-
-    function updateUI() {
-      document.getElementById('historyDisplay').innerHTML = state.history.slice(-10).map((h, i) => {
-        const outcome = state.accuracyWindow[i] || '';
-        return `<div class="${h}" data-outcome="${outcome}">${h}</div>`;
-      }).join('');
-      document.getElementById('wins').textContent = state.wins;
-      document.getElementById('losses').textContent = state.losses;
-      document.getElementById('accuracy').textContent = state.wins + state.losses > 0 
-        ? `${((state.wins / (state.wins + state.losses)) * 100).toFixed(1)}%` 
-        : '0%';
-      document.getElementById('currentWager').textContent = `💵 Current Bet: ${state.betState.currentBetUnits * state.baseUnit || 0}`;
-      document.getElementById('bankrollDisplay').textContent = `💼 Balance: ${state.currentBankroll || 0} | Profit: ${state.betState.totalProfit || 0}`;
-      document.getElementById('streakInfo').textContent = `Current Streak: ${calculateCurrentStreak()} (${getShoeType()})`;
-    }
-
-    function recordResult(result) {
-      if (!state.baseUnit || !state.startBankroll) {
-        showMessage('Set bankroll/unit first');
-        return;
-      }
-      const prediction = selectPredictionAlgorithm();
-      snapshots.push(JSON.parse(JSON.stringify(state)));
-      if (!state.predictions) state.predictions = [];
-      state.predictions.push({
-        algo: prediction.algo,
-        predict: prediction.predict,
-        confidence: prediction.confidence,
-        timestamp: DateTime.now().toMillis()
-      });
-      state.history.push(result);
-      state.outcomes.push(prediction.predict === result ? 'W' : 'L');
-      state.accuracyWindow.push(prediction.predict === result ? 'W' : 'L');
-      if (prediction.predict === result && result !== 'T') {
-        state.wins++;
-        state.currentBankroll += state.betState.currentBetUnits * state.baseUnit * (result === 'B' ? 0.95 : 1);
-        state.betState.totalProfit += state.betState.currentBetUnits * state.baseUnit * (result === 'B' ? 0.95 : 1);
-        state.betState.cycleProfit += state.betState.currentBetUnits * state.baseUnit * (result === 'B' ? 0.95 : 1);
-      } else if (result !== 'T') {
-        state.losses++;
-        state.currentBankroll -= state.betState.currentBetUnits * state.baseUnit;
-        state.betState.totalProfit -= state.betState.currentBetUnits * state.baseUnit;
-        state.betState.cycleProfit -= state.betState.currentBetUnits * state.baseUnit;
-        state.betState.previousLosses.push(state.betState.currentBetUnits);
-      }
-      if (state.mmSystem === 'plus1' && prediction.predict === result && result !== 'T') {
-        state.betState.currentBetUnits++;
-      } else if (state.betState.previousLosses.length > 0) {
-        state.betState.currentBetUnits = state.betState.previousLosses.pop();
-      }
-      // Update card counts (simplified)
-      state.cardCounts.totalCards += 4; // Assume 4 cards per hand
-      if (['2','3','4','5'].includes(result)) state.cardCounts.low++;
-      if (['10','J','Q','K','A'].includes(result)) state.cardCounts.high++;
-      // Update pattern memory
-      for (let n = 2; n <= 5; n++) {
-        if (state.history.length >= n) {
-          const key = state.history.slice(-n).join('');
-          state.patternMemory[key] = state.patternMemory[key] || { P: 0, B: 0 };
-          if (result === 'P') state.patternMemory[key].P++;
-          if (result === 'B') state.patternMemory[key].B++;
-          state.predictionPerformance[n].total++;
-          if (prediction.predict === result) state.predictionPerformance[n].correct++;
-        }
-      }
-      // Check stop profit
-      if (state.stopProfitType === 'percentage' && state.betState.totalProfit >= state.startBankroll * (state.stopProfitValue / 100)) {
-        state.stopProfitReached = true;
-        showMessage('Stop profit reached!');
-      } else if (state.stopProfitType === 'currency' && state.betState.totalProfit >= state.stopProfitValue) {
-        state.stopProfitReached = true;
-        showMessage('Stop profit reached!');
-      }
-      updateUI();
-      updatePrediction();
-      updateShoeInfo();
-      saveMemoryFast();
-    }
-
-    function undo() {
-      if (snapshots.length > 0) {
-        state = snapshots.pop();
-        updateUI();
-        updatePrediction();
-        updateShoeInfo();
-        saveMemoryFast();
-      }
-    }
-
-    function clearAll() {
-      if (confirm('Reset memory for new shoe? Bankroll, wager, profit, and money management will be preserved.')) {
-        snapshots.push(JSON.parse(JSON.stringify(state)));
-        const preservedState = {
-          baseUnit: state.baseUnit,
-          startBankroll: state.startBankroll,
-          currentBankroll: state.currentBankroll,
-          betState: state.betState,
-          stopProfitType: state.stopProfitType,
-          stopProfitValue: state.stopProfitValue,
-          stopProfitEffective: state.stopProfitEffective,
-          stopProfitReached: state.stopProfitReached,
-          mmSystem: state.mmSystem,
-          selectedAlgorithms: state.selectedAlgorithms,
-          predictions: state.predictions
-        };
-        state = {
-          ...state,
-          history: [],
-          outcomes: [],
-          wins: 0,
-          losses: 0,
-          patternMemory: {},
-          predictionPerformance: { 2: { correct: 0, total: 0 }, 3: { correct: 0, total: 0 }, 4: { correct: 0, total: 0 }, 5: { correct: 0, total: 0 } },
-          cardCounts: { low: 0, high: 0, totalCards: 0, decks: 8 },
-          accuracyWindow: []
-        };
-        Object.assign(state, preservedState);
-        updateUI();
-        updatePrediction();
-        updateShoeInfo();
-        saveMemoryFast();
-      }
-    }
-
-    function resetStats() {
-      snapshots.push(JSON.parse(JSON.stringify(state)));
-      state.wins = 0;
-      state.losses = 0;
-      state.accuracyWindow = [];
-      updateUI();
-      updatePrediction();
-      saveMemoryFast();
-    }
-
-    function resetMemory() {
-      snapshots.push(JSON.parse(JSON.stringify(state)));
-      state.patternMemory = {};
-      state.predictionPerformance = { 2: { correct: 0, total: 0 }, 3: { correct: 0, total: 0 }, 4: { correct: 0, total: 0 }, 5: { correct: 0, total: 0 } };
-      state.cardCounts = { low: 0, high: 0, totalCards: 0, decks: 8 };
-      updateUI();
-      updatePrediction();
-      updateShoeInfo();
-      saveMemoryFast();
-    }
-
-    function setBankroll() {
-      const bankrollInput = document.getElementById('bankrollInput').value;
-      const basebetInput = document.getElementById('basebetInput').value;
-      const stopProfitType = document.getElementById('stopProfitType').value;
-      const stopProfitInput = document.getElementById('stopProfitInput').value;
-      if (bankrollInput && basebetInput) {
-        snapshots.push(JSON.parse(JSON.stringify(state)));
-        state.startBankroll = parseFloat(bankrollInput);
-        state.currentBankroll = state.startBankroll;
-        state.baseUnit = parseFloat(basebetInput);
-        state.stopProfitType = stopProfitType;
-        state.stopProfitValue = parseFloat(stopProfitInput) || 0;
-        state.mmSystem = document.getElementById('mmSystem').value;
-        state.betState.totalProfit = 0;
-        state.betState.cycleProfit = 0;
-        state.betState.previousLosses = [];
-        state.betState.currentBetUnits = 1;
-        state.stopProfitReached = false;
-        updateUI();
-        saveMemoryFast();
-        showMessage('Bankroll and bet set.');
-      } else {
-        showMessage('Please enter valid bankroll and unit values.');
-      }
-    }
-
-    function resetBet() {
-      snapshots.push(JSON.parse(JSON.stringify(state)));
-      state.betState.currentBetUnits = 1;
-      state.betState.previousLosses = [];
-      updateUI();
-      saveMemoryFast();
-      showMessage('Bet reset.');
-    }
-
-    async function saveMemory() {
-      await saveMemoryFast();
-      showMessage('State saved successfully.');
-    }
-
     function toggleAdvanced() {
-      const advancedControls = document.getElementById('advancedControls');
-      advancedControls.classList.toggle('show');
+      const section = document.getElementById('advancedControls');
+      const button = document.querySelector('.toggle-section[onclick="toggleAdvanced()"]');
+      section.classList.toggle('show');
+      button.innerText = section.classList.contains('show') ? 'Hide Advanced' : 'Show Advanced';
     }
 
-    async function signIn() {
-      const email = document.getElementById('emailInput').value;
-      const password = document.getElementById('passwordInput').value;
-      try {
-        await signInWithEmailAndPassword(auth, email, password);
-        document.getElementById('loginForm').classList.add('hidden');
-        document.getElementById('appContainer').classList.remove('hidden');
-      } catch (error) {
-        showMessage('Sign-in error: ' + error.message, true);
-      }
-    }
-
-    async function signOutUser() {
-      try {
-        await signOut(auth);
-        document.getElementById('appContainer').classList.add('hidden');
-        document.getElementById('loginForm').classList.remove('hidden');
-        showMessage('Signed out successfully.');
-      } catch (error) {
-        showMessage('Error signing out: ' + error.message);
-      }
-    }
-
-    async function createUser() {
-      if (!isAdmin) {
-        showMessage('Admin access required.');
-        return;
-      }
-      const email = document.getElementById('newUserEmail').value;
-      const password = document.getElementById('newUserPassword').value;
-      const isAdmin = document.getElementById('newUserIsAdmin').checked;
-      try {
-        const userCredential = await createUserWithEmailAndPassword(auth, email, password);
-        await setDoc(doc(db, 'users', userCredential.user.uid), {
-          email,
-          isAdmin,
-          subscriptionEnd: null,
-          state: {},
-          lastActive: DateTime.now().toMillis()
-        });
-        showMessage('User created successfully.');
-      } catch (error) {
-        showMessage('Error creating user: ' + error.message);
-      }
-    }
-
-    async function extendSubscription() {
-      if (!isAdmin) {
-        showMessage('Admin access required.');
-        return;
-      }
-      const email = document.getElementById('extendUserEmail').value;
-      const timeUnit = document.getElementById('extendTimeUnit').value;
-      const amount = parseInt(document.getElementById('extendTimeAmount').value);
-      if (!email || !amount) {
-        showMessage('Please enter a valid email and amount.');
-        return;
-      }
-      try {
-        const q = query(collection(db, 'users'), where('email', '==', email));
-        const querySnapshot = await getDocs(q);
-        if (querySnapshot.empty) {
-          showMessage('User not found.');
-          return;
-        }
-        const userDoc = querySnapshot.docs[0];
-        const userData = userDoc.data();
-        let newEnd = userData.subscriptionEnd ? DateTime.fromMillis(userData.subscriptionEnd) : DateTime.now();
-        if (timeUnit === 'hours') {
-          newEnd = newEnd.plus({ hours: amount });
-        } else if (timeUnit === 'days') {
-          newEnd = newEnd.plus({ days: amount });
-        } else if (timeUnit === 'test') {
-          newEnd = DateTime.now().plus({ hours: 24 });
-        }
-        await setDoc(doc(db, 'users', userDoc.id), { subscriptionEnd: newEnd.toMillis() }, { merge: true });
-        showMessage(`Subscription extended for ${email}.`);
-      } catch (error) {
-        showMessage('Error extending subscription: ' + error.message);
-      }
-    }
-
-    async function fixUserSubscription(uid) {
-      if (!isAdmin) {
-        showMessage('Admin access required.');
-        return;
-      }
-      try {
-        await setDoc(doc(db, 'users', uid), { subscriptionEnd: DateTime.now().plus({ days: 7 }).toMillis() }, { merge: true });
-        showMessage('Subscription fixed for 7 days.');
-      } catch (error) {
-        showMessage('Error fixing subscription: ' + error.message);
-      }
-    }
-
-    async function deleteUser(uid) {
-      if (!isAdmin) {
-        showMessage('Admin access required.');
-        return;
-      }
-      if (confirm('Are you sure you want to delete this user?')) {
-        try {
-          await setDoc(doc(db, 'users', uid), { deleted: true }, { merge: true });
-          showMessage('User marked as deleted.');
-        } catch (error) {
-          showMessage('Error deleting user: ' + error.message);
-        }
-      }
-    }
-
-    onAuthStateChanged(auth, async user => {
-      const loading = document.getElementById('loading');
-      const appContainer = document.getElementById('appContainer');
-      const loginForm = document.getElementById('loginForm');
-      try {
-        console.log('Auth state changed:', user ? user.uid : 'No user');
-        loading.style.display = 'block';
-        if (user) {
-          const userDoc = await getDoc(doc(db, 'users', user.uid));
-          if (userDoc.exists()) {
-            const userData = userDoc.data();
-            if (userData.deleted) {
-              showMessage('Account deleted. Please contact support.');
-              loginForm.classList.remove('hidden');
-              appContainer.classList.add('hidden');
-              return;
-            }
-            isAdmin = userData.isAdmin || false;
-            state = {
-              ...state,
-              ...userData.state,
-              predictions: Array.isArray(userData.state?.predictions) ? userData.state.predictions : [],
-              history: Array.isArray(userData.state?.history) ? userData.state.history : [],
-              outcomes: Array.isArray(userData.state?.outcomes) ? userData.state.outcomes : [],
-              accuracyWindow: Array.isArray(userData.state?.accuracyWindow) ? userData.state.accuracyWindow : []
-            };
-            loginForm.classList.add('hidden');
-            appContainer.classList.remove('hidden');
-            document.getElementById('adminPanel').classList.toggle('hidden', !isAdmin);
-            document.getElementById('shoeType').classList.toggle('hidden', !isAdmin);
-            document.getElementById('cardCountDisplay').classList.toggle('hidden', !isAdmin);
-            document.getElementById('subscriptionStatus').textContent = `Subscription: ${userData.subscriptionEnd ? DateTime.fromMillis(userData.subscriptionEnd).toLocaleString(DateTime.DATETIME_SHORT) : 'N/A'}`;
-            await loadMemory();
-            updatePrediction();
-            updateUI();
-            updateShoeInfo();
-            if (isAdmin) {
-              accuracyUnsubscribe = loadAlgorithmAccuracy();
-              onlineUsersUnsubscribe = loadOnlineUsers();
-              loadUsers();
-              globalSettingsUnsubscribe = onSnapshot(doc(db, 'settings', 'global'), (doc) => {
-                if (doc.exists()) {
-                  globalSelectedAlgorithms = doc.data().selectedAlgorithms || ['neural', 'bayesian'];
-                  updatePrediction();
-                }
-              });
-            }
-          } else {
-            showMessage('User data not found.');
-            loginForm.classList.remove('hidden');
-            appContainer.classList.add('hidden');
-          }
-        } else {
-          loginForm.classList.remove('hidden');
-          appContainer.classList.add('hidden');
-          showMessage('Please sign in to access the app.', true);
-        }
-      } catch (error) {
-        console.error('Initialization error:', error);
-        showMessage('Error loading app: ' + error.message);
-        loginForm.classList.remove('hidden');
-        appContainer.classList.add('hidden');
-      } finally {
-        loading.style.display = 'none';
-      }
-    });
-
-    window.signIn = signIn;
     window.signOutUser = signOutUser;
     window.createUser = createUser;
-    window.updateUserSubscription = (uid, email) => {
+    window.updateUserSubscription = updateUserSubscription;
+    window.fixUserSubscription = fixUserSubscription;
+    window.extendSubscription = extendSubscription;
+    window.extendSubscriptionFor = (uid, email) => {
       document.getElementById('extendUserEmail').value = email;
       document.getElementById('extendTimeUnit').value = 'hours';
       document.getElementById('extendTimeAmount').value = '';
       document.getElementById('extendTimeUnit').focus();
     };
-    window.fixUserSubscription = fixUserSubscription;
-    window.extendSubscription = extendSubscription;
     window.deleteUser = deleteUser;
     window.recordResult = recordResult;
     window.undo = undo;
