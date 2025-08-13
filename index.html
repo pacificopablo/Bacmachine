@@ -305,6 +305,7 @@
           <label><input type="checkbox" id="bayesianCheckbox" onchange="setAlgorithms()" aria-label="Use Bayesian algorithm">Bayesian</label>
           <label><input type="checkbox" id="chatgptCheckbox" onchange="setAlgorithms()" aria-label="Use ChatGPT algorithm">ChatGPT</label>
           <label><input type="checkbox" id="grokCheckbox" onchange="setAlgorithms()" aria-label="Use Grok algorithm">Grok</label>
+          <label><input type="checkbox" id="neuralnetCheckbox" onchange="setAlgorithms()" aria-label="Use Neural Network algorithm">Neural Network</label>
         </div>
       </div>
       <div class="section">
@@ -328,6 +329,7 @@
               <th>Bayesian</th>
               <th>ChatGPT</th>
               <th>Grok</th>
+              <th>Neural Net</th>
             </tr>
           </thead>
           <tbody id="algorithmAccuracyTableBody"></tbody>
@@ -348,7 +350,7 @@
       apiKey: "AIzaSyBs3LHGZA_8spAwQ5kgULiqcZmKqcIvZiI",
       authDomain: "bfc-vip.firebaseapp.com",
       projectId: "bfc-vip",
-      storageBucket: "bfc-vip.firebasestorage.app",
+      storageBucket: "bfc-vip.appspot.com",
       messagingSenderId: "92211995630",
       appId: "1:92211995630:web:186a26085329fc607724ff",
       measurementId: "G-1EBPP36F59"
@@ -422,7 +424,7 @@
             useAltAlgo: false,
             altAlgoType: 'chatgpt',
             mmSystem: 'default',
-            selectedAlgorithms: [] // Not used for non-admins
+            selectedAlgorithms: []
           }
         });
         showMessage('User created successfully');
@@ -611,7 +613,7 @@
             }
             const bayesianAccuracy = bayesianTotal > 0 ? (bayesianCorrect / bayesianTotal * 100).toFixed(1) + '%' : 'N/A';
 
-            let chatgptCorrect = 0, chatgptTotal = 0, grokCorrect = 0, grokTotal = 0;
+            let chatgptCorrect = 0, chatgptTotal = 0, grokCorrect = 0, grokTotal = 0, neuralnetCorrect = 0, neuralnetTotal = 0;
             let currentAlgo = 'bayesian';
             accuracyWindow.forEach(outcome => {
               if (state.useAltAlgo && state.altAlgoCount > 0) {
@@ -625,10 +627,14 @@
               } else if (currentAlgo === 'grok') {
                 grokTotal++;
                 if (outcome === 'W') grokCorrect++;
+              } else if (currentAlgo === 'neuralnet') {
+                neuralnetTotal++;
+                if (outcome === 'W') neuralnetCorrect++;
               }
             });
             const chatgptAccuracy = chatgptTotal > 0 ? (chatgptCorrect / chatgptTotal * 100).toFixed(1) + '%' : 'N/A';
             const grokAccuracy = grokTotal > 0 ? (grokCorrect / grokTotal * 100).toFixed(1) + '%' : 'N/A';
+            const neuralnetAccuracy = neuralnetTotal > 0 ? (neuralnetCorrect / neuralnetTotal * 100).toFixed(1) + '%' : 'N/A';
 
             const row = document.createElement('tr');
             row.innerHTML = `
@@ -636,6 +642,7 @@
               <td>${bayesianAccuracy}</td>
               <td>${chatgptAccuracy}</td>
               <td>${grokAccuracy}</td>
+              <td>${neuralnetAccuracy}</td>
             `;
             accuracyTableBody.appendChild(row);
           });
@@ -691,6 +698,7 @@
                 document.getElementById('bayesianCheckbox').checked = selectedAlgorithms.includes('bayesian');
                 document.getElementById('chatgptCheckbox').checked = selectedAlgorithms.includes('chatgpt');
                 document.getElementById('grokCheckbox').checked = selectedAlgorithms.includes('grok');
+                document.getElementById('neuralnetCheckbox').checked = selectedAlgorithms.includes('neuralnet');
               }
               globalSettingsUnsubscribe = loadGlobalSettings();
               loadMemory();
@@ -754,7 +762,7 @@
       useAltAlgo: false,
       altAlgoType: 'chatgpt',
       mmSystem: 'default',
-      selectedAlgorithms: [] // Only used for admins
+      selectedAlgorithms: []
     };
     let snapshots = [];
     let saveTimeout = null;
@@ -988,12 +996,104 @@
       return bestPrediction;
     }
 
+    function neuralNetPrediction() {
+      let bestPrediction = { predict: 'P', confidence: 50, score: 0, algo: 'neuralnet' };
+      const threshold = getDynamicConfidenceThreshold();
+      const shoeType = getShoeType();
+      const trueCount = calculateTrueCount();
+      
+      // Neural network weights (these would normally be trained)
+      const weights = {
+        sequenceWeight: 0.4,
+        shoeTypeWeight: 0.3,
+        trueCountWeight: 0.2,
+        recentAccuracyWeight: 0.1
+      };
+      
+      // Get recent accuracy
+      const recentAccuracy = calculateRecentAccuracy();
+      
+      for (let n = 5; n >= 2; n--) {
+        if (state.history.length >= n) {
+          const key = state.history.slice(-n + 1).join('');
+          if (state.patternMemory[key]) {
+            let p = state.patternMemory[key].P || 0;
+            let b = state.patternMemory[key].B || 0;
+            const total = p + b;
+            
+            if (total > 0) {
+              // Base probabilities from sequence
+              const sequenceProbP = p / total;
+              const sequenceProbB = b / total;
+              
+              // Shoe type adjustment
+              let shoeTypeAdjustmentP = 0;
+              let shoeTypeAdjustmentB = 0;
+              if (shoeType === 'Streak') {
+                shoeTypeAdjustmentP = state.history[state.history.length - 1] === 'P' ? 0.15 : -0.05;
+                shoeTypeAdjustmentB = state.history[state.history.length - 1] === 'B' ? 0.15 : -0.05;
+              } else if (shoeType === 'Chop') {
+                shoeTypeAdjustmentP = state.history[state.history.length - 1] === 'B' ? 0.1 : -0.1;
+                shoeTypeAdjustmentB = state.history[state.history.length - 1] === 'P' ? 0.1 : -0.1;
+              }
+              
+              // True count adjustment
+              let trueCountAdjustmentP = 0;
+              let trueCountAdjustmentB = 0;
+              if (trueCount > 1) {
+                trueCountAdjustmentB = 0.05 * trueCount;
+                trueCountAdjustmentP = -0.025 * trueCount;
+              } else if (trueCount < -1) {
+                trueCountAdjustmentP = 0.05 * Math.abs(trueCount);
+                trueCountAdjustmentB = -0.025 * Math.abs(trueCount);
+              }
+              
+              // Recent accuracy adjustment
+              const accuracyAdjustment = (recentAccuracy - 0.5) * 0.1;
+              
+              // Combine all factors
+              const finalP = (sequenceProbP * weights.sequenceWeight) + 
+                             (shoeTypeAdjustmentP * weights.shoeTypeWeight) + 
+                             (trueCountAdjustmentP * weights.trueCountWeight) + 
+                             (accuracyAdjustment * weights.recentAccuracyWeight);
+              
+              const finalB = (sequenceProbB * weights.sequenceWeight) + 
+                             (shoeTypeAdjustmentB * weights.shoeTypeWeight) + 
+                             (trueCountAdjustmentB * weights.trueCountWeight) + 
+                             (-accuracyAdjustment * weights.recentAccuracyWeight);
+              
+              // Normalize
+              const totalFinal = finalP + finalB;
+              const normalizedP = totalFinal > 0 ? finalP / totalFinal : 0.5;
+              const normalizedB = totalFinal > 0 ? finalB / totalFinal : 0.5;
+              
+              const confidence = Math.round(100 * Math.max(normalizedP, normalizedB));
+              const predict = normalizedP > normalizedB ? 'P' : 'B';
+              
+              // Score based on sequence length and frequency
+              const frequencyWeight = total / (state.wins + state.losses + 1);
+              const lengthWeight = n / 5;
+              const recencyWeight = 1 / (state.history.length - state.history.lastIndexOf(key) + 1);
+              const score = frequencyWeight * lengthWeight * recencyWeight;
+              
+              if (score > bestPrediction.score && confidence > threshold) {
+                bestPrediction = { predict, confidence, score, algo: 'neuralnet' };
+              }
+            }
+          }
+        }
+      }
+      
+      return bestPrediction;
+    }
+
     function selectPredictionAlgorithm() {
       const algorithms = isAdmin ? (state.selectedAlgorithms.length > 0 ? state.selectedAlgorithms : ['bayesian']) : globalSelectedAlgorithms;
       const predictions = [];
       if (algorithms.includes('bayesian')) predictions.push(bayesianPrediction());
       if (algorithms.includes('chatgpt')) predictions.push(chatGPTPrediction());
       if (algorithms.includes('grok')) predictions.push(grokPrediction());
+      if (algorithms.includes('neuralnet')) predictions.push(neuralNetPrediction());
       return predictions.reduce((best, current) => 
         current.confidence > best.confidence ? current : best, 
         { predict: 'P', confidence: 0, score: 0, algo: 'bayesian' }
@@ -1006,6 +1106,7 @@
       if (document.getElementById('bayesianCheckbox').checked) selectedAlgorithms.push('bayesian');
       if (document.getElementById('chatgptCheckbox').checked) selectedAlgorithms.push('chatgpt');
       if (document.getElementById('grokCheckbox').checked) selectedAlgorithms.push('grok');
+      if (document.getElementById('neuralnetCheckbox').checked) selectedAlgorithms.push('neuralnet');
       state.selectedAlgorithms = selectedAlgorithms;
       try {
         await setDoc(doc(db, 'settings', 'global'), { selectedAlgorithms: selectedAlgorithms.length > 0 ? selectedAlgorithms : ['bayesian'] }, { merge: true });
@@ -1427,6 +1528,7 @@
               document.getElementById('bayesianCheckbox').checked = state.selectedAlgorithms.includes('bayesian');
               document.getElementById('chatgptCheckbox').checked = state.selectedAlgorithms.includes('chatgpt');
               document.getElementById('grokCheckbox').checked = state.selectedAlgorithms.includes('grok');
+              document.getElementById('neuralnetCheckbox').checked = state.selectedAlgorithms.includes('neuralnet');
             }
             updateDisplay();
           }
