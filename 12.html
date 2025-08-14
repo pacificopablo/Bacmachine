@@ -54,8 +54,6 @@
       background-color: #6c757d;
     }
     .fix-subscription { background-color: #28a745; }
-    .record-win { background-color: #28a745; }
-    .record-loss { background-color: #dc3545; }
     .reset-cycle { background-color: #17a2b8; }
     .new-session { background-color: #ff9800; }
     .toggle-section {
@@ -254,8 +252,6 @@
         <div class="section" id="modeDisplay">Mode: Base | Step 1</div>
         <div class="section" id="suggestedBetDisplay">Suggested Next Bet: 0 (Base Mode)</div>
         <div class="flex-row">
-          <button class="record-win" onclick="recordWin()" aria-label="Record win">✅ Record Win</button>
-          <button class="record-loss" onclick="recordLoss()" aria-label="Record loss">❌ Record Loss</button>
           <button class="reset-cycle" onclick="forceResetCycle()" aria-label="Force reset cycle">🔁 Force Reset Cycle</button>
           <button class="new-session" onclick="newSession()" aria-label="New session">🧹 New Session</button>
         </div>
@@ -760,7 +756,6 @@
     };
     let snapshots = [];
     let saveTimeout = null;
-    let pendingBet = null;
 
     function learnPattern(latest) {
       for (let n = 2; n <= 5; n++) {
@@ -1011,7 +1006,6 @@
         showMessage('Set bankroll and base bet first');
         return;
       }
-      const prediction = selectPredictionAlgorithm();
       snapshots.push(JSON.parse(JSON.stringify(state)));
       const cardsDrawn = estimateCardsDrawn(result);
       state.cardCounts.low += cardsDrawn.low;
@@ -1019,121 +1013,101 @@
       state.cardCounts.totalCards += cardsDrawn.total;
       state.history.push(result);
       learnPattern(result);
+      
+      const prediction = selectPredictionAlgorithm();
       if (result === 'T' || prediction.confidence <= getDynamicConfidenceThreshold()) {
         showMessage(result === 'T' ? 'Tie recorded. No wager placed.' : `No strong prediction (confidence ≤ ${getDynamicConfidenceThreshold()}%). No wager placed.`);
         saveMemoryFast();
         updateDisplay();
         return;
       }
-      pendingBet = { side: prediction.predict, bet: calculateNextBet() };
-      document.getElementById('currentWager').innerText = `💵 Current Bet: ${pendingBet.bet.toFixed(2)} on ${pendingBet.side === 'P' ? 'Player' : 'Banker'}`;
-      showMessage(`Place bet of ${pendingBet.bet.toFixed(2)} on ${pendingBet.side === 'P' ? 'Player' : 'Banker'} and confirm result.`);
-    }
 
-    function recordWin() {
-      if (!pendingBet) {
-        showMessage('No pending bet to record.');
-        return;
-      }
-      snapshots.push(JSON.parse(JSON.stringify(state)));
-      const { side, bet } = pendingBet;
-      const result = state.history[state.history.length - 1];
-      if (result !== side) {
-        showMessage(`Result (${result === 'P' ? 'Player' : 'Banker'}) does not match bet (${side === 'P' ? 'Player' : 'Banker'}). Record loss instead.`);
-        return;
-      }
-      for (let n = 5; n >= 2; n--) {
-        if (state.history.length >= n) {
-          const key = state.history.slice(-n + 1).join('');
-          if (state.patternMemory[key] && side === (state.patternMemory[key].P > state.patternMemory[key].B ? 'P' : 'B')) {
-            state.predictionPerformance[n].total++;
-            state.predictionPerformance[n].correct++;
-            break;
-          }
-        }
-      }
-      state.outcomes.push('W');
-      state.accuracyWindow.push('W');
-      if (state.accuracyWindow.length > 10) state.accuracyWindow.shift();
-      state.wins++;
-      const payout = side === 'B' ? bet * (1 - state.mmState.commission / 100) : bet;
-      state.mmState.currentBankroll += payout;
-      state.mmState.cycleProfit += payout - bet;
-      state.mmState.betHistory.push({
-        id: state.mmState.betHistory.length + 1,
-        mode: state.mmState.mode,
-        step: state.mmState.step,
-        side,
-        bet,
-        result: 'W',
-        profitLoss: (payout - bet).toFixed(2),
-        cycleProfit: state.mmState.cycleProfit.toFixed(2),
-        bankroll: state.mmState.currentBankroll.toFixed(2),
-        note: state.mmState.tableNotes
-      });
-      if (state.mmState.cycleProfit >= state.mmState.targetProfit) {
-        state.mmState.cycleNumber++;
-        state.mmState.cycleProfit = 0;
-        state.mmState.mode = 'Base';
-        state.mmState.step = 1;
-        state.mmState.baseBet += state.mmState.incrementPerCycle;
-      }
-      pendingBet = null;
-      calculateNextBet();
-      saveMemoryFast();
-      updateDisplay();
-    }
+      const bet = calculateNextBet();
+      const side = prediction.predict;
+      document.getElementById('currentWager').innerText = `💵 Current Bet: ${bet.toFixed(2)} on ${side === 'P' ? 'Player' : 'Banker'}`;
 
-    function recordLoss() {
-      if (!pendingBet) {
-        showMessage('No pending bet to record.');
-        return;
-      }
-      snapshots.push(JSON.parse(JSON.stringify(state)));
-      const { side, bet } = pendingBet;
-      const result = state.history[state.history.length - 1];
+      // Process bet outcome
       if (result === side) {
-        showMessage(`Result (${result === 'P' ? 'Player' : 'Banker'}) matches bet. Record win instead.`);
-        return;
-      }
-      for (let n = 5; n >= 2; n--) {
-        if (state.history.length >= n) {
-          const key = state.history.slice(-n + 1).join('');
-          if (state.patternMemory[key] && side === (state.patternMemory[key].P > state.patternMemory[key].B ? 'P' : 'B')) {
-            state.predictionPerformance[n].total++;
-            break;
+        // Win
+        for (let n = 5; n >= 2; n--) {
+          if (state.history.length >= n) {
+            const key = state.history.slice(-n + 1).join('');
+            if (state.patternMemory[key] && side === (state.patternMemory[key].P > state.patternMemory[key].B ? 'P' : 'B')) {
+              state.predictionPerformance[n].total++;
+              state.predictionPerformance[n].correct++;
+              break;
+            }
           }
         }
+        state.outcomes.push('W');
+        state.accuracyWindow.push('W');
+        if (state.accuracyWindow.length > 10) state.accuracyWindow.shift();
+        state.wins++;
+        const payout = side === 'B' ? bet * (1 - state.mmState.commission / 100) : bet;
+        state.mmState.currentBankroll += payout;
+        state.mmState.cycleProfit += payout - bet;
+        state.mmState.betHistory.push({
+          id: state.mmState.betHistory.length + 1,
+          mode: state.mmState.mode,
+          step: state.mmState.step,
+          side,
+          bet,
+          result: 'W',
+          profitLoss: (payout - bet).toFixed(2),
+          cycleProfit: state.mmState.cycleProfit.toFixed(2),
+          bankroll: state.mmState.currentBankroll.toFixed(2),
+          note: state.mmState.tableNotes
+        });
+        if (state.mmState.cycleProfit >= state.mmState.targetProfit) {
+          state.mmState.cycleNumber++;
+          state.mmState.cycleProfit = 0;
+          state.mmState.mode = 'Base';
+          state.mmState.step = 1;
+          state.mmState.baseBet += state.mmState.incrementPerCycle;
+        }
+        showMessage(`Win! Bet ${bet.toFixed(2)} on ${side === 'P' ? 'Player' : 'Banker'} paid ${payout.toFixed(2)}.`);
+      } else {
+        // Loss
+        for (let n = 5; n >= 2; n--) {
+          if (state.history.length >= n) {
+            const key = state.history.slice(-n + 1).join('');
+            if (state.patternMemory[key] && side === (state.patternMemory[key].P > state.patternMemory[key].B ? 'P' : 'B')) {
+              state.predictionPerformance[n].total++;
+              break;
+            }
+          }
+        }
+        state.outcomes.push('L');
+        state.accuracyWindow.push('L');
+        if (state.accuracyWindow.length > 10) state.accuracyWindow.shift();
+        state.losses++;
+        state.mmState.currentBankroll -= bet;
+        state.mmState.cycleProfit -= bet;
+        state.mmState.betHistory.push({
+          id: state.mmState.betHistory.length + 1,
+          mode: state.mmState.mode,
+          step: state.mmState.step,
+          side,
+          bet,
+          result: 'L',
+          profitLoss: (-bet).toFixed(2),
+          cycleProfit: state.mmState.cycleProfit.toFixed(2),
+          bankroll: state.mmState.currentBankroll.toFixed(2),
+          note: state.mmState.tableNotes
+        });
+        if (state.mmState.currentBankroll <= state.mmState.stopLoss && state.mmState.stopLoss > 0) {
+          state.mmState.mode = 'Base';
+          state.mmState.step = 1;
+          state.mmState.cycleProfit = 0;
+          state.mmState.cycleNumber++;
+          showMessage('Stop loss reached. Resetting to base mode.');
+        } else if (state.mmState.attackMode && state.mmState.cycleProfit < 0) {
+          state.mmState.step++;
+          state.mmState.mode = 'Recovery';
+        }
+        showMessage(`Loss. Bet ${bet.toFixed(2)} on ${side === 'P' ? 'Player' : 'Banker'} lost.`);
       }
-      state.outcomes.push('L');
-      state.accuracyWindow.push('L');
-      if (state.accuracyWindow.length > 10) state.accuracyWindow.shift();
-      state.losses++;
-      state.mmState.currentBankroll -= bet;
-      state.mmState.cycleProfit -= bet;
-      state.mmState.betHistory.push({
-        id: state.mmState.betHistory.length + 1,
-        mode: state.mmState.mode,
-        step: state.mmState.step,
-        side,
-        bet,
-        result: 'L',
-        profitLoss: (-bet).toFixed(2),
-        cycleProfit: state.mmState.cycleProfit.toFixed(2),
-        bankroll: state.mmState.currentBankroll.toFixed(2),
-        note: state.mmState.tableNotes
-      });
-      if (state.mmState.currentBankroll <= state.mmState.stopLoss && state.mmState.stopLoss > 0) {
-        state.mmState.mode = 'Base';
-        state.mmState.step = 1;
-        state.mmState.cycleProfit = 0;
-        state.mmState.cycleNumber++;
-        showMessage('Stop loss reached. Resetting to base mode.');
-      } else if (state.mmState.attackMode && state.mmState.cycleProfit < 0) {
-        state.mmState.step++;
-        state.mmState.mode = 'Recovery';
-      }
-      pendingBet = null;
+
       calculateNextBet();
       saveMemoryFast();
       updateDisplay();
@@ -1165,7 +1139,6 @@
         state.cardCounts = { low: 0, high: 0, totalCards: 0, decks: 8 };
         state.accuracyWindow = [];
         Object.assign(state, preservedState);
-        pendingBet = null;
         saveMemoryFast();
         document.getElementById('prediction').innerText = 'Waiting for input...';
         document.getElementById('shoeType').innerText = 'Detected Pattern: N/A';
@@ -1206,7 +1179,6 @@
         state.mmState.mode = 'Base';
         state.mmState.step = 1;
         state.mmState.betHistory = [];
-        pendingBet = null;
         saveMemoryFast();
         updateDisplay();
       }
@@ -1220,7 +1192,6 @@
         state.mmState.mode = 'Base';
         state.mmState.step = 1;
         state.mmState.currentBet = state.mmState.baseBet;
-        pendingBet = null;
         saveMemoryFast();
         updateDisplay();
       }
@@ -1254,7 +1225,6 @@
         state.predictionPerformance = { 2: { correct: 0, total: 0 }, 3: { correct: 0, total: 0 }, 4: { correct: 0, total: 0 }, 5: { correct: 0, total: 0 } };
         state.cardCounts = { low: 0, high: 0, totalCards: 0, decks: 8 };
         state.accuracyWindow = [];
-        pendingBet = null;
         saveMemoryFast();
         updateDisplay();
       }
@@ -1324,9 +1294,7 @@
       const { currentBankroll, cycleProfit, targetProfit, cycleNumber, mode, step, currentBet, betHistory, tableNotes, stopLoss } = state.mmState;
       document.getElementById('streakInfo').innerText = state.outcomes.slice(-3).every(v => v === 'L') ? `🧊 Cold Streak` :
         state.outcomes.slice(-3).every(v => v === 'W') ? `🔥 Hot Streak` : '';
-      document.getElementById('currentWager').innerText = pendingBet ? 
-        `💵 Current Bet: ${pendingBet.bet.toFixed(2)} on ${pendingBet.side === 'P' ? 'Player' : 'Banker'}` : 
-        `💵 Current Bet: ${currentBet.toFixed(2)}`;
+      document.getElementById('currentWager').innerText = `💵 Current Bet: ${currentBet.toFixed(2)}`;
       document.getElementById('wins').innerText = state.wins;
       document.getElementById('losses').innerText = state.losses;
       document.getElementById('accuracy').innerText = state.wins + state.losses ? 
@@ -1465,8 +1433,6 @@
     window.toggleAdvanced = toggleAdvanced;
     window.setAlgorithms = setAlgorithms;
     window.saveApplyMM = saveApplyMM;
-    window.recordWin = recordWin;
-    window.recordLoss = recordLoss;
     window.forceResetCycle = forceResetCycle;
     window.newSession = newSession;
   </script>
