@@ -1,413 +1,467 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <!-- Previous head content remains the same -->
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>🎯 Baccarat Money Management Tracker</title>
   <style>
-    /* Previous styles remain the same */
-    
-    /* Additional styles for Baccarat MM system */
-    .baccarat-mm-controls {
-      display: none;
-      margin-top: 15px;
-      padding: 15px;
-      background: #171a2b;
+    :root {
+      --bg: #0f1220;
+      --card: #171a2b;
+      --muted: #8d95b5;
+      --text: #e6e9ff;
+      --accent: #6ee7b7;
+      --danger: #ff6b6b;
+      --warn: #facc15;
+      --shadow: 0 10px 30px rgba(0,0,0,.35);
+    }
+    * { box-sizing: border-box; }
+    body {
+      font-family: system-ui, -apple-system, Segoe UI, Roboto, Inter, Arial, Helvetica, sans-serif;
+      background: linear-gradient(180deg, #0d1020, #0b1022 40%, #0a0d1a);
+      color: var(--text);
+      margin: 0;
+      padding: 24px;
+    }
+    h1 { font-size: 22px; margin: 0 0 14px; }
+    .grid { display: grid; gap: 14px; }
+    .wrap { max-width: 1100px; margin: 0 auto; }
+    .card { background: var(--card); border: 1px solid rgba(255,255,255,.05); border-radius: 18px; box-shadow: var(--shadow); padding: 16px; }
+    .row { display: grid; grid-template-columns: repeat(12, 1fr); gap: 12px; }
+    .row > .col-3 { grid-column: span 3; }
+    .row > .col-4 { grid-column: span 4; }
+    .row > .col-6 { grid-column: span 6; }
+    .row > .col-8 { grid-column: span 8; }
+    label { font-size: 12px; color: var(--muted); display: block; margin-bottom: 6px; }
+    input, select, textarea {
+      width: 100%;
+      background: #0e1222;
+      border: 1px solid rgba(255,255,255,.08);
+      color: var(--text);
+      padding: 10px 12px;
       border-radius: 12px;
-      color: #e6e9ff;
+      outline: none;
     }
-    
-    .baccarat-mm-controls.active {
-      display: block;
+    input:focus, textarea:focus { border-color: #7c8cff; }
+    textarea { resize: vertical; min-height: 60px; }
+    .btn {
+      appearance: none;
+      border: 0;
+      background: #22284a;
+      color: #fff;
+      padding: 10px 14px;
+      border-radius: 12px;
+      cursor: pointer;
+      transition: transform .04s ease, opacity .15s;
+      box-shadow: var(--shadow);
     }
-    
-    .baccarat-row {
-      display: grid;
-      grid-template-columns: repeat(12, 1fr);
-      gap: 12px;
-      margin-bottom: 12px;
+    .btn:hover { opacity: .95; }
+    .btn:active { transform: translateY(1px); }
+    .btn.primary { background: linear-gradient(120deg, #4f46e5, #06b6d4); }
+    .btn.success { background: linear-gradient(120deg, #10b981, #22d3ee); }
+    .btn.danger { background: linear-gradient(120deg, #ef4444, #f97316); }
+    .btn.warn { background: linear-gradient(120deg, #f59e0b, #facc15); }
+    .badge {
+      display: inline-block;
+      padding: 6px 10px;
+      border-radius: 999px;
+      font-size: 12px;
+      border: 1px solid rgba(255,255,255,.12);
+      background: #12152a;
     }
-    
-    .baccarat-col-3 {
-      grid-column: span 3;
+    .stat {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      background: #12142a;
+      border: 1px solid rgba(255,255,255,.05);
+      border-radius: 16px;
+      padding: 12px;
+      align-items: flex-start;
     }
-    
-    .baccarat-col-4 {
-      grid-column: span 4;
-    }
-    
-    .baccarat-col-6 {
-      grid-column: span 6;
-    }
-    
-    .baccarat-col-12 {
-      grid-column: span 12;
-    }
-    
-    @media (max-width: 768px) {
-      .baccarat-col-3, .baccarat-col-4, .baccarat-col-6 {
-        grid-column: span 12;
-      }
-    }
+    .stat .big { font-size: 20px; font-weight: 700; }
+    .muted { color: var(--muted); }
+    .flex { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+    .hr { height: 1px; background: rgba(255,255,255,.06); margin: 12px 0; }
+    table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    th, td { padding: 10px; border-bottom: 1px solid rgba(255,255,255,.06); text-align: left; }
+    th { color: var(--muted); font-weight: 600; }
+    .pill { padding: 4px 8px; border-radius: 999px; font-size: 12px; border: 1px solid rgba(255,255,255,.12); }
+    .green { color: #86efac; }
+    .red { color: #fecaca; }
+    .center { display: flex; justify-content: center; align-items: center; }
+    .small { font-size: 12px; }
   </style>
 </head>
 <body>
-  <div class="container hidden" id="appContainer">
-    <!-- Previous content remains the same until the bet-controls section -->
-    
-    <div class="bet-controls">
-      <label><span>Bankroll</span><input type="number" id="bankrollInput" placeholder="Bankroll" min="0.01" step="0.01" aria-label="Set bankroll"></label>
-      <label><span>Unit Value</span><input type="number" id="basebetInput" placeholder="Unit Value ($)" min="0.01" step="0.01" aria-label="Set base unit"></label>
-      <label>
-        <select id="stopProfitType" aria-label="Select stop profit type">
-          <option value="currency">$</option>
-          <option value="percentage">%</option>
-        </select>
-        <input type="number" id="stopProfitInput" placeholder="Stop Profit" min="0" step="0.01" aria-label="Set stop profit">
-      </label>
-      <label>
-        <span>MM System</span>
-        <select id="mmSystem" aria-label="Select money management system" onchange="toggleMMSystem()">
-          <option value="default">Default</option>
-          <option value="plus1">Plus 1</option>
-          <option value="baccarat">Baccarat MM</option>
-        </select>
-      </label>
-      <button class="set-bet" onclick="setBankroll()" aria-label="Set bankroll and bet">Set</button>
-    </div>
-    
-    <!-- Baccarat MM Controls (hidden by default) -->
-    <div id="baccaratMMControls" class="baccarat-mm-controls">
-      <div class="baccarat-row">
-        <div class="baccarat-col-3"><label>Target Profit / Cycle</label><input id="targetProfit" type="number" min="1" step="1" value="3" /></div>
-        <div class="baccarat-col-3"><label>Increment per Cycle</label><input id="increment" type="number" min="0" step="1" value="0" /></div>
-        <div class="baccarat-col-3"><label>Commission (Banker)</label><input id="commission" type="number" min="0" step="0.01" value="0.05" /></div>
-        <div class="baccarat-col-3"><label>Stop Loss</label><input id="stopLoss" type="number" min="0" step="0.01" /></div>
+  <div class="wrap grid">
+    <h1>🎯 Baccarat Money Management Tracker</h1>
+    <div class="card grid">
+      <div class="row">
+        <div class="col-3"><label>Initial Bankroll</label><input id="bankroll" type="number" min="0" step="0.01" /></div>
+        <div class="col-3"><label>Base Bet (unit)</label><input id="baseBet" type="number" min="0.01" step="0.01" /></div>
+        <div class="col-3"><label>Stop Profit Type</label>
+          <select id="stopProfitType">
+            <option value="currency">$</option>
+            <option value="percentage">%</option>
+          </select>
+        </div>
+        <div class="col-3"><label>Stop Profit</label><input id="stopProfit" type="number" min="0" step="0.01" /></div>
       </div>
-      <div class="baccarat-row">
-        <div class="baccarat-col-4"><label>Enable Attack Mode</label><select id="attackMode"><option value="on">On</option><option value="off">Off</option></select></div>
-        <div class="baccarat-col-8"><label>Table Notes</label><textarea id="tableNotes" placeholder="Enter notes about table patterns, trends, etc."></textarea></div>
+      <div class="row">
+        <div class="col-3"><label>Commission (Banker)</label><input id="commission" type="number" min="0" step="0.01" value="0.05" /></div>
+        <div class="col-3"><label>Stop Loss</label><input id="stopLoss" type="number" min="0" step="0.01" /></div>
+        <div class="col-3"><label>Money Management</label>
+          <select id="mmSystem">
+            <option value="default">Default</option>
+            <option value="plus1">Plus 1</option>
+          </select>
+        </div>
+        <div class="col-3 center"><button class="btn primary" id="saveCfg">💾 Save / Apply</button></div>
       </div>
-      <div class="baccarat-row">
-        <div class="baccarat-col-4">
-          <button class="btn success" onclick="recordBaccaratResult('W')">✅ Record Win</button>
-        </div>
-        <div class="baccarat-col-4">
-          <button class="btn danger" onclick="recordBaccaratResult('L')">❌ Record Loss</button>
-        </div>
-        <div class="baccarat-col-4">
-          <button class="btn warn" onclick="resetBaccaratCycle()">🔁 Reset Cycle</button>
-        </div>
-      </div>
-      <div class="baccarat-row">
-        <div class="baccarat-col-6">
-          <div class="stat"><div class="muted">Cycle Profit / Target</div><div class="big" id="statCycle">0 / 0</div></div>
-        </div>
-        <div class="baccarat-col-6">
-          <div class="stat"><div class="muted">Mode</div><div class="big" id="statMode">Base</div></div>
-        </div>
-      </div>
-      <div class="baccarat-row">
-        <div class="baccarat-col-12">
-          <div class="stat"><div class="muted">Suggested Next Bet</div><div class="big" id="nextBet">0</div></div>
-        </div>
+      <div class="row">
+        <div class="col-12"><label>Table Notes</label><textarea id="tableNotes" placeholder="Enter notes about table patterns, trends, etc."></textarea></div>
       </div>
     </div>
-    
-    <!-- Rest of your existing content remains the same -->
-    
-  </div>
 
-  <script type="module">
-    // Previous imports and Firebase config remain the same
-    
-    // Add Baccarat MM state
-    let baccaratMMState = {
-      targetProfit: 3,
-      increment: 0,
-      commission: 0.05,
-      stopLoss: 0,
-      attackMode: 'on',
-      tableNotes: '',
-      cycle: 1,
-      cycleProfit: 0,
-      mode: 'Base',
-      baseLossStreak: 0,
-      recoverySteps: [2,3,4,6],
-      recoveryIndex: 0,
-      attackSteps: [1,2,4],
-      attackIndex: 0,
-      attackActive: false
-    };
-    
-    // Helper functions
-    function num(v,d){v=parseFloat(v);return isFinite(v)?v:d}
-    function int(v,d){v=parseInt(v,10);return isFinite(v)?v:d}
-    function fmt(n){return (Math.round((typeof n==='number'?n:parseFloat(n)||0)*100)/100).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2});}
-    
-    // Toggle MM system visibility
-    function toggleMMSystem() {
-      const mmSystem = document.getElementById('mmSystem').value;
-      const baccaratControls = document.getElementById('baccaratMMControls');
-      
-      if (mmSystem === 'baccarat') {
-        baccaratControls.classList.add('active');
-        loadBaccaratState();
+    <div class="row">
+      <div class="col-4"><div class="stat"><div class="muted">Current Bankroll</div><div class="big" id="statBankroll">0</div></div></div>
+      <div class="col-4"><div class="stat"><div class="muted">Cycle Profit / Stop Profit</div><div class="big" id="statCycle">0 / 0</div><span class="badge" id="cycleBadge">Cycle #1</span></div></ آه
+
+System: div>
+      <div class="col-4"><div class="stat"><div class="muted">Total Profit</div><div class="big" id="statProfit">0</div><span class="badge" id="mmBadge">Default</span></div></div>
+    </div>
+
+    <div class="card grid">
+      <div class="flex"><div class="badge">Suggested Next Bet</div><div class="big" id="nextBet" style="font-weight:800;font-size:24px">0</div><span class="muted small" id="nextBetNote">Base Bet</span></div>
+      <div class="flex">
+        <button class="btn success" id="btnWin">✅ Record Win</button>
+        <button class="btn danger" id="btnLoss">❌ Record Loss</button>
+        <button class="btn warn" id="btnResetCycle">🔁 Reset Cycle</button>
+        <button class="btn" id="btnResetBet">🔄 Reset Bet</button>
+        <button class="btn" id="btnNewSession">🧹 New Session</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="flex" style="justify-content:space-between"><div class="badge">History</div><div class="muted small">Commission auto-applied on Banker wins.</div></div>
+      <div class="hr"></div>
+      <table>
+        <thead>
+          <tr><th>#</th><th>MM System</th><th>Units</th><th>Side</th><th>Bet</th><th>Result</th><th>P/L</th><th>Cycle Profit</th><th>Total Profit</th><th>Bankroll</th><th>Note</th></tr>
+        </thead>
+        <tbody id="history"></tbody>
+      </table>
+    </div>
+  </div>
+  <script>
+(function() {
+  const $ = (id) => document.getElementById(id);
+  let S = {
+    bankroll: 0,
+    baseBet: 0,
+    stopProfitType: 'percentage',
+    stopProfitValue: 0,
+    stopProfitEffective: 0,
+    stopProfitReached: false,
+    commission: 0.05,
+    stopLoss: 0,
+    mmSystem: 'default',
+    tableNotes: '',
+    cycle: 1,
+    cycleProfit: 0,
+    betState: { currentBetUnits: 1, totalProfit: 0, cycleProfit: 0, previousLosses: [] },
+    history: [],
+    hand: 0,
+    bankrollStart: 0
+  };
+
+  try {
+    Object.assign(S, JSON.parse(localStorage.getItem('bacc_mm_v1') || '{}'));
+  } catch (e) {}
+
+  function syncInputs() {
+    $('bankroll').value = S.bankroll || '';
+    $('baseBet').value = S.baseBet || '';
+    $('stopProfitType').value = S.stopProfitType;
+    $('stopProfit').value = S.stopProfitValue || '';
+    $('commission').value = S.commission;
+    $('stopLoss').value = S.stopLoss || '';
+    $('mmSystem').value = S.mmSystem;
+    $('tableNotes').value = S.tableNotes;
+  }
+
+  function saveCfg() {
+    const bankroll = num($('bankroll').value, S.bankroll);
+    const baseBet = num($('baseBet').value, S.baseBet);
+    const stopProfit = num($('stopProfit').value, S.stopProfitValue);
+    const commission = num($('commission').value, S.commission);
+    const stopLoss = num($('stopLoss').value, S.stopLoss);
+
+    if (bankroll <= 0 || baseBet <= 0) {
+      alert('Bankroll and base bet must be greater than 0.');
+      return;
+    }
+    if (stopProfit < 0 || commission < 0 || stopLoss < 0) {
+      alert('Stop profit, commission, and stop loss cannot be negative.');
+      return;
+    }
+
+    S.bankroll = bankroll;
+    S.bankrollStart = bankroll;
+    S.baseBet = baseBet;
+    S.stopProfitType = $('stopProfitType').value;
+    S.stopProfitValue = stopProfit;
+    S.stopProfitEffective = S.stopProfitType === 'percentage' ? stopProfit / 100 * bankroll : stopProfit;
+    S.stopProfitReached = false;
+    S.commission = commission;
+    S.stopLoss = stopLoss;
+    S.mmSystem = $('mmSystem').value;
+    S.tableNotes = $('tableNotes').value;
+    S.cycle = 1;
+    S.cycleProfit = 0;
+    S.betState = { currentBetUnits: 1, totalProfit: 0, cycleProfit: 0, previousLosses: [] };
+    persist();
+    render();
+  }
+
+  function num(v, d) {
+    v = parseFloat(v);
+    return isFinite(v) ? v : d;
+  }
+
+  function int(v, d) {
+    v = parseInt(v, 10);
+    return isFinite(v) ? v : d;
+  }
+
+  function calculatePlusX(number) {
+    if (number < 10) return 1;
+    return int(String(number).slice(0, -1)) || 1;
+  }
+
+  function handleWin() {
+    const wager = S.baseBet * S.betState.currentBetUnits;
+    const payout = S.commission > 0 ? wager * (1 - S.commission) : wager;
+    S.bankroll += payout;
+    S.betState.totalProfit += S.betState.currentBetUnits;
+    S.cycleProfit += payout;
+
+    if (S.mmSystem === 'default') {
+      S.betState.cycleProfit += S.betState.currentBetUnits;
+      if (S.betState.cycleProfit >= 1) {
+        S.betState.currentBetUnits = 1;
+        S.betState.cycleProfit = 0;
+        S.cycle += 1;
+        S.betState.previousLosses = [];
       } else {
-        baccaratControls.classList.remove('active');
-      }
-    }
-    
-    // Load Baccarat MM state from Firestore
-    async function loadBaccaratState() {
-      try {
-        const user = auth.currentUser;
-        if (user) {
-          const userDoc = await getDoc(doc(db, 'users', user.uid));
-          if (userDoc.exists() && userDoc.data().baccaratMMState) {
-            baccaratMMState = userDoc.data().baccaratMMState;
-            updateBaccaratControls();
-          }
+        if (S.betState.previousLosses.length > 0) {
+          S.betState.previousLosses.shift();
         }
-      } catch (e) {
-        console.error('Error loading Baccarat MM state:', e);
+        const lastLoss = S.betState.previousLosses.length > 0 ? S.betState.previousLosses[0] : 1;
+        S.betState.currentBetUnits = lastLoss + calculatePlusX(lastLoss);
       }
-    }
-    
-    // Update Baccarat controls with current state
-    function updateBaccaratControls() {
-      document.getElementById('targetProfit').value = baccaratMMState.targetProfit;
-      document.getElementById('increment').value = baccaratMMState.increment;
-      document.getElementById('commission').value = baccaratMMState.commission;
-      document.getElementById('stopLoss').value = baccaratMMState.stopLoss;
-      document.getElementById('attackMode').value = baccaratMMState.attackMode;
-      document.getElementById('tableNotes').value = baccaratMMState.tableNotes;
-      updateBaccaratDisplay();
-    }
-    
-    // Save Baccarat MM state to Firestore
-    async function saveBaccaratState() {
-      try {
-        const user = auth.currentUser;
-        if (user) {
-          await setDoc(doc(db, 'users', user.uid), {
-            baccaratMMState: baccaratMMState
-          }, { merge: true });
-        }
-      } catch (e) {
-        console.error('Error saving Baccarat MM state:', e);
+    } else if (S.mmSystem === 'plus1') {
+      S.betState.cycleProfit += S.betState.currentBetUnits;
+      if (S.betState.previousLosses.length > 0) {
+        S.betState.previousLosses.shift();
       }
-    }
-    
-    // Calculate next bet amount for Baccarat MM
-    function nextBaccaratBetAmount() {
-      if (baccaratMMState.mode === 'Base') return state.baseUnit;
-      if (baccaratMMState.mode === 'Recovery') return state.baseUnit * baccaratMMState.recoverySteps[baccaratMMState.recoveryIndex];
-      if (baccaratMMState.mode === 'Attack') return state.baseUnit * baccaratMMState.attackSteps[baccaratMMState.attackIndex];
-      return state.baseUnit;
-    }
-    
-    // Update Baccarat display
-    function updateBaccaratDisplay() {
-      document.getElementById('nextBet').textContent = fmt(nextBaccaratBetAmount());
-      document.getElementById('statCycle').textContent = `${fmt(baccaratMMState.cycleProfit)} / ${fmt(baccaratMMState.targetProfit)}`;
-      document.getElementById('statMode').textContent = baccaratMMState.mode;
-    }
-    
-    // Record Baccarat result
-    function recordBaccaratResult(result) {
-      if (!state.baseUnit || !state.startBankroll) {
-        showMessage('Set bankroll/unit first');
-        return;
-      }
-      
-      const bet = nextBaccaratBetAmount();
-      const side = 'banker';
-      let pl = 0;
-      
-      if (result === 'W') {
-        pl = side === 'banker' ? bet * (1 - baccaratMMState.commission) : bet;
+      if (S.betState.cycleProfit >= 1) {
+        S.betState.currentBetUnits = 1;
+        S.betState.cycleProfit = 0;
+        S.cycle += 1;
+      } else if (S.betState.previousLosses.length > 0) {
+        const nextLoss = S.betState.previousLosses[0];
+        S.betState.currentBetUnits = nextLoss + calculatePlusX(nextLoss);
       } else {
-        pl = -bet;
-      }
-      
-      // Update bankroll
-      state.currentBankroll += pl;
-      baccaratMMState.cycleProfit += pl;
-      
-      // Handle mode transitions
-      autoTransitionsOnResult(result === 'W');
-      
-      // Check for cycle completion
-      if (baccaratMMState.cycleProfit >= baccaratMMState.targetProfit) {
-        baccaratMMState.targetProfit += baccaratMMState.increment;
-        resetBaccaratCycle();
-      }
-      
-      saveBaccaratState();
-      updateBaccaratDisplay();
-      updateMMDisplay();
-    }
-    
-    // Auto transitions based on result
-    function autoTransitionsOnResult(win) {
-      if (baccaratMMState.mode === 'Base') {
-        if (win) {
-          baccaratMMState.baseLossStreak = 0;
-        } else {
-          baccaratMMState.baseLossStreak += 1;
-          if (baccaratMMState.baseLossStreak >= 2) {
-            baccaratMMState.mode = 'Recovery';
-            baccaratMMState.recoveryIndex = 0;
-          }
-        }
-      } else if (baccaratMMState.mode === 'Recovery') {
-        if (win) {
-          if (baccaratMMState.attackMode === 'on') {
-            baccaratMMState.mode = 'Attack';
-            baccaratMMState.attackIndex = 0;
-            baccaratMMState.attackActive = true;
-          } else {
-            baccaratMMState.mode = 'Base';
-            baccaratMMState.baseLossStreak = 0;
-            baccaratMMState.recoveryIndex = 0;
-          }
-        } else {
-          if (baccaratMMState.recoveryIndex < baccaratMMState.recoverySteps.length - 1) {
-            baccaratMMState.recoveryIndex += 1;
-          } else {
-            baccaratMMState.mode = 'Base';
-            baccaratMMState.baseLossStreak = 0;
-            baccaratMMState.recoveryIndex = 0;
-          }
-        }
-      } else if (baccaratMMState.mode === 'Attack') {
-        if (win) {
-          if (baccaratMMState.attackIndex < baccaratMMState.attackSteps.length - 1) {
-            baccaratMMState.attackIndex += 1;
-          } else {
-            baccaratMMState.mode = 'Base';
-            baccaratMMState.baseLossStreak = 0;
-            baccaratMMState.attackIndex = 0;
-            baccaratMMState.attackActive = false;
-          }
-        } else {
-          baccaratMMState.mode = 'Base';
-          baccaratMMState.baseLossStreak = 0;
-          baccaratMMState.attackIndex = 0;
-          baccaratMMState.attackActive = false;
-        }
+        S.betState.currentBetUnits = 1;
       }
     }
-    
-    // Reset Baccarat cycle
-    function resetBaccaratCycle() {
-      baccaratMMState.cycleProfit = 0;
-      baccaratMMState.mode = 'Base';
-      baccaratMMState.baseLossStreak = 0;
-      baccaratMMState.recoveryIndex = 0;
-      baccaratMMState.attackIndex = 0;
-      baccaratMMState.attackActive = false;
-      baccaratMMState.cycle += 1;
-      saveBaccaratState();
-      updateBaccaratDisplay();
-    }
-    
-    // Modify setBankroll to handle Baccarat MM
-    async function setBankroll() {
-      const bankroll = parseFloat(document.getElementById('bankrollInput').value);
-      const unit = parseFloat(document.getElementById('basebetInput').value);
-      const stopProfit = parseFloat(document.getElementById('stopProfitInput').value) || 0;
-      state.stopProfitType = document.getElementById('stopProfitType').value;
-      state.mmSystem = document.getElementById('mmSystem').value;
-      
-      if (isNaN(bankroll) || bankroll <= 0 || isNaN(unit) || unit <= 0) {
-        showMessage('Invalid bankroll or unit value');
-        return;
-      }
-      
-      if (stopProfit < 0) {
-        showMessage('Invalid stop profit');
-        return;
-      }
-      
-      // Save Baccarat MM settings if that's the selected system
-      if (state.mmSystem === 'baccarat') {
-        baccaratMMState.targetProfit = int(document.getElementById('targetProfit').value, 3);
-        baccaratMMState.increment = int(document.getElementById('increment').value, 0);
-        baccaratMMState.commission = num(document.getElementById('commission').value, 0.05);
-        baccaratMMState.stopLoss = num(document.getElementById('stopLoss').value, 0);
-        baccaratMMState.attackMode = document.getElementById('attackMode').value;
-        baccaratMMState.tableNotes = document.getElementById('tableNotes').value;
-        
-        // Reset cycle when changing settings
-        resetBaccaratCycle();
-      }
-      
-      // Rest of the setBankroll function remains the same
-      snapshots.push(JSON.parse(JSON.stringify(state)));
-      state.startBankroll = bankroll;
-      state.baseUnit = unit;
-      state.currentBankroll = bankroll;
-      state.stopProfitValue = stopProfit;
-      state.stopProfitEffective = state.stopProfitType === 'percentage' ? stopProfit / 100 * bankroll : stopProfit;
-      state.stopProfitReached = false;
-      state.betState = { currentBetUnits: 1, totalProfit: 0, cycleProfit: 0, previousLosses: [] };
-      state.wins = 0;
-      state.losses = 0;
-      state.outcomes = [];
-      
-      // Save both states
-      await saveMemory();
-      if (state.mmSystem === 'baccarat') {
-        await saveBaccaratState();
-      }
-      
-      updateDisplay();
-    }
-    
-    // Modify updateMMDisplay to show Baccarat MM info
-    function updateMMDisplay() {
-      if (state.mmSystem === 'baccarat') {
-        document.getElementById('currentWager').innerText = `💵 Current Bet: ${fmt(nextBaccaratBetAmount())}`;
-        document.getElementById('streakInfo').innerText = '';
+  }
+
+  function handleLoss() {
+    const wager = S.baseBet * S.betState.currentBetUnits;
+    S.bankroll -= wager;
+    S.betState.totalProfit -= S.betState.currentBetUnits;
+    S.cycleProfit -= wager;
+
+    if (S.mmSystem === 'default') {
+      S.betState.cycleProfit -= S.betState.currentBetUnits;
+      S.betState.previousLosses.push(S.betState.currentBetUnits);
+    } else if (S.mmSystem === 'plus1') {
+      S.betState.cycleProfit -= S.betState.currentBetUnits;
+      if (S.betState.previousLosses.length === 0) {
+        S.betState.previousLosses.push(1);
       } else {
-        // Original updateMMDisplay logic for other systems
-        document.getElementById('currentWager').innerText = `💵 Current Bet: ${getWager().toFixed(2)}`;
-        document.getElementById('streakInfo').innerText = state.stopProfitReached ? '' : 
-          state.outcomes.slice(-3).every(v => v === 'L') ? `🧊 Cold Streak - Losses: ${state.betState.previousLosses.length}` :
-          state.outcomes.slice(-3).every(v => v === 'W') ? `🔥 Hot Streak` : '';
+        const nextLoss = S.betState.previousLosses[0];
+        const x = calculatePlusX(nextLoss);
+        S.betState.previousLosses.push(nextLoss + x);
       }
-      
-      // Rest of the display update remains the same
-      document.getElementById('wins').innerText = state.wins;
-      document.getElementById('losses').innerText = state.losses;
-      document.getElementById('accuracy').innerText = state.wins + state.losses ? ((state.wins / (state.wins + state.losses)) * 100).toFixed(1) + '%' : '0%';
-      
-      const previousLosses = state.betState.previousLosses.length > 0 ? state.betState.previousLosses.join(', ') : 'None';
-      const stopProfitDisplay = state.stopProfitValue > 0 ? 
-        state.stopProfitType === 'percentage' ? `${state.stopProfitValue}% ($${state.stopProfitEffective.toFixed(2)})` : 
-        `$${state.stopProfitValue.toFixed(2)}` : 'Not Set';
-      
-      document.getElementById('bankrollDisplay').innerHTML = state.startBankroll ? 
-        `💼 Balance: ${state.currentBankroll.toFixed(2)} | Profit: ${(state.currentBankroll - state.startBankroll).toFixed(2)}<br>` +
-        (state.mmSystem === 'baccarat' ? 
-          `Bet: $${fmt(nextBaccaratBetAmount())}<br>` +
-          `Mode: ${baccaratMMState.mode}<br>` +
-          `Cycle: $${fmt(baccaratMMState.cycleProfit)} / $${fmt(baccaratMMState.targetProfit)}<br>` :
-          `Bet: $${(state.betState.currentBetUnits * state.baseUnit).toFixed(2)} (${state.betState.currentBetUnits} units)<br>` +
-          `Losses: ${previousLosses}<br>` +
-          `<span class="${state.betState.cycleProfit >= 1 ? 'cycle-reset' : ''}">Cycle: $${(state.betState.cycleProfit * state.baseUnit).toFixed(2)}</span><br>` +
-          `Total: $${(state.betState.totalProfit * state.baseUnit).toFixed(2)}<br>`) +
-        `Stop: ${stopProfitDisplay} | ${state.stopProfitReached ? '🚨 Reached' : 'Active'}<br>` +
-        `MM: ${state.mmSystem === 'plus1' ? 'Plus 1' : state.mmSystem === 'baccarat' ? 'Baccarat MM' : 'Default'}` : 
-        '💼 Balance: - | Profit: -';
+      const nextBet = S.betState.previousLosses[0];
+      S.betState.currentBetUnits = nextBet + calculatePlusX(nextBet);
+      if (S.betState.cycleProfit >= 1) {
+        S.betState.currentBetUnits = 1;
+        S.betState.cycleProfit = 0;
+        S.cycle += 1;
+      }
     }
-    
-    // Add the new functions to the window object
-    window.toggleMMSystem = toggleMMSystem;
-    window.recordBaccaratResult = recordBaccaratResult;
-    window.resetBaccaratCycle = resetBaccaratCycle;
-    
-    // Rest of your existing code remains the same
+  }
+
+  function getWager() {
+    if (!S.baseBet || S.stopProfitReached) return 0;
+    return Math.min(S.betState.currentBetUnits * S.baseBet, S.bankroll);
+  }
+
+  function resetBet() {
+    if (confirm('Reset bet to base unit?')) {
+      S.betState = { currentBetUnits: 1, totalProfit: 0, cycleProfit: 0, previousLosses: [] };
+      S.cycle = 1;
+      S.cycleProfit = 0;
+      persist();
+      render();
+    }
+  }
+
+  function resetCycle(manual = false) {
+    S.cycleProfit = 0;
+    S.betState.cycleProfit = 0;
+    S.betState.currentBetUnits = 1;
+    S.betState.previousLosses = [];
+    if (!manual) {
+      S.cycle += 1;
+    }
+    persist();
+    render();
+  }
+
+  function newSession() {
+    if (confirm('Start a new session? History will clear.')) {
+      const keep = {
+        bankroll: num($('bankroll').value, S.bankroll),
+        bankrollStart: num($('bankroll').value, S.bankroll),
+        baseBet: num($('baseBet').value, S.baseBet),
+        stopProfitType: $('stopProfitType').value,
+        stopProfitValue: num($('stopProfit').value, S.stopProfitValue),
+        stopProfitEffective: S.stopProfitType === 'percentage' ? num($('stopProfit').value, S.stopProfitValue) / 100 * num($('bankroll').value, S.bankroll) : num($('stopProfit').value, S.stopProfitValue),
+        stopProfitReached: false,
+        commission: num($('commission').value, S.commission),
+        stopLoss: num($('stopLoss').value, S.stopLoss),
+        mmSystem: $('mmSystem').value,
+        tableNotes: $('tableNotes').value
+      };
+      S = Object.assign({
+        cycle: 1,
+        cycleProfit: 0,
+        betState: { currentBetUnits: 1, totalProfit: 0, cycleProfit: 0, previousLosses: [] },
+        history: [],
+        hand: 0
+      }, keep);
+      persist();
+      syncInputs();
+      render();
+    }
+  }
+
+  function applyResult(res) {
+    if (S.stopLoss > 0 && S.bankroll <= S.bankrollStart - S.stopLoss) {
+      alert('Stop Loss reached. No more bets this session.');
+      return;
+    }
+    if (S.stopProfitEffective > 0 && S.bankroll - S.bankrollStart >= S.stopProfitEffective) {
+      S.stopProfitReached = true;
+      alert('Stop Profit reached. Betting paused.');
+      render();
+      return;
+    }
+    if (!S.baseBet || !S.bankroll) {
+      alert('Set bankroll and base bet first.');
+      return;
+    }
+
+    const bet = getWager();
+    const side = 'banker';
+    let pl = 0;
+    let note = '';
+    S.hand += 1;
+
+    if (res === 'W') {
+      pl = side === 'banker' ? bet * (1 - S.commission) : bet;
+      handleWin();
+      note = S.betState.cycleProfit >= 1 ? `Cycle target reached. Reset to 1 unit.` : '';
+    } else {
+      pl = -bet;
+      handleLoss();
+      note = S.betState.previousLosses.length > 0 ? `Loss recorded. Next bet: ${S.betState.currentBetUnits} units.` : '';
+    }
+
+    S.history.unshift({
+      hand: S.hand,
+      mmSystem: S.mmSystem,
+      units: S.betState.currentBetUnits,
+      side: side,
+      bet: bet,
+      result: res,
+      pl: pl,
+      cycleProfit: S.cycleProfit,
+      totalProfit: S.betState.totalProfit * S.baseBet,
+      bankroll: S.bankroll,
+      note: note || S.tableNotes
+    });
+
+    if (S.stopProfitEffective > 0 && S.bankroll - S.bankrollStart >= S.stopProfitEffective) {
+      S.stopProfitReached = true;
+      S.history[0].note = `Stop Profit reached (${S.stopProfitType === 'percentage' ? S.stopProfitValue + '%' : '$' + S.stopProfitValue}). Betting paused.`;
+    }
+
+    persist();
+    render();
+  }
+
+  function render() {
+    const stopProfitDisplay = S.stopProfitValue > 0 ?
+      S.stopProfitType === 'percentage' ? `${S.stopProfitValue}% ($${fmt(S.stopProfitEffective)})` : `$${fmt(S.stopProfitValue)}` : 'Not Set';
+    $('nextBet').textContent = fmt(getWager());
+    $('nextBetNote').textContent = S.stopProfitReached ? 'Stop Profit Reached' : `${S.mmSystem === 'plus1' ? 'Plus 1' : 'Default'} (${S.betState.currentBetUnits} units)`;
+    $('statBankroll').textContent = fmt(S.bankroll);
+    $('statCycle').textContent = `${fmt(S.cycleProfit)} / ${stopProfitDisplay}`;
+    $('cycleBadge').textContent = `Cycle #${S.cycle}`;
+    $('statProfit').textContent = fmt(S.betState.totalProfit * S.baseBet);
+    $('mmBadge').textContent = S.mmSystem === 'plus1' ? 'Plus 1' : 'Default';
+    $('history').innerHTML = S.history.map(r =>
+      `<tr>
+        <td>${r.hand}</td>
+        <td><span class="pill">${r.mmSystem}</span></td>
+        <td>${r.units}</td>
+        <td>${r.side}</td>
+        <td>${fmt(r.bet)}</td>
+        <td>${r.result === 'W' ? '<span class="green">Win</span>' : '<span class="red">Loss</span>'}</td>
+        <td>${r.pl >= 0 ? '<span class="green">+' + fmt(r.pl) + '</span>' : '<span class="red">' + fmt(r.pl) + '</span>'}</td>
+        <td>${fmt(r.cycleProfit)}</td>
+        <td>${fmt(r.totalProfit)}</td>
+        <td>${fmt(r.bankroll)}</td>
+        <td class="small muted">${r.note}</td>
+      </tr>`
+    ).join('');
+  }
+
+  function fmt(n) {
+    return (Math.round((typeof n === 'number' ? n : parseFloat(n) || 0) * 100) / 100).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  }
+
+  function persist() {
+    localStorage.setItem('bacc_mm_v1', JSON.stringify(S));
+  }
+
+  $('saveCfg').addEventListener('click', saveCfg);
+  $('btnWin').addEventListener('click', () => applyResult('W'));
+  $('btnLoss').addEventListener('click', () => applyResult('L'));
+  $('btnResetCycle').addEventListener('click', () => { resetCycle(true); });
+  $('btnResetBet').addEventListener('click', resetBet);
+  $('btnNewSession').addEventListener('click', newSession);
+
+  syncInputs();
+  render();
+})();
   </script>
 </body>
 </html>
