@@ -721,23 +721,23 @@
               } else {
                 await setDoc(doc(db, 'users', user.uid), { isOnline: false }, { merge: true });
                 showMessage('Your subscription has expired or is invalid. Contact admin to renew.');
-                document.getElementById('appContainer').classList.remove('hidden'); // Show UI for debugging
+                document.getElementById('appContainer').classList.remove('hidden');
                 console.error('Subscription expired or invalid');
               }
             } else {
               showMessage('User data not found. Contact admin.');
-              document.getElementById('appContainer').classList.remove('hidden'); // Show UI for debugging
+              document.getElementById('appContainer').classList.remove('hidden');
               console.error('User document not found');
             }
           } catch (error) {
             console.error('Error checking subscription:', error);
             showMessage('Error checking subscription: ' + error.message);
-            document.getElementById('appContainer').classList.remove('hidden'); // Show UI for debugging
+            document.getElementById('appContainer').classList.remove('hidden');
           }
         } else {
           console.error('No user authenticated');
           showMessage('Please log in to access the app');
-          document.getElementById('appContainer').classList.remove('hidden'); // Show UI for debugging
+          document.getElementById('appContainer').classList.remove('hidden');
         }
       });
 
@@ -1120,6 +1120,11 @@
       }
 
       function selectPredictionAlgorithm() {
+        // Require at least 5 deals before making a prediction
+        if (state.history.length < 5) {
+          return { predict: 'None', confidence: 0, score: 0, algo: 'none', threshold: 50 };
+        }
+
         const algorithms = isAdmin ? (state.selectedAlgorithms.length > 0 ? state.selectedAlgorithms : ['bayesian']) : globalSelectedAlgorithms;
         const predictions = [];
         if (algorithms.includes('bayesian')) predictions.push(bayesianPrediction());
@@ -1251,7 +1256,9 @@
         const prediction = selectPredictionAlgorithm();
         const predictionText = state.stopProfitReached
           ? 'Stop Profit Reached - No Bet'
-          : `Prediction: ${prediction.predict === 'P' ? 'Player' : prediction.predict === 'B' ? 'Banker' : 'Tie'} (${prediction.algo}, ${prediction.confidence}% confidence, ≥${prediction.threshold}% threshold)`;
+          : prediction.predict === 'None'
+            ? 'Waiting for 5 deals...'
+            : `Prediction: ${prediction.predict === 'P' ? 'Player' : prediction.predict === 'B' ? 'Banker' : 'Tie'} (${prediction.algo}, ${prediction.confidence}% confidence, ≥${prediction.threshold}% threshold)`;
         document.getElementById('prediction').innerText = predictionText;
         
         document.getElementById('currentWager').innerText = `💵 Current Bet: ${state.baseUnit ? (state.baseUnit * state.betState.currentBetUnits).toFixed(2) : 0}`;
@@ -1464,7 +1471,6 @@
         logEvent(analytics, 'reset_stats');
       }
 
-      // Fix for extendSubscriptionFor (missing in original)
       window.extendSubscriptionFor = async function(uid, email) {
         try {
           const timeUnit = document.getElementById('extendTimeUnit').value;
