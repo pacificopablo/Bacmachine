@@ -363,7 +363,7 @@
     const db = getFirestore(app);
     const analytics = getAnalytics(app);
 
-    let globalSelectedAlgorithms = ['bayesian']; // Default to Bayesian
+    let globalSelectedAlgorithms = ['bayesian'];
     let isAdmin = false;
     let onlineUsersUnsubscribe = null;
     let accuracyUnsubscribe = null;
@@ -855,7 +855,7 @@
     }
 
     function bayesianPrediction() {
-      let bestPrediction = { predict: 'P', confidence: 50, score: 0, algo: 'bayesian', threshold: 60 };
+      let bestPrediction = { predict: 'P', confidence: 50, score: 0, algo: 'bayesian', threshold: 50 };
       const priorP = 0.4462;
       const priorB = 0.4586;
       const priorT = 0.0952;
@@ -864,8 +864,7 @@
       const winRate = state.wins + state.losses > 0 ? state.wins / (state.wins + state.losses) : 0.5;
       const bankrollRatio = state.startBankroll > 0 ? state.currentBankroll / state.startBankroll : 1;
       
-      // Bayesian-specific threshold
-      let threshold = 60;
+      let threshold = 50;
       threshold += state.outcomes.slice(-3).every(v => v === 'L') ? 10 : 0;
       threshold += bankrollRatio < 0.5 ? 10 : 0;
       threshold += winRate < 0.4 ? 5 : 0;
@@ -927,12 +926,11 @@
     }
 
     function chatGPTPrediction() {
-      let bestPrediction = { predict: 'P', confidence: 50, score: 0, algo: 'chatgpt', threshold: 65 };
+      let bestPrediction = { predict: 'P', confidence: 50, score: 0, algo: 'chatgpt', threshold: 50 };
       const winRate = state.wins + state.losses > 0 ? state.wins / (state.wins + state.losses) : 0.5;
       const recentAccuracy = calculateRecentAccuracy();
       
-      // ChatGPT-specific threshold
-      let threshold = 65;
+      let threshold = 50;
       threshold += state.outcomes.slice(-2).every(v => v === 'L') ? 8 : 0;
       threshold += recentAccuracy < 0.5 ? 7 : 0;
       bestPrediction.threshold = threshold;
@@ -964,13 +962,12 @@
     }
 
     function grokPrediction() {
-      let bestPrediction = { predict: 'P', confidence: 50, score: 0, algo: 'grok', threshold: 55 };
+      let bestPrediction = { predict: 'P', confidence: 50, score: 0, algo: 'grok', threshold: 50 };
       const shoeType = getShoeType();
       const trueCount = calculateTrueCount();
       const recentAccuracy = calculateRecentAccuracy();
       
-      // Grok-specific threshold
-      let threshold = 55;
+      let threshold = 50;
       threshold += shoeType === 'Streak' ? 5 : 0;
       threshold += recentAccuracy < 0.5 ? 10 : 0;
       bestPrediction.threshold = threshold;
@@ -1017,13 +1014,12 @@
     }
 
     function neuralNetPrediction() {
-      let bestPrediction = { predict: 'P', confidence: 50, score: 0, algo: 'neuralnet', threshold: 60 };
+      let bestPrediction = { predict: 'P', confidence: 50, score: 0, algo: 'neuralnet', threshold: 50 };
       const shoeType = getShoeType();
       const trueCount = calculateTrueCount();
       const recentAccuracy = calculateRecentAccuracy();
       
-      // Neural Network-specific threshold
-      let threshold = 60;
+      let threshold = 50;
       threshold += Math.abs(trueCount) > 2 ? 5 : 0;
       threshold += recentAccuracy < 0.5 ? 10 : 0;
       bestPrediction.threshold = threshold;
@@ -1106,7 +1102,6 @@
       let bestPrediction = { predict: 'P', confidence: 60, score: 0, algo: 'fusion', threshold: 50 };
       const recentAccuracy = calculateRecentAccuracy();
       
-      // Fusion-specific threshold
       let threshold = 50;
       threshold += state.history.length < 10 ? 10 : 0;
       threshold += recentAccuracy < 0.5 ? 5 : 0;
@@ -1161,12 +1156,12 @@
       if (algorithms.includes('fusion')) predictions.push(fusionPrediction());
       
       if (predictions.length === 0) {
-        return { predict: 'P', confidence: 0, score: 0, algo: 'bayesian', threshold: 60 };
+        return { predict: 'P', confidence: 0, score: 0, algo: 'bayesian', threshold: 50 };
       }
       
       return predictions.reduce((best, current) => 
         current.score * current.confidence > best.score * best.confidence ? current : best, 
-        { predict: 'P', confidence: 0, score: 0, algo: 'bayesian', threshold: 60 }
+        { predict: 'P', confidence: 0, score: 0, algo: 'bayesian', threshold: 50 }
       );
     }
 
@@ -1201,9 +1196,7 @@
       const cardsDrawn = estimateCardsDrawn(result);
       state.cardCounts.low += cardsDrawn.low;
       state.cardCounts.high += cardsDrawn.high;
-      state.cardCounts.total ProtonMail and Hotmail are not supported by this browser. Please copy the HTML code below, paste it into a text editor, and then open it with a browser that supports those email services.
-
-    state.cardCounts.totalCards += cardsDrawn.total;
+      state.cardCounts.totalCards += cardsDrawn.total;
       state.history.push(result);
       learnPattern(result);
       
@@ -1480,6 +1473,16 @@
       updateUI();
     }
 
+    function resetStats() {
+      state.wins = 0;
+      state.losses = 0;
+      state.accuracyWindow = [];
+      state.predictionPerformance = { 2: { correct: 0, total: 0 }, 3: { correct: 0, total: 0 }, 4: { correct: 0, total: 0 }, 5: { correct: 0, total: 0 } };
+      updateUI();
+      saveMemoryFast();
+      logEvent(analytics, 'reset_stats');
+    }
+
     window.extendSubscriptionFor = async (uid, email) => {
       document.getElementById('extendUserEmail').value = email;
       document.getElementById('extendTimeUnit').value = 'days';
@@ -1507,4 +1510,4 @@
     });
   </script>
 </body>
-</html>    
+</html>
