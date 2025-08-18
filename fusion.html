@@ -804,15 +804,6 @@
       }
     }
 
-    function getDynamicConfidenceThreshold() {
-      const winRate = state.wins + state.losses > 0 ? state.wins / (state.wins + state.losses) : 0.5;
-      const bankrollRatio = state.currentBankroll / state.startBankroll;
-      const baseThreshold = 60;
-      const streakPenalty = state.outcomes.slice(-3).every(v => v === 'L') ? 10 : 0;
-      const bankrollPenalty = bankrollRatio < 0.5 ? 10 : 0;
-      return baseThreshold + streakPenalty + bankrollPenalty;
-    }
-
     function getShoeType() {
       let streaks = 0;
       for (let i = 1; i < state.history.length; i++) {
@@ -864,13 +855,21 @@
     }
 
     function bayesianPrediction() {
-      let bestPrediction = { predict: 'P', confidence: 50, score: 0, algo: 'bayesian' };
-      const threshold = getDynamicConfidenceThreshold();
+      let bestPrediction = { predict: 'P', confidence: 50, score: 0, algo: 'bayesian', threshold: 60 };
       const priorP = 0.4462;
       const priorB = 0.4586;
       const priorT = 0.0952;
       const shoeType = getShoeType();
       const trueCount = calculateTrueCount();
+      const winRate = state.wins + state.losses > 0 ? state.wins / (state.wins + state.losses) : 0.5;
+      const bankrollRatio = state.startBankroll > 0 ? state.currentBankroll / state.startBankroll : 1;
+      
+      // Bayesian-specific threshold
+      let threshold = 60;
+      threshold += state.outcomes.slice(-3).every(v => v === 'L') ? 10 : 0;
+      threshold += bankrollRatio < 0.5 ? 10 : 0;
+      threshold += winRate < 0.4 ? 5 : 0;
+      bestPrediction.threshold = threshold;
       
       let adjustedPriorP = priorP;
       let adjustedPriorB = priorB;
@@ -916,8 +915,8 @@
               const confidence = Math.round(100 * Math.max(posteriorP, posteriorB));
               const predict = posteriorP > posteriorB ? 'P' : 'B';
               
-              if (score > bestPrediction.score && confidence > threshold) {
-                bestPrediction = { predict, confidence, score, algo: 'bayesian' };
+              if (score > bestPrediction.score && confidence >= threshold) {
+                bestPrediction = { predict, confidence, score, algo: 'bayesian', threshold };
               }
             }
           }
@@ -928,8 +927,15 @@
     }
 
     function chatGPTPrediction() {
-      let bestPrediction = { predict: 'P', confidence: 50, score: 0, algo: 'chatgpt' };
-      const threshold = getDynamicConfidenceThreshold();
+      let bestPrediction = { predict: 'P', confidence: 50, score: 0, algo: 'chatgpt', threshold: 65 };
+      const winRate = state.wins + state.losses > 0 ? state.wins / (state.wins + state.losses) : 0.5;
+      const recentAccuracy = calculateRecentAccuracy();
+      
+      // ChatGPT-specific threshold
+      let threshold = 65;
+      threshold += state.outcomes.slice(-2).every(v => v === 'L') ? 8 : 0;
+      threshold += recentAccuracy < 0.5 ? 7 : 0;
+      bestPrediction.threshold = threshold;
       
       for (let n = 6; n >= 2; n--) {
         if (state.history.length >= n) {
@@ -946,8 +952,8 @@
               const confidence = Math.round(100 * Math.max(p / total, b / total));
               const predict = p > b ? 'P' : 'B';
               
-              if (score > bestPrediction.score && confidence > threshold) {
-                bestPrediction = { predict, confidence, score, algo: 'chatgpt' };
+              if (score > bestPrediction.score && confidence >= threshold) {
+                bestPrediction = { predict, confidence, score, algo: 'chatgpt', threshold };
               }
             }
           }
@@ -958,10 +964,16 @@
     }
 
     function grokPrediction() {
-      let bestPrediction = { predict: 'P', confidence: 50, score: 0, algo: 'grok' };
-      const threshold = getDynamicConfidenceThreshold();
+      let bestPrediction = { predict: 'P', confidence: 50, score: 0, algo: 'grok', threshold: 55 };
       const shoeType = getShoeType();
       const trueCount = calculateTrueCount();
+      const recentAccuracy = calculateRecentAccuracy();
+      
+      // Grok-specific threshold
+      let threshold = 55;
+      threshold += shoeType === 'Streak' ? 5 : 0;
+      threshold += recentAccuracy < 0.5 ? 10 : 0;
+      bestPrediction.threshold = threshold;
       
       let baseP = 0.4462;
       let baseB = 0.4586;
@@ -993,8 +1005,8 @@
               const predict = p > b ? 'P' : 'B';
               const score = (n / 5) * (totalCounts / (state.wins + state.losses + 1));
               
-              if (score > bestPrediction.score && confidence > threshold) {
-                bestPrediction = { predict, confidence, score, algo: 'grok' };
+              if (score > bestPrediction.score && confidence >= threshold) {
+                bestPrediction = { predict, confidence, score, algo: 'grok', threshold };
               }
             }
           }
@@ -1005,21 +1017,23 @@
     }
 
     function neuralNetPrediction() {
-      let bestPrediction = { predict: 'P', confidence: 50, score: 0, algo: 'neuralnet' };
-      const threshold = getDynamicConfidenceThreshold();
+      let bestPrediction = { predict: 'P', confidence: 50, score: 0, algo: 'neuralnet', threshold: 60 };
       const shoeType = getShoeType();
       const trueCount = calculateTrueCount();
+      const recentAccuracy = calculateRecentAccuracy();
       
-      // Neural network weights (these would normally be trained)
+      // Neural Network-specific threshold
+      let threshold = 60;
+      threshold += Math.abs(trueCount) > 2 ? 5 : 0;
+      threshold += recentAccuracy < 0.5 ? 10 : 0;
+      bestPrediction.threshold = threshold;
+      
       const weights = {
         sequenceWeight: 0.4,
         shoeTypeWeight: 0.3,
         trueCountWeight: 0.2,
         recentAccuracyWeight: 0.1
       };
-      
-      // Get recent accuracy
-      const recentAccuracy = calculateRecentAccuracy();
       
       for (let n = 5; n >= 2; n--) {
         if (state.history.length >= n) {
@@ -1030,11 +1044,9 @@
             const total = p + b;
             
             if (total > 0) {
-              // Base probabilities from sequence
               const sequenceProbP = p / total;
               const sequenceProbB = b / total;
               
-              // Shoe type adjustment
               let shoeTypeAdjustmentP = 0;
               let shoeTypeAdjustmentB = 0;
               if (shoeType === 'Streak') {
@@ -1045,7 +1057,6 @@
                 shoeTypeAdjustmentB = state.history[state.history.length - 1] === 'P' ? 0.1 : -0.1;
               }
               
-              // True count adjustment
               let trueCountAdjustmentP = 0;
               let trueCountAdjustmentB = 0;
               if (trueCount > 1) {
@@ -1056,10 +1067,8 @@
                 trueCountAdjustmentB = -0.025 * Math.abs(trueCount);
               }
               
-              // Recent accuracy adjustment
               const accuracyAdjustment = (recentAccuracy - 0.5) * 0.1;
               
-              // Combine all factors
               const finalP = (sequenceProbP * weights.sequenceWeight) + 
                              (shoeTypeAdjustmentP * weights.shoeTypeWeight) + 
                              (trueCountAdjustmentP * weights.trueCountWeight) + 
@@ -1070,7 +1079,6 @@
                              (trueCountAdjustmentB * weights.trueCountWeight) + 
                              (-accuracyAdjustment * weights.recentAccuracyWeight);
               
-              // Normalize
               const totalFinal = finalP + finalB;
               const normalizedP = totalFinal > 0 ? finalP / totalFinal : 0.5;
               const normalizedB = totalFinal > 0 ? finalB / totalFinal : 0.5;
@@ -1078,14 +1086,13 @@
               const confidence = Math.round(100 * Math.max(normalizedP, normalizedB));
               const predict = normalizedP > normalizedB ? 'P' : 'B';
               
-              // Score based on sequence length and frequency
               const frequencyWeight = total / (state.wins + state.losses + 1);
               const lengthWeight = n / 5;
               const recencyWeight = 1 / (state.history.length - state.history.lastIndexOf(key) + 1);
               const score = frequencyWeight * lengthWeight * recencyWeight;
               
-              if (score > bestPrediction.score && confidence > threshold) {
-                bestPrediction = { predict, confidence, score, algo: 'neuralnet' };
+              if (score > bestPrediction.score && confidence >= threshold) {
+                bestPrediction = { predict, confidence, score, algo: 'neuralnet', threshold };
               }
             }
           }
@@ -1096,1197 +1103,48 @@
     }
 
     function fusionPrediction() {
-      let bestPrediction = { predict: 'P', confidence: 60, score: 0, algo: 'fusion' }; // Default confidence set to 60
-      const threshold = getDynamicConfidenceThreshold();
+      let bestPrediction = { predict: 'P', confidence: 60, score: 0, algo: 'fusion', threshold: 50 };
+      const recentAccuracy = calculateRecentAccuracy();
+      
+      // Fusion-specific threshold
+      let threshold = 50;
+      threshold += state.history.length < 10 ? 10 : 0;
+      threshold += recentAccuracy < 0.5 ? 5 : 0;
+      bestPrediction.threshold = threshold;
       
       if (state.history.length >= 3) {
         const last3 = state.history.slice(-3).join('');
         let predict = 'P';
         let score = 0;
         
-        // Pattern matching for chop patterns
         if (last3 === 'PBP' || last3 === 'BPB') {
           predict = state.history[state.history.length - 1] === 'P' ? 'B' : 'P';
-          score = 0.8; // Assign a moderate score for pattern match
-        }
-        // Streak detection
-        else if (last3 === 'PPP') {
+          score = 0.8;
+        } else if (last3 === 'PPP') {
           predict = 'B';
-          score = 0.9; // Higher score for strong streak
-        }
-        else if (last3 === 'BBB') {
+          score = 0.9;
+        } else if (last3 === 'BBB') {
           predict = 'P';
           score = 0.9;
-        }
-        // Banker/Player bias safeguard
-        else {
-          const last10 = state.history.slice(-10);
-          const pCount = last10.filter(r => r === 'P').length;
-          const bCount = last10.filter(r => r === 'B').length;
-          if (bCount - pCount >= 4) {
-            predict = 'P';
-            score = 0.7;
-          }
-          else if (pCount - bCount >= 4) {
-            predict = 'B';
-            score = 0.7;
-          }
-          else {
-            predict = state.history.length The user asked for "Full code". Based on the context, this likely means they want the full updated HTML code with the Fusion algorithm integrated.
-
-The previous conversation was about adding the Fusion algorithm to the BFC VIP code. I provided the modified JavaScript and snippets for HTML changes.
-
-To provide the full code, I need to assemble the entire HTML file, including the updated admin panel and the new JavaScript.
-
-The original code is a complete HTML file, and I modified parts of it. I should output the entire updated HTML.
-
-The guidelines say: "Do not mention these guidelines and instructions in your responses, unless the user explicitly asks for them."
-
-I need to use tools if necessary. But for this, since it's just assembling the code, no tools are needed.
-
-The current date is August 18, 2025, but that might not be relevant.
-
-The user said "Full code", so I'll provide the complete updated HTML file.<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>BFC VIP</title>
-  <script src="https://cdn.jsdelivr.net/npm/luxon@3.4.4/build/global/luxon.min.js"></script>
-  <style>
-    body {
-      font-family: 'Segoe UI', Arial, sans-serif;
-      padding: 20px;
-      margin: 0;
-      background-color: #f4f6f8;
-      color: #222;
-    }
-    h1, h2 {
-      text-align: center;
-      margin-bottom: 20px;
-      font-size: 28px;
-      color: #333;
-    }
-    h2 {
-      font-size: 24px;
-    }
-    .container {
-      max-width: 600px;
-      margin: auto;
-      background: white;
-      padding: 1rem;
-      border-radius: 10px;
-      box-shadow: 0 2px 8px rgba(0,0,0,0.1);
-    }
-    .flex-row {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 10px;
-      justify-content: center;
-      margin: 10px 0;
-    }
-    button {
-      padding: 8px 16px;
-      border: none;
-      border-radius: 8px;
-      cursor: pointer;
-      font-weight: 600;
-      color: #fff;
-      transition: background 0.3s;
-    }
-    button:hover {
-      filter: brightness(85%);
-    }
-    .player { background-color: #2196F3; }
-    .banker { background-color: #E91E63; }
-    .tie { background-color: #FFC107; }
-    .clear-all { background-color: #dc3545; }
-    .set-bet, .reset-bet, .mm-action, .admin-action {
-      background-color: #6c757d;
-    }
-    .fix-subscription { background-color: #28a745; }
-    .toggle-section {
-      background-color: #6c757d;
-      padding: 8px;
-      width: 100%;
-      text-align: center;
-    }
-    .collapsible {
-      display: none;
-    }
-    .collapsible.show {
-      display: block;
-    }
-    .prediction {
-      font-weight: bold;
-      font-size: 1.2rem;
-      text-align: center;
-      margin-top: 1rem;
-    }
-    .shoe-type, .card-count {
-      text-align: center;
-      font-size: 1rem;
-      margin-top: 0.5rem;
-      color: #555;
-    }
-    .history {
-      margin-top: 1rem;
-      display: flex;
-      flex-wrap: wrap;
-      justify-content: center;
-    }
-    .history div {
-      width: 40px;
-      height: 30px;
-      margin: 3px;
-      line-height: 30px;
-      text-align: center;
-      color: white;
-      font-weight: bold;
-      border-radius: 5px;
-      position: relative;
-    }
-    .P { background-color: #2196F3; }
-    .B { background-color: #E91E63; }
-    .T { background-color: #FFC107; }
-    .W::after, .L::after {
-      content: attr(data-outcome);
-      position: absolute;
-      top: -10px;
-      right: -5px;
-      font-size: 12px;
-      color: #fff;
-      background: #28a745;
-      border-radius: 50%;
-      width: 16px;
-      height: 16px;
-      line-height: 16px;
-      text-align: center;
-    }
-    .L::after {
-      background: #dc3545;
-    }
-    .stats {
-      padding: 15px;
-      text-align: center;
-    }
-    .section {
-      text-align: center;
-      margin: 12px 0;
-      font-size: 18px;
-      font-weight: 700;
-    }
-    .bet-controls {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 0.5rem;
-      justify-content: center;
-      margin-bottom: 1rem;
-      width: 100%;
-      max-width: 90vw;
-    }
-    input[type=number], select, input[type=datetime-local], input[type=email], input[type=password], input[type=checkbox] {
-      padding: 10px;
-      font-size: 16px;
-      border: 1px solid #ccc;
-      border-radius: 8px;
-      width: 150px;
-    }
-    label {
-      font-size: 16px;
-      display: flex;
-      align-items: center;
-      gap: 6px;
-    }
-    .cycle-reset {
-      color: #28a745;
-      font-weight: 700;
-    }
-    .error {
-      color: #dc3545;
-      text-align: center;
-    }
-    .hidden {
-      display: none;
-    }
-    .admin-panel table {
-      width: 100%;
-      border-collapse: collapse;
-      margin-top: 1rem;
-    }
-    .admin-panel th, .admin-panel td {
-      border: 1px solid #ccc;
-      padding: 8px;
-      text-align: center;
-    }
-    .admin-panel th {
-      background-color: #f0f0f0;
-    }
-    .admin-panel button {
-      background-color: #dc3545;
-    }
-    .online-indicator {
-      display: inline-block;
-      width: 10px;
-      height: 10px;
-      border-radius: 50%;
-      margin-right: 5px;
-    }
-    .online { background-color: #28a745; }
-    .offline { background-color: #dc3545; }
-    .algorithm-checkboxes {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 15px;
-      justify-content: center;
-    }
-    @media (max-width: 500px) {
-      .flex-row { flex-direction: column; align-items: stretch; }
-      .bet-controls { flex-direction: column; align-items: stretch; }
-      .algorithm-checkboxes { flex-direction: column; align-items: center; }
-      input[type=number], input[type=datetime-local], select, input[type=email], input[type=password] { width: 100%; }
-    }
-  </style>
-</head>
-<body>
-  <div class="container hidden" id="appContainer">
-    <h1>BFC VIP</h1>
-    <div class="section" id="subscriptionStatus">Subscription: -</div>
-    <div class="error" id="errorMessage"></div>
-    <div class="flex-row">
-      <button onclick="signOutUser()" aria-label="Sign out">Sign Out</button>
-    </div>
-    <div class="flex-row">
-      <button class="player" onclick="recordResult('P')" aria-label="Record Player result">Player</button>
-      <button class="banker" onclick="recordResult('B')" aria-label="Record Banker result">Banker</button>
-      <button class="tie" onclick="recordResult('T')" aria-label="Record Tie result">Tie</button>
-      <button class="clear-all" onclick="clearAll()" aria-label="Clear all data">Clear All</button>
-      <button class="undo" onclick="undo()" aria-label="Undo last action">Undo</button>
-    </div>
-
-    <div class="prediction" id="prediction">Waiting for input...</div>
-    <div class="shoe-type admin-only" id="shoeType">Detected Pattern: N/A</div>
-    <div class="card-count admin-only" id="cardCountDisplay">Card Count: N/A</div>
-    <div class="section">Showing last 10 results</div>
-    <div class="history" id="historyDisplay"></div>
-
-    <div class="stats">
-      <div class="section" id="currentWager">💵 Current Bet: 0</div>
-      <div class="section" id="bankrollDisplay">💼 Balance: - | Profit: -</div>
-      <div class="section" id="streakInfo"></div>
-      <div class="section">
-        ✅ <span id="wins">0</span> | ❌ <span id="losses">0</span> | 📊 <span id="accuracy">0%</span>
-      </div>
-      <div class="bet-controls">
-        <label><span>Bankroll</span><input type="number" id="bankrollInput" placeholder="Bankroll" min="0.01" step="0.01" aria-label="Set bankroll"></label>
-        <label><span>Unit Value</span><input type="number" id="basebetInput" placeholder="Unit Value ($)" min="0.01" step="0.01" aria-label="Set base unit"></label>
-        <label>
-          <select id="stopProfitType" aria-label="Select stop profit type">
-            <option value="currency">$</option>
-            <option value="percentage">%</option>
-          </select>
-          <input type="number" id="stopProfitInput" placeholder="Stop Profit" min="0" step="0.01" aria-label="Set stop profit">
-        </label>
-        <label>
-          <span>MM System</span>
-          <select id="mmSystem" aria-label="Select money management system">
-            <option value="default">Default</option>
-            <option value="plus1">Plus 1</option>
-          </select>
-        </label>
-        <button class="set-bet" onclick="setBankroll()" aria-label="Set bankroll and bet">Set</button>
-      </div>
-      <button class="toggle-section" onclick="toggleAdvanced()" aria-label="Toggle advanced controls">Show Advanced</button>
-      <div class="flex-row collapsible" id="advancedControls">
-        <button class="reset-bet" onclick="resetBet()" aria-label="Reset bet">Reset Bet</button>
-        <button class="mm-action" onclick="saveMemory()" aria-label="Save state">💾</button>
-        <button class="mm-action" onclick="loadMemory()" aria-label="Load state">📥</button>
-        <button class="mm-action" onclick="resetStats()" aria-label="Reset stats">🔄 Reset Stats</button>
-        <button class="mm-action" onclick="resetMemory()" aria-label="Reset memory">🧠 Reset Memory</button>
-      </div>
-    </div>
-
-    <div class="admin-panel hidden" id="adminPanel">
-      <h2>Admin Panel</h2>
-      <div class="section">
-        <h3>Create User</h3>
-        <div class="flex-row">
-          <label><span>Email</span><input type="email" id="newUserEmail" placeholder="Email" aria-label="New user email"></label>
-          <label><span>Password</span><input type="password" id="newUserPassword" placeholder="Password" aria-label="New user password"></label>
-          <label><span>Admin</span><input type="checkbox" id="newUserIsAdmin" aria-label="New user admin status"></label>
-          <button class="admin-action" onclick="createUser()">Create User</button>
-        </div>
-      </div>
-      <div class="section">
-        <h3>Manage Users</h3>
-        <table id="userTable">
-          <thead>
-            <tr>
-              <th>Email</th>
-              <th>Subscription End (PST)</th>
-              <th>Admin</th>
-              <th>Add Time</th>
-              <th>Actions</th>
-            </tr>
-          </thead>
-          <tbody id="userTableBody"></tbody>
-        </table>
-      </div>
-      <div class="section">
-        <h3>Add Subscription Time</h3>
-        <div class="flex-row">
-          <label><span>User Email</span><input type="email" id="extendUserEmail" placeholder="User Email" aria-label="User email to extend subscription"></label>
-          <label>
-            <select id="extendTimeUnit" aria-label="Select time unit">
-              <option value="hours">Hours</option>
-              <option value="days">Days</option>
-              <option value="test">24-Hour Test</option>
-            </select>
-          </label>
-          <label><span>Amount</span><input type="number" id="extendTimeAmount" placeholder="Amount" min="1" step="1" aria-label="Amount of time to add"></label>
-          <button class="admin-action" onclick="extendSubscription()">Add Time</button>
-        </div>
-      </div>
-      <div class="section">
-        <h3>Algorithm Selection</h3>
-        <div class="flex-row algorithm-checkboxes">
-          <label><input type="checkbox" id="bayesianCheckbox" onchange="setAlgorithms()" aria-label="Use Bayesian algorithm">Bayesian</label>
-          <label><input type="checkbox" id="chatgptCheckbox" onchange="setAlgorithms()" aria-label="Use ChatGPT algorithm">ChatGPT</label>
-          <label><input type="checkbox" id="grokCheckbox" onchange="setAlgorithms()" aria-label="Use Grok algorithm">Grok</label>
-          <label><input type="checkbox" id="neuralnetCheckbox" onchange="setAlgorithms()" aria-label="Use Neural Network algorithm">Neural Network</label>
-          <label><input type="checkbox" id="fusionCheckbox" onchange="setAlgorithms()" aria-label="Use Fusion algorithm">Fusion</label>
-        </div>
-      </div>
-      <div class="section">
-        <h3>Online Users</h3>
-        <table id="onlineUsersTable">
-          <thead>
-            <tr>
-              <th>Email</th>
-              <th>Status</th>
-            </tr>
-          </thead>
-          <tbody id="onlineUsersTableBody"></tbody>
-        </table>
-      </div>
-      <div class="section">
-        <h3>Non-Admin Algorithm Accuracy</h3>
-        <table id="algorithmAccuracyTable">
-          <thead>
-            <tr>
-              <th>Email</th>
-              <th>Bayesian</th>
-              <th>ChatGPT</th>
-              <th>Grok</th>
-              <th>Neural Net</th>
-              <th>Fusion</th>
-            </tr>
-          </thead>
-          <tbody id="algorithmAccuracyTableBody"></tbody>
-        </table>
-      </div>
-    </div>
-  </div>
-
-  <script type="module">
-    import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js';
-    import { getAuth, signOut, onAuthStateChanged, createUserWithEmailAndPassword } from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js';
-    import { getAnalytics, logEvent } from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-analytics.js';
-    import { getFirestore, doc, getDoc, setDoc, collection, getDocs, query, where, onSnapshot } from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js';
-
-    const { DateTime } = luxon;
-
-    const firebaseConfig = {
-      apiKey: "AIzaSyBs3LHGZA_8spAwQ5kgULiqcZmKqcIvZiI",
-      authDomain: "bfc-vip.firebaseapp.com",
-      projectId: "bfc-vip",
-      storageBucket: "bfc-vip.appspot.com",
-      messagingSenderId: "92211995630",
-      appId: "1:92211995630:web:186a26085329fc607724ff",
-      measurementId: "G-1EBPP36F59"
-    };
-
-    const app = initializeApp(firebaseConfig);
-    const auth = getAuth(app);
-    const db = getFirestore(app);
-    const analytics = getAnalytics(app);
-
-    let globalSelectedAlgorithms = ['bayesian']; // Default to Bayesian
-    let isAdmin = false;
-    let onlineUsersUnsubscribe = null;
-    let accuracyUnsubscribe = null;
-    let globalSettingsUnsubscribe = null;
-
-    function showMessage(message) {
-      const errorMessage = document.getElementById('errorMessage');
-      errorMessage.innerText = message;
-      setTimeout(() => { errorMessage.innerText = ''; }, 5000);
-    }
-
-    function signOutUser() {
-      const user = auth.currentUser;
-      if (user) {
-        setDoc(doc(db, 'users', user.uid), { isOnline: false }, { merge: true });
-      }
-      signOut(auth).then(() => {
-        window.location.href = 'login.html';
-      });
-    }
-
-    async function createUser() {
-      const email = document.getElementById('newUserEmail').value;
-      const password = document.getElementById('newUserPassword').value;
-      const isAdmin = document.getElementById('newUserIsAdmin').checked;
-      const errorMessage = document.getElementById('errorMessage');
-      errorMessage.innerText = '';
-
-      if (!email || !password) {
-        showMessage('Please fill in email and password');
-        return;
-      }
-
-      try {
-        const userCredential = await createUserWithEmailAndPassword(auth, email, password);
-        const subscriptionEnd = DateTime.now().setZone('Asia/Manila').plus({ days: 60 }).toMillis();
-        await setDoc(doc(db, 'users', userCredential.user.uid), {
-          email: userCredential.user.email,
-          subscriptionEnd,
-          isAdmin,
-          isOnline: false,
-          state: {
-            history: [],
-            outcomes: [],
-            wins: 0,
-            losses: 0,
-            baseUnit: 0,
-            startBankroll: 0,
-            currentBankroll: 0,
-            betState: { currentBetUnits: 1, totalProfit: 0, cycleProfit: 0, previousLosses: [] },
-            stopProfitType: 'percentage',
-            stopProfitValue: 0,
-            stopProfitEffective: 0,
-            stopProfitReached: false,
-            patternMemory: {},
-            predictionPerformance: { 2: { correct: 0, total: 0 }, 3: { correct: 0, total: 0 }, 4: { correct: 0, total: 0 }, 5: { correct: 0, total: 0 } },
-            cardCounts: { low: 0, high: 0, totalCards: 0, decks: 8 },
-            accuracyWindow: [],
-            altAlgoCount: 0,
-            useAltAlgo: false,
-            altAlgoType: 'chatgpt',
-            mmSystem: 'default',
-            selectedAlgorithms: []
-          }
-        });
-        showMessage('User created successfully');
-        logEvent(analytics, 'create_user', { email, isAdmin });
-        document.getElementById('newUserEmail').value = '';
-        document.getElementById('newUserPassword').value = '';
-        document.getElementById('newUserIsAdmin').checked = false;
-        loadUsers();
-      } catch (error) {
-        showMessage('Error creating user: ' + error.message);
-        logEvent(analytics, 'create_user', { email, success: false, error: error.code });
-      }
-    }
-
-    async function updateUserSubscription(uid) {
-      const subscriptionEndInput = document.getElementById(`subscriptionEnd_${uid}`).value;
-      const errorMessage = document.getElementById('errorMessage');
-      if (!subscriptionEndInput) {
-        showMessage('Please select a valid subscription date');
-        return;
-      }
-      const subscriptionEnd = DateTime.fromISO(subscriptionEndInput, { zone: 'Asia/Manila' }).toMillis();
-      if (isNaN(subscriptionEnd)) {
-        showMessage('Invalid subscription date');
-        return;
-      }
-      try {
-        await setDoc(doc(db, 'users', uid), { subscriptionEnd }, { merge: true });
-        showMessage('Subscription updated');
-        logEvent(analytics, 'update_subscription', { uid });
-        loadUsers();
-      } catch (error) {
-        showMessage('Error updating subscription: ' + error.message);
-      }
-    }
-
-    async function fixUserSubscription(uid) {
-      try {
-        const subscriptionEnd = DateTime.now().setZone('Asia/Manila').plus({ days: 60 }).toMillis();
-        await setDoc(doc(db, 'users', uid), { subscriptionEnd }, { merge: true });
-        showMessage('Subscription fixed to 60 days from now');
-        logEvent(analytics, 'fix_subscription', { uid });
-        loadUsers();
-      } catch (error) {
-        showMessage('Error fixing subscription: ' + error.message);
-      }
-    }
-
-    async function extendSubscription() {
-      const email = document.getElementById('extendUserEmail').value;
-      const timeUnit = document.getElementById('extendTimeUnit').value;
-      const timeAmount = parseInt(document.getElementById('extendTimeAmount').value);
-      const errorMessage = document.getElementById('errorMessage');
-      errorMessage.innerText = '';
-
-      if (!email) {
-        showMessage('Please enter a user email');
-        return;
-      }
-      if (timeUnit !== 'test' && (!timeAmount || timeAmount < 1)) {
-        showMessage('Please enter a valid time amount');
-        return;
-      }
-
-      try {
-        const userQuery = query(collection(db, 'users'), where('email', '==', email));
-        const querySnapshot = await getDocs(userQuery);
-        if (querySnapshot.empty) {
-          showMessage('User not found');
-          return;
-        }
-        const userDoc = querySnapshot.docs[0];
-        const uid = userDoc.id;
-        const currentSubscriptionEnd = Number.isInteger(userDoc.data().subscriptionEnd) ? userDoc.data().subscriptionEnd : DateTime.now().setZone('Asia/Manila').toMillis();
-        const currentTime = DateTime.now().setZone('Asia/Manila').toMillis();
-        const effectiveStart = Math.max(currentSubscriptionEnd, currentTime);
-        let additionalTime;
-
-        if (timeUnit === 'test') {
-          additionalTime = 24 * 60 * 60 * 1000;
-        } else if (timeUnit === 'hours') {
-          additionalTime = timeAmount * 60 * 60 * 1000;
         } else {
-          additionalTime = timeAmount * 24 * 60 * 60 * 1000;
-        }
-
-        const newSubscriptionEnd = effectiveStart + additionalTime;
-        await setDoc(doc(db, 'users', uid), { subscriptionEnd: newSubscriptionEnd }, { merge: true });
-        showMessage(`Subscription extended to ${DateTime.fromMillis(newSubscriptionEnd, { zone: 'Asia/Manila' }).toLocaleString(DateTime.DATETIME_FULL)}`);
-        logEvent(analytics, 'extend_subscription', { email, timeUnit, timeAmount });
-        document.getElementById('extendUserEmail').value = '';
-        document.getElementById('extendTimeUnit').value = 'hours';
-        document.getElementById('extendTimeAmount').value = '';
-        loadUsers();
-      } catch (error) {
-        showMessage('Error extending subscription: ' + error.message);
-        logEvent(analytics, 'extend_subscription', { email, success: false, error: error.code });
-      }
-    }
-
-    async function deleteUser(uid) {
-      if (!confirm('Are you sure you want to delete this user?')) return;
-      try {
-        await setDoc(doc(db, 'users', uid), { deleted: true, isOnline: false }, { merge: true });
-        showMessage('User marked as deleted (use Admin SDK for full deletion)');
-        logEvent(analytics, 'delete_user', { uid });
-        loadUsers();
-      } catch (error) {
-        showMessage('Error deleting user: ' + error.message);
-      }
-    }
-
-    async function loadUsers() {
-      const userTableBody = document.getElementById('userTableBody');
-      userTableBody.innerHTML = '';
-      try {
-        const querySnapshot = await getDocs(collection(db, 'users'));
-        querySnapshot.forEach(doc => {
-          const user = doc.data();
-          if (user.deleted) return;
-          const row = document.createElement('tr');
-          const subscriptionEnd = Number.isInteger(user.subscriptionEnd) ? user.subscriptionEnd : null;
-          const dateValue = subscriptionEnd ? DateTime.fromMillis(subscriptionEnd, { zone: 'Asia/Manila' }).toFormat('yyyy-MM-dd\'T\'HH:mm') : '';
-          row.innerHTML = `
-            <td>${user.email}</td>
-            <td>${subscriptionEnd ? `<input type="datetime-local" id="subscriptionEnd_${doc.id}" value="${dateValue}" aria-label="Subscription end date for ${user.email}">` : 'Not Set'}</td>
-            <td>${user.isAdmin ? 'Yes' : 'No'}</td>
-            <td><button class="admin-action" onclick="extendSubscriptionFor('${doc.id}', '${user.email}')">Add Time</button></td>
-            <td>
-              ${subscriptionEnd ? `<button class="admin-action" onclick="updateUserSubscription('${doc.id}')">Update</button>` : `<button class="fix-subscription" onclick="fixUserSubscription('${doc.id}')">Fix</button>`}
-              <button class="admin-action" onclick="deleteUser('${doc.id}')">Delete</button>
-            </td>
-          `;
-          userTableBody.appendChild(row);
-        });
-      } catch (error) {
-        showMessage('Error loading users: ' + error.message);
-      }
-    }
-
-    function loadOnlineUsers() {
-      if (!isAdmin) return;
-      const onlineUsersTableBody = document.getElementById('onlineUsersTableBody');
-      onlineUsersTableBody.innerHTML = '';
-      try {
-        const unsubscribe = onSnapshot(collection(db, 'users'), (querySnapshot) => {
-          onlineUsersTableBody.innerHTML = '';
-          querySnapshot.forEach(doc => {
-            const user = doc.data();
-            if (user.deleted) return;
-            const row = document.createElement('tr');
-            const status = user.isOnline ? 'Online' : 'Offline';
-            const statusClass = user.isOnline ? 'online' : 'offline';
-            row.innerHTML = `
-              <td>${user.email}</td>
-              <td><span class="online-indicator ${statusClass}"></span>${status}</td>
-            `;
-            onlineUsersTableBody.appendChild(row);
-          });
-        });
-        return unsubscribe;
-      } catch (error) {
-        showMessage('Error loading online users: ' + error.message);
-      }
-    }
-
-    function loadAlgorithmAccuracy() {
-      if (!isAdmin) return;
-      const accuracyTableBody = document.getElementById('algorithmAccuracyTableBody');
-      accuracyTableBody.innerHTML = '';
-      try {
-        const unsubscribe = onSnapshot(collection(db, 'users'), (querySnapshot) => {
-          accuracyTableBody.innerHTML = '';
-          querySnapshot.forEach(doc => {
-            const user = doc.data();
-            if (user.deleted || user.isAdmin) return;
-            const state = user.state || {};
-            const predictionPerformance = state.predictionPerformance || { 2: { correct: 0, total: 0 }, 3: { correct: 0, total: 0 }, 4: { correct: 0, total: 0 }, 5: { correct: 0, total: 0 } };
-            const accuracyWindow = state.accuracyWindow || [];
-            const altAlgoType = state.altAlgoType || 'chatgpt';
-
-            let bayesianCorrect = 0, bayesianTotal = 0;
-            for (let n = 2; n <= 5; n++) {
-              bayesianCorrect += predictionPerformance[n]?.correct || 0;
-              bayesianTotal += predictionPerformance[n]?.total || 0;
-            }
-            const bayesianAccuracy = bayesianTotal > 0 ? (bayesianCorrect / bayesianTotal * 100).toFixed(1) + '%' : 'N/A';
-
-            let chatgptCorrect = 0, chatgptTotal = 0, grokCorrect = 0, grokTotal = 0, neuralnetCorrect = 0, neuralnetTotal = 0, fusionCorrect = 0, fusionTotal = 0;
-            let currentAlgo = 'bayesian';
-            accuracyWindow.forEach(outcome => {
-              if (state.useAltAlgo && state.altAlgoCount > 0) {
-                currentAlgo = altAlgoType;
-              } else {
-                currentAlgo = 'bayesian';
-              }
-              if (currentAlgo === 'chatgpt') {
-                chatgptTotal++;
-                if (outcome === 'W') chatgptCorrect++;
-              } else if (currentAlgo === 'grok') {
-                grokTotal++;
-                if (outcome === 'W') grokCorrect++;
-              } else if (currentAlgo === 'neuralnet') {
-                neuralnetTotal++;
-                if (outcome === 'W') neuralnetCorrect++;
-              } else if (currentAlgo === 'fusion') {
-                fusionTotal++;
-                if (outcome === 'W') fusionCorrect++;
-              }
-            });
-            const chatgptAccuracy = chatgptTotal > 0 ? (chatgptCorrect / chatgptTotal * 100).toFixed(1) + '%' : 'N/A';
-            const grokAccuracy = grokTotal > 0 ? (grokCorrect / grokTotal * 100).toFixed(1) + '%' : 'N/A';
-            const neuralnetAccuracy = neuralnetTotal > 0 ? (neuralnetCorrect / neuralnetTotal * 100).toFixed(1) + '%' : 'N/A';
-            const fusionAccuracy = fusionTotal > 0 ? (fusionCorrect / fusionTotal * 100).toFixed(1) + '%' : 'N/A';
-
-            const row = document.createElement('tr');
-            row.innerHTML = `
-              <td>${user.email}</td>
-              <td>${bayesianAccuracy}</td>
-              <td>${chatgptAccuracy}</td>
-              <td>${grokAccuracy}</td>
-              <td>${neuralnetAccuracy}</td>
-              <td>${fusionAccuracy}</td>
-            `;
-            accuracyTableBody.appendChild(row);
-          });
-        });
-        return unsubscribe;
-      } catch (error) {
-        showMessage('Error loading algorithm accuracy: ' + error.message);
-      }
-    }
-
-    function loadGlobalSettings() {
-      try {
-        const unsubscribe = onSnapshot(doc(db, 'settings', 'global'), (docSnapshot) => {
-          if (docSnapshot.exists()) {
-            globalSelectedAlgorithms = docSnapshot.data().selectedAlgorithms || ['bayesian'];
-          } else {
-            globalSelectedAlgorithms = ['bayesian'];
-            setDoc(doc(db, 'settings', 'global'), { selectedAlgorithms: globalSelectedAlgorithms }, { merge: true });
-          }
-          if (!isAdmin) {
-            updatePrediction();
-          }
-        });
-        return unsubscribe;
-      } catch (error) {
-        showMessage('Error loading global settings: ' + error.message);
-        globalSelectedAlgorithms = ['bayesian'];
-      }
-    }
-
-    onAuthStateChanged(auth, async user => {
-      const errorMessage = document.getElementById('errorMessage');
-      errorMessage.innerText = '';
-      if (user) {
-        try {
-          const userDoc = await getDoc(doc(db, 'users', user.uid));
-          if (userDoc.exists()) {
-            const userData = userDoc.data();
-            isAdmin = userData.isAdmin || false;
-            const subscriptionEnd = Number.isInteger(userData.subscriptionEnd) ? userData.subscriptionEnd : null;
-            const currentTime = DateTime.now().setZone('Asia/Manila').toMillis();
-            if (subscriptionEnd && currentTime < subscriptionEnd) {
-              await setDoc(doc(db, 'users', user.uid), { isOnline: true }, { merge: true });
-              document.getElementById('appContainer').classList.remove('hidden');
-              document.getElementById('subscriptionStatus').innerText = `Subscription: Active until ${DateTime.fromMillis(subscriptionEnd, { zone: 'Asia/Manila' }).toLocaleString(DateTime.DATETIME_FULL)}`;
-              document.getElementById('adminPanel').classList.toggle('hidden', !isAdmin);
-              document.querySelectorAll('.admin-only').forEach(el => el.classList.toggle('hidden', !isAdmin));
-              if (isAdmin) {
-                loadUsers();
-                onlineUsersUnsubscribe = loadOnlineUsers();
-                accuracyUnsubscribe = loadAlgorithmAccuracy();
-                const selectedAlgorithms = userData.state?.selectedAlgorithms || globalSelectedAlgorithms;
-                document.getElementById('bayesianCheckbox').checked = selectedAlgorithms.includes('bayesian');
-                document.getElementById('chatgptCheckbox').checked = selectedAlgorithms.includes('chatgpt');
-                document.getElementById('grokCheckbox').checked = selectedAlgorithms.includes('grok');
-                document.getElementById('neuralnetCheckbox').checked = selectedAlgorithms.includes('neuralnet');
-                document.getElementById('fusionCheckbox').checked = selectedAlgorithms.includes('fusion');
-              }
-              globalSettingsUnsubscribe = loadGlobalSettings();
-              loadMemory();
-            } else {
-              await setDoc(doc(db, 'users', user.uid), { isOnline: false }, { merge: true });
-              showMessage('Your subscription has expired or is invalid. Contact admin to renew.');
-              signOut(auth);
-            }
-          } else {
-            showMessage('User data not found. Contact admin.');
-            signOut(auth);
-          }
-        } catch (error) {
-          console.error('Error:', error);
-          showMessage('Error checking subscription: ' + error.message);
-          await setDoc(doc(db, 'users', user.uid), { isOnline: false }, { merge: true });
-          signOut(auth);
-        }
-      } else {
-        if (onlineUsersUnsubscribe) {
-          onlineUsersUnsubscribe();
-          onlineUsersUnsubscribe = null;
-        }
-        if (accuracyUnsubscribe) {
-          accuracyUnsubscribe();
-          accuracyUnsubscribe = null;
-        }
-        if (globalSettingsUnsubscribe) {
-          globalSettingsUnsubscribe();
-          globalSettingsUnsubscribe = null;
-        }
-        window.location.href = 'login.html';
-      }
-    });
-
-    window.addEventListener('beforeunload', () => {
-      const user = auth.currentUser;
-      if (user) {
-        setDoc(doc(db, 'users', user.uid), { isOnline: false }, { merge: true });
-      }
-    });
-
-    let state = {
-      history: [],
-      outcomes: [],
-      wins: 0,
-      losses: 0,
-      baseUnit: 0,
-      startBankroll: 0,
-      currentBankroll: 0,
-      betState: { currentBetUnits: 1, totalProfit: 0, cycleProfit: 0, previousLosses: [] },
-      stopProfitType: 'percentage',
-      stopProfitValue: 0,
-      stopProfitEffective: 0,
-      stopProfitReached: false,
-      patternMemory: {},
-      predictionPerformance: { 2: { correct: 0, total: 0 }, 3: { correct: 0, total: 0 }, 4: { correct: 0, total: 0 }, 5: { correct: 0, total: 0 } },
-      cardCounts: { low: 0, high: 0, totalCards: 0, decks: 8 },
-      accuracyWindow: [],
-      altAlgoCount: 0,
-      useAltAlgo: false,
-      altAlgoType: 'chatgpt',
-      mmSystem: 'default',
-      selectedAlgorithms: []
-    };
-    let snapshots = [];
-    let saveTimeout = null;
-
-    function learnPattern(latest) {
-      for (let n = 2; n <= 5; n++) {
-        if (state.history.length >= n) {
-          const seq = state.history.slice(-n).join('');
-          const key = seq.slice(0, -1);
-          const next = seq.slice(-1);
-          if (next !== 'T') {
-            if (!state.patternMemory[key]) state.patternMemory[key] = { P: 0, B: 0 };
-            const recencyWeight = 1 + 0.1 * (state.history.length - state.history.lastIndexOf(seq));
-            state.patternMemory[key][next] += recencyWeight;
-          }
-        }
-      }
-    }
-
-    function unlearnPattern(latest) {
-      for (let n = 2; n <= 5; n++) {
-        if (state.history.length >= n) {
-          const seq = state.history.slice(-n).join('');
-          const key = seq.slice(0, -1);
-          const next = seq.slice(-1);
-          if (next !== 'T' && state.patternMemory[key]) {
-            const recencyWeight = 1 + 0.1 * (state.history.length - state.history.lastIndexOf(seq));
-            state.patternMemory[key][next] = Math.max(0, state.patternMemory[key][next] - recencyWeight);
-          }
-        }
-      }
-    }
-
-    function getDynamicConfidenceThreshold() {
-      const winRate = state.wins + state.losses > 0 ? state.wins / (state.wins + state.losses) : 0.5;
-      const bankrollRatio = state.currentBankroll / state.startBankroll;
-      const baseThreshold = 60;
-      const streakPenalty = state.outcomes.slice(-3).every(v => v === 'L') ? 10 : 0;
-      const bankrollPenalty = bankrollRatio < 0.5 ? 10 : 0;
-      return baseThreshold + streakPenalty + bankrollPenalty;
-    }
-
-    function getShoeType() {
-      let streaks = 0;
-      for (let i = 1; i < state.history.length; i++) {
-        if (state.history[i] === state.history[i - 1]) streaks++;
-      }
-      const chopScore = state.history.length > 1 ? state.history.length - 1 - streaks : 0;
-      const chopRatio = state.history.length > 1 ? chopScore / (state.history.length - 1) : 0;
-      if (chopRatio > 0.7) return 'Chop';
-      if (chopRatio < 0.3) return 'Streak';
-      return 'Balanced';
-    }
-
-    function calculateTrueCount() {
-      const runningCount = state.cardCounts.high - state.cardCounts.low;
-      const remainingDecks = Math.max(0.1, (state.cardCounts.decks * 52 - state.cardCounts.totalCards) / 52);
-      return runningCount / remainingDecks;
-    }
-
-    function estimateCardsDrawn(result) {
-      let low = 0, high = 0, total = 4;
-      if (result === 'P') {
-        low += 1;
-        high += 0.5;
-        if (Math.random() < 0.4) total = 6;
-      } else if (result === 'B') {
-        high += 1;
-        low += 0.5;
-        if (Math.random() < 0.4) total = 6;
-      } else if (result === 'T') {
-        high += 1;
-        total = Math.random() < 0.3 ? 6 : 4;
-      }
-      return { low, high, total };
-    }
-
-    function calculateRecentAccuracy() {
-      if (state.accuracyWindow.length === 0) return 1.0;
-      const wins = state.accuracyWindow.filter(o => o === 'W').length;
-      return wins / state.accuracyWindow.length;
-    }
-
-    function updateCardCountDisplay() {
-      if (!isAdmin) return;
-      const trueCount = calculateTrueCount();
-      const remainingDecks = (state.cardCounts.decks * 52 - state.cardCounts.totalCards) / 52;
-      const recentAccuracy = (calculateRecentAccuracy() * 100).toFixed(1);
-      document.getElementById('cardCountDisplay').innerText = 
-        `Card Count: Low=${state.cardCounts.low.toFixed(1)}, High=${state.cardCounts.high.toFixed(1)}, True Count=${trueCount.toFixed(2)}, Decks Remaining=${remainingDecks.toFixed(1)}, Recent Accuracy=${recentAccuracy}%`;
-    }
-
-    function bayesianPrediction() {
-      let bestPrediction = { predict: 'P', confidence: 50, score: 0, algo: 'bayesian' };
-      const threshold = getDynamicConfidenceThreshold();
-      const priorP = 0.4462;
-      const priorB = 0.4586;
-      const priorT = 0.0952;
-      const shoeType = getShoeType();
-      const trueCount = calculateTrueCount();
-      
-      let adjustedPriorP = priorP;
-      let adjustedPriorB = priorB;
-      if (trueCount > 1) {
-        adjustedPriorB += 0.02 * trueCount;
-        adjustedPriorP -= 0.01 * trueCount;
-      } else if (trueCount < -1) {
-        adjustedPriorP += 0.02 * Math.abs(trueCount);
-        adjustedPriorB -= 0.01 * Math.abs(trueCount);
-      }
-      const totalPrior = adjustedPriorP + adjustedPriorB + priorT;
-      adjustedPriorP /= totalPrior;
-      adjustedPriorB /= totalPrior;
-      
-      for (let n = 5; n >= 2; n--) {
-        if (state.history.length >= n) {
-          const key = state.history.slice(-n + 1).join('');
-          if (state.patternMemory[key]) {
-            let p = state.patternMemory[key].P || 0;
-            let b = state.patternMemory[key].B || 0;
-            const total = p + b;
-            if (total > 0) {
-              if (shoeType === 'Streak' && state.history[state.history.length - 1] === 'P') {
-                p *= 1.2;
-              } else if (shoeType === 'Streak' && state.history[state.history.length - 1] === 'B') {
-                b *= 1.2;
-              } else if (shoeType === 'Chop') {
-                p *= state.history[state.history.length - 1] === 'B' ? 1.2 : 0.8;
-                b *= state.history[state.history.length - 1] === 'P' ? 1.2 : 0.8;
-              }
-              
-              const alpha = 2;
-              const posteriorP = (p + alpha * adjustedPriorP) / (total + alpha);
-              const posteriorB = (b + alpha * adjustedPriorB) / (total + alpha);
-              
-              const frequencyWeight = total / (state.wins + state.losses + 1);
-              const lengthWeight = n / 5;
-              const recencyWeight = 1 / (state.history.length - state.history.lastIndexOf(key) + 1);
-              const perfWeight = state.predictionPerformance[n].total > 0 ? 
-                state.predictionPerformance[n].correct / state.predictionPerformance[n].total : 1;
-              const score = frequencyWeight * lengthWeight * recencyWeight * perfWeight;
-              
-              const confidence = Math.round(100 * Math.max(posteriorP, posteriorB));
-              const predict = posteriorP > posteriorB ? 'P' : 'B';
-              
-              if (score > bestPrediction.score && confidence > threshold) {
-                bestPrediction = { predict, confidence, score, algo: 'bayesian' };
-              }
-            }
-          }
-        }
-      }
-      
-      return bestPrediction;
-    }
-
-    function chatGPTPrediction() {
-      let bestPrediction = { predict: 'P', confidence: 50, score: 0, algo: 'chatgpt' };
-      const threshold = getDynamicConfidenceThreshold();
-      
-      for (let n = 6; n >= 2; n--) {
-        if (state.history.length >= n) {
-          const key = state.history.slice(-n + 1).join('');
-          if (state.patternMemory[key]) {
-            let p = state.patternMemory[key].P || 0;
-            let b = state.patternMemory[key].B || 0;
-            const total = p + b;
-            if (total > 0) {
-              const recencyWeight = 1 / (state.history.length - state.history.lastIndexOf(key) + 1);
-              const frequencyWeight = total / (state.wins + state.losses + 1);
-              const score = recencyWeight * frequencyWeight * (n / 6);
-              
-              const confidence = Math.round(100 * Math.max(p / total, b / total));
-              const predict = p > b ? 'P' : 'B';
-              
-              if (score > bestPrediction.score && confidence > threshold) {
-                bestPrediction = { predict, confidence, score, algo: 'chatgpt' };
-              }
-            }
-          }
-        }
-      }
-      
-      return bestPrediction;
-    }
-
-    function grokPrediction() {
-      let bestPrediction = { predict: 'P', confidence: 50, score: 0, algo: 'grok' };
-      const threshold = getDynamicConfidenceThreshold();
-      const shoeType = getShoeType();
-      const trueCount = calculateTrueCount();
-      
-      let baseP = 0.4462;
-      let baseB = 0.4586;
-      if (shoeType === 'Streak' && state.history.length > 0) {
-        if (state.history[state.history.length - 1] === 'P') baseP *= 1.3;
-        else if (state.history[state.history.length - 1] === 'B') baseB *= 1.3;
-      } else if (shoeType === 'Chop') {
-        if (state.history[state.history.length - 1] === 'P') baseB *= 1.3;
-        else if (state.history[state.history.length - 1] === 'B') baseP *= 1.3;
-      }
-      if (trueCount > 1) baseB += 0.03 * trueCount;
-      else if (trueCount < -1) baseP += 0.03 * Math.abs(trueCount);
-      
-      const total = baseP + baseB;
-      baseP /= total;
-      baseB /= total;
-      
-      for (let n = 5; n >= 2; n--) {
-        if (state.history.length >= n) {
-          const key = state.history.slice(-n + 1).join('');
-          if (state.patternMemory[key]) {
-            let p = state.patternMemory[key].P || 0;
-            let b = state.patternMemory[key].B || 0;
-            const totalCounts = p + b;
-            if (totalCounts > 0) {
-              p = (p + 1 * baseP) / (totalCounts + 1);
-              b = (b + 1 * baseB) / (totalCounts + 1);
-              const confidence = Math.round(100 * Math.max(p, b));
-              const predict = p > b ? 'P' : 'B';
-              const score = (n / 5) * (totalCounts / (state.wins + state.losses + 1));
-              
-              if (score > bestPrediction.score && confidence > threshold) {
-                bestPrediction = { predict, confidence, score, algo: 'grok' };
-              }
-            }
-          }
-        }
-      }
-      
-      return bestPrediction;
-    }
-
-    function neuralNetPrediction() {
-      let bestPrediction = { predict: 'P', confidence: 50, score: 0, algo: 'neuralnet' };
-      const threshold = getDynamicConfidenceThreshold();
-      const shoeType = getShoeType();
-      const trueCount = calculateTrueCount();
-      
-      // Neural network weights (these would normally be trained)
-      const weights = {
-        sequenceWeight: 0.4,
-        shoeTypeWeight: 0.3,
-        trueCountWeight: 0.2,
-        recentAccuracyWeight: 0.1
-      };
-      
-      // Get recent accuracy
-      const recentAccuracy = calculateRecentAccuracy();
-      
-      for (let n = 5; n >= 2; n--) {
-        if (state.history.length >= n) {
-          const key = state.history.slice(-n + 1).join('');
-          if (state.patternMemory[key]) {
-            let p = state.patternMemory[key].P || 0;
-            let b = state.patternMemory[key].B || 0;
-            const total = p + b;
-            
-            if (total > 0) {
-              // Base probabilities from sequence
-              const sequenceProbP = p / total;
-              const sequenceProbB = b / total;
-              
-              // Shoe type adjustment
-              let shoeTypeAdjustmentP = 0;
-              let shoeTypeAdjustmentB = 0;
-              if (shoeType === 'Streak') {
-                shoeTypeAdjustmentP = state.history[state.history.length - 1] === 'P' ? 0.15 : -0.05;
-                shoeTypeAdjustmentB = state.history[state.history.length - 1] === 'B' ? 0.15 : -0.05;
-              } else if (shoeType === 'Chop') {
-                shoeTypeAdjustmentP = state.history[state.history.length - 1] === 'B' ? 0.1 : -0.1;
-                shoeTypeAdjustmentB = state.history[state.history.length - 1] === 'P' ? 0.1 : -0.1;
-              }
-              
-              // True count adjustment
-              let trueCountAdjustmentP = 0;
-              let trueCountAdjustmentB = 0;
-              if (trueCount > 1) {
-                trueCountAdjustmentB = 0.05 * trueCount;
-                trueCountAdjustmentP = -0.025 * trueCount;
-              } else if (trueCount < -1) {
-                trueCountAdjustmentP = 0.05 * Math.abs(trueCount);
-                trueCountAdjustmentB = -0.025 * Math.abs(trueCount);
-              }
-              
-              // Recent accuracy adjustment
-              const accuracyAdjustment = (recentAccuracy - 0.5) * 0.1;
-              
-              // Combine all factors
-              const finalP = (sequenceProbP * weights.sequenceWeight) + 
-                             (shoeTypeAdjustmentP * weights.shoeTypeWeight) + 
-                             (trueCountAdjustmentP * weights.trueCountWeight) + 
-                             (accuracyAdjustment * weights.recentAccuracyWeight);
-              
-              const finalB = (sequenceProbB * weights.sequenceWeight) + 
-                             (shoeTypeAdjustmentB * weights.shoeTypeWeight) + 
-                             (trueCountAdjustmentB * weights.trueCountWeight) + 
-                             (-accuracyAdjustment * weights.recentAccuracyWeight);
-              
-              // Normalize
-              const totalFinal = finalP + finalB;
-              const normalizedP = totalFinal > 0 ? finalP / totalFinal : 0.5;
-              const normalizedB = totalFinal > 0 ? finalB / totalFinal : 0.5;
-              
-              const confidence = Math.round(100 * Math.max(normalizedP, normalizedB));
-              const predict = normalizedP > normalizedB ? 'P' : 'B';
-              
-              // Score based on sequence length and frequency
-              const frequencyWeight = total / (state.wins + state.losses + 1);
-              const lengthWeight = n / 5;
-              const recencyWeight = 1 / (state.history.length - state.history.lastIndexOf(key) + 1);
-              const score = frequencyWeight * lengthWeight * recencyWeight;
-              
-              if (score > bestPrediction.score && confidence > threshold) {
-                bestPrediction = { predict, confidence, score, algo: 'neuralnet' };
-              }
-            }
-          }
-        }
-      }
-      
-      return bestPrediction;
-    }
-
-    function fusionPrediction() {
-      let bestPrediction = { predict: 'P', confidence: 60, score: 0, algo: 'fusion' }; // Default confidence set to 60
-      const threshold = getDynamicConfidenceThreshold();
-      
-      if (state.history.length >= 3) {
-        const last3 = state.history.slice(-3).join('');
-        let predict = 'P';
-        let score = 0;
-        
-        // Pattern matching for chop patterns
-        if (last3 === 'PBP' || last3 === 'BPB') {
-          predict = state.history[state.history.length - 1] === 'P' ? 'B' : 'P';
-          score = 0.8; // Assign a moderate score for pattern match
-        }
-        // Streak detection
-        else if (last3 === 'PPP') {
-          predict = 'B';
-          score = 0.9; // Higher score for strong streak
-        }
-        else if (last3 === 'BBB') {
-          predict = 'P';
-          score = 0.9;
-        }
-        // Banker/Player bias safeguard
-        else {
           const last10 = state.history.slice(-10);
           const pCount = last10.filter(r => r === 'P').length;
           const bCount = last10.filter(r => r === 'B').length;
           if (bCount - pCount >= 4) {
             predict = 'P';
             score = 0.7;
-          }
-          else if (pCount - bCount >= 4) {
+          } else if (pCount - bCount >= 4) {
             predict = 'B';
             score = 0.7;
-          }
-          else {
+          } else {
             predict = state.history.length % 2 === 0 ? 'P' : 'B';
-            score = 0.5; // Lower score for default prediction
+            score = 0.5;
           }
         }
         
-        if (score > bestPrediction.score && bestPrediction.confidence >= threshold) {
-          bestPrediction = { predict, confidence: 60, score, algo: 'fusion' };
+        const confidence = Math.round(60 + score * 20);
+        if (score > bestPrediction.score && confidence >= threshold) {
+          bestPrediction = { predict, confidence, score, algo: 'fusion', threshold };
         }
       }
       
@@ -2301,9 +1159,14 @@ The user said "Full code", so I'll provide the complete updated HTML file.<!DOCT
       if (algorithms.includes('grok')) predictions.push(grokPrediction());
       if (algorithms.includes('neuralnet')) predictions.push(neuralNetPrediction());
       if (algorithms.includes('fusion')) predictions.push(fusionPrediction());
+      
+      if (predictions.length === 0) {
+        return { predict: 'P', confidence: 0, score: 0, algo: 'bayesian', threshold: 60 };
+      }
+      
       return predictions.reduce((best, current) => 
-        current.confidence > best.confidence ? current : best, 
-        { predict: 'P', confidence: 0, score: 0, algo: 'bayesian' }
+        current.score * current.confidence > best.score * best.confidence ? current : best, 
+        { predict: 'P', confidence: 0, score: 0, algo: 'bayesian', threshold: 60 }
       );
     }
 
@@ -2338,445 +1201,310 @@ The user said "Full code", so I'll provide the complete updated HTML file.<!DOCT
       const cardsDrawn = estimateCardsDrawn(result);
       state.cardCounts.low += cardsDrawn.low;
       state.cardCounts.high += cardsDrawn.high;
-      state.cardCounts.totalCards += cardsDrawn.total;
+      state.cardCounts.total ProtonMail and Hotmail are not supported by this browser. Please copy the HTML code below, paste it into a text editor, and then open it with a browser that supports those email services.
+
+    state.cardCounts.totalCards += cardsDrawn.total;
+      state.history.push(result);
+      learnPattern(result);
       
-      if (result === 'T') {
-        state.history.push('T');
-        learnPattern('T');
-        showMessage('Tie recorded. No wager placed.');
-        saveMemoryFast();
-        updateDisplay();
-        return;
+      const outcome = (result === prediction.predict && result !== 'T') ? 'W' : (result !== 'T' ? 'L' : 'T');
+      state.outcomes.push(outcome);
+      state.accuracyWindow.push(outcome);
+      if (state.accuracyWindow.length > 10) state.accuracyWindow.shift();
+      
+      if (outcome === 'W' && result !== 'T') {
+        state.wins++;
+        if (state.mmSystem === 'plus1' && state.betState.previousLosses.length === 0) {
+          state.betState.currentBetUnits = Math.max(1, state.betState.currentBetUnits + 1);
+        }
+        const profit = state.baseUnit * state.betState.currentBetUnits * (result === 'B' ? 0.95 : 1);
+        state.betState.cycleProfit += profit;
+        state.betState.totalProfit += profit;
+        state.currentBankroll += profit;
+        state.betState.previousLosses = [];
+      } else if (outcome === 'L') {
+        state.losses++;
+        const loss = state.baseUnit * state.betState.currentBetUnits;
+        state.betState.cycleProfit -= loss;
+        state.betState.totalProfit -= loss;
+        state.currentBankroll -= loss;
+        state.betState.previousLosses.push(loss);
+        state.betState.currentBetUnits = Math.min(
+          state.betState.currentBetUnits + state.betState.previousLosses.length,
+          Math.floor(state.currentBankroll / state.baseUnit)
+        );
       }
       
-      if (prediction.confidence <= getDynamicConfidenceThreshold()) {
-        state.history.push(result);
-        learnPattern(result);
-        showMessage(`No strong prediction (confidence ≤ ${getDynamicConfidenceThreshold()}%). No wager placed.`);
-        saveMemoryFast();
-        updateDisplay();
-        return;
-      }
-      
-      for (let n = 5; n >= 2; n--) {
-        if (state.history.length >= n - 1) {
-          const key = state.history.slice(-n + 1).join('');
-          if (state.patternMemory[key] && prediction.predict === (state.patternMemory[key].P > state.patternMemory[key].B ? 'P' : 'B')) {
+      if (state.patternMemory[result]) {
+        for (let n = 2; n <= 5; n++) {
+          if (state.history.length >= n) {
+            const seq = state.history.slice(-n).join('');
             state.predictionPerformance[n].total++;
-            if (result === prediction.predict) {
-              state.predictionPerformance[n].correct++;
-            }
-            break;
+            if (outcome === 'W') state.predictionPerformance[n].correct++;
           }
         }
       }
       
-      state.history.push(result);
-      learnPattern(result);
-      const outcome = result === prediction.predict ? 'win' : 'loss';
-      state.outcomes.push(outcome === 'win' ? 'W' : 'L');
-      state.accuracyWindow.push(outcome === 'win' ? 'W' : 'L');
-      if (state.accuracyWindow.length > 10) state.accuracyWindow.shift();
-      
-      if (outcome === 'win') {
-        handleWin();
-        state.wins++;
-      } else {
-        handleLoss();
-        state.losses++;
-      }
-      if (state.stopProfitEffective > 0 && state.currentBankroll - state.startBankroll >= state.stopProfitEffective) {
-        state.stopProfitReached = true;
+      if (state.stopProfitValue > 0) {
+        const effectiveProfit = state.stopProfitType === 'percentage'
+          ? (state.betState.totalProfit / state.startBankroll) * 100
+          : state.betState.totalProfit;
+        state.stopProfitEffective = effectiveProfit;
+        if (effectiveProfit >= state.stopProfitValue) {
+          state.stopProfitReached = true;
+          showMessage('Stop profit reached!');
+        }
       }
       
+      if (state.useAltAlgo && state.altAlgoCount > 0) {
+        state.altAlgoCount--;
+        if (state.altAlgoCount === 0) state.useAltAlgo = false;
+      }
+      
+      if (state.outcomes.slice(-3).every(o => o === 'L') && !state.useAltAlgo) {
+        state.useAltAlgo = true;
+        state.altAlgoCount = 3;
+        state.altAlgoType = globalSelectedAlgorithms[Math.floor(Math.random() * globalSelectedAlgorithms.length)] || 'chatgpt';
+      }
+      
+      updateUI();
       saveMemoryFast();
-      updateDisplay();
+      logEvent(analytics, 'record_result', { result, outcome, algo: prediction.algo });
     }
 
-    function undo() {
-      if (snapshots.length) {
-        const prevState = snapshots.pop();
-        unlearnPattern(state.history[state.history.length - 1]);
-        state = prevState;
-        saveMemoryFast();
-        updateDisplay();
+    function updateUI() {
+      document.getElementById('historyDisplay').innerHTML = state.history.slice(-10).map((result, i) => {
+        const outcome = state.outcomes[state.outcomes.length - state.history.length + i];
+        return `<div class="${result} ${outcome || ''}" data-outcome="${outcome || ''}">${result}</div>`;
+      }).join('');
+      
+      document.getElementById('shoeType').innerText = `Detected Pattern: ${getShoeType()}`;
+      updateCardCountDisplay();
+      
+      const prediction = selectPredictionAlgorithm();
+      const predictionText = state.stopProfitReached
+        ? 'Stop Profit Reached - No Bet'
+        : `Prediction: ${prediction.predict === 'P' ? 'Player' : prediction.predict === 'B' ? 'Banker' : 'Tie'} (${prediction.algo}, ${prediction.confidence}% confidence, ≥${prediction.threshold}% threshold)`;
+      document.getElementById('prediction').innerText = predictionText;
+      
+      document.getElementById('currentWager').innerText = `💵 Current Bet: ${state.baseUnit ? (state.baseUnit * state.betState.currentBetUnits).toFixed(2) : 0}`;
+      document.getElementById('bankrollDisplay').innerText = `💼 Balance: ${state.currentBankroll.toFixed(2)} | Profit: ${state.betState.totalProfit.toFixed(2)}`;
+      document.getElementById('wins').innerText = state.wins;
+      document.getElementById('losses').innerText = state.losses;
+      const accuracy = state.wins + state.losses > 0 ? (state.wins / (state.wins + state.losses) * 100).toFixed(1) : 0;
+      document.getElementById('accuracy').innerText = `${accuracy}%`;
+      
+      let streakInfo = '';
+      if (state.outcomes.length > 0) {
+        const lastOutcome = state.outcomes[state.outcomes.length - 1];
+        let streakCount = 1;
+        for (let i = state.outcomes.length - 2; i >= 0; i--) {
+          if (state.outcomes[i] === lastOutcome) streakCount++;
+          else break;
+        }
+        if (lastOutcome === 'W') streakInfo = `Win Streak: ${streakCount}`;
+        else if (lastOutcome === 'L') streakInfo = `Loss Streak: ${streakCount}`;
+        else streakInfo = `Last: Tie`;
       }
-    }
-
-    function clearAll() {
-      if (confirm('Reset memory for new shoe? Bankroll, wager, profit, and money management will be preserved.')) {
-        snapshots.push(JSON.parse(JSON.stringify(state)));
-        // Preserve financial and betting-related state
-        const preservedState = {
-          currentBankroll: state.currentBankroll,
-          startBankroll: state.startBankroll,
-          baseUnit: state.baseUnit,
-          betState: { ...state.betState },
-          mmSystem: state.mmSystem,
-          stopProfitType: state.stopProfitType,
-          stopProfitValue: state.stopProfitValue,
-          stopProfitEffective: state.stopProfitEffective,
-          stopProfitReached: state.stopProfitReached,
-          wins: state.wins,
-          losses: state.losses,
-          selectedAlgorithms: state.selectedAlgorithms // Preserve for admins
-        };
-        // Reset memory-related state
-        state.history = [];
-        state.outcomes = [];
-        state.patternMemory = {};
-        state.predictionPerformance = { 2: { correct: 0, total: 0 }, 3: { correct: 0, total: 0 }, 4: { correct: 0, total: 0 }, 5: { correct: 0, total: 0 } };
-        state.cardCounts = { low: 0, high: 0, totalCards: 0, decks: 8 };
-        state.accuracyWindow = [];
-        state.altAlgoCount = 0;
-        state.useAltAlgo = false;
-        state.altAlgoType = 'chatgpt';
-        // Restore preserved state
-        Object.assign(state, preservedState);
-        saveMemoryFast();
-        document.getElementById('prediction').innerText = 'Waiting for input...';
-        document.getElementById('shoeType').innerText = 'Detected Pattern: N/A';
-        document.getElementById('historyDisplay').innerHTML = '';
-        if (isAdmin) updateCardCountDisplay();
-        updateMMDisplay();
-      }
-    }
-
-    function resetStats() {
-      if (confirm('Reset stats (wins, losses, outcomes)?')) {
-        snapshots.push(JSON.parse(JSON.stringify(state)));
-        state.wins = 0;
-        state.losses = 0;
-        state.outcomes = [];
-        state.accuracyWindow = [];
-        state.altAlgoCount = 0;
-        state.useAltAlgo = false;
-        state.altAlgoType = 'chatgpt';
-        saveMemoryFast();
-        updateDisplay();
-      }
-    }
-
-    function resetMemory() {
-      if (confirm('Reset learned patterns?')) {
-        snapshots.push(JSON.parse(JSON.stringify(state)));
-        state.patternMemory = {};
-        state.predictionPerformance = { 2: { correct: 0, total: 0 }, 3: { correct: 0, total: 0 }, 4: { correct: 0, total: 0 }, 5: { correct: 0, total: 0 } };
-        state.accuracyWindow = [];
-        state.altAlgoCount = 0;
-        state.useAltAlgo = false;
-        state.altAlgoType = 'chatgpt';
-        saveMemoryFast();
-        updateDisplay();
-      }
+      document.getElementById('streakInfo').innerText = streakInfo;
     }
 
     function setBankroll() {
       const bankroll = parseFloat(document.getElementById('bankrollInput').value);
-      const unit = parseFloat(document.getElementById('basebetInput').value);
-      const stopProfit = parseFloat(document.getElementById('stopProfitInput').value) || 0;
-      state.stopProfitType = document.getElementById('stopProfitType').value;
-      state.mmSystem = document.getElementById('mmSystem').value;
-      if (isNaN(bankroll) || bankroll <= 0 || isNaN(unit) || unit <= 0) {
-        showMessage('Invalid bankroll or unit value');
+      const baseUnit = parseFloat(document.getElementById('basebetInput').value);
+      const stopProfitValue = parseFloat(document.getElementById('stopProfitInput').value) || 0;
+      const stopProfitType = document.getElementById('stopProfitType').value;
+      const mmSystem = document.getElementById('mmSystem').value;
+      
+      if (!bankroll || !baseUnit || bankroll < baseUnit) {
+        showMessage('Invalid bankroll or base unit');
         return;
       }
-      if (stopProfit < 0) {
-        showMessage('Invalid stop profit');
-        return;
-      }
-      snapshots.push(JSON.parse(JSON.stringify(state)));
+      
       state.startBankroll = bankroll;
-      state.baseUnit = unit;
       state.currentBankroll = bankroll;
-      state.stopProfitValue = stopProfit;
-      state.stopProfitEffective = state.stopProfitType === 'percentage' ? stopProfit / 100 * bankroll : stopProfit;
+      state.baseUnit = baseUnit;
+      state.betState.currentBetUnits = 1;
+      state.betState.totalProfit = 0;
+      state.betState.cycleProfit = 0;
+      state.betState.previousLosses = [];
+      state.stopProfitType = stopProfitType;
+      state.stopProfitValue = stopProfitValue;
+      state.stopProfitEffective = 0;
       state.stopProfitReached = false;
-      state.betState = { currentBetUnits: 1, totalProfit: 0, cycleProfit: 0, previousLosses: [] };
+      state.mmSystem = mmSystem;
+      
+      updateUI();
+      saveMemoryFast();
+      logEvent(analytics, 'set_bankroll', { bankroll, baseUnit, stopProfitValue, stopProfitType, mmSystem });
+    }
+
+    function resetBet() {
+      state.betState.currentBetUnits = 1;
+      state.betState.cycleProfit = 0;
+      state.betState.previousLosses = [];
+      state.stopProfitReached = false;
+      updateUI();
+      saveMemoryFast();
+      logEvent(analytics, 'reset_bet');
+    }
+
+    function clearAll() {
+      if (!confirm('Are you sure you want to clear all data?')) return;
+      state.history = [];
+      state.outcomes = [];
       state.wins = 0;
       state.losses = 0;
-      state.outcomes = [];
       state.patternMemory = {};
       state.predictionPerformance = { 2: { correct: 0, total: 0 }, 3: { correct: 0, total: 0 }, 4: { correct: 0, total: 0 }, 5: { correct: 0, total: 0 } };
       state.cardCounts = { low: 0, high: 0, totalCards: 0, decks: 8 };
       state.accuracyWindow = [];
       state.altAlgoCount = 0;
       state.useAltAlgo = false;
-      state.altAlgoType = 'chatgpt';
+      state.betState.currentBetUnits = 1;
+      state.betState.cycleProfit = 0;
+      state.betState.previousLosses = [];
+      state.stopProfitReached = false;
+      snapshots = [];
+      updateUI();
       saveMemoryFast();
-      updateDisplay();
+      logEvent(analytics, 'clear_all');
     }
 
-    function calculatePlusX(number) {
-      if (number < 10) return 1;
-      return parseInt(String(number).slice(0, -1)) || 1;
-    }
-
-    function handleWin() {
-      const wager = state.baseUnit * state.betState.currentBetUnits;
-      const payout = state.history[state.history.length - 1] === 'B' ? wager * 0.95 : wager;
-      state.currentBankroll += payout;
-
-      if (state.mmSystem === 'default') {
-        state.betState.totalProfit += state.betState.currentBetUnits;
-        state.betState.cycleProfit += state.betState.currentBetUnits;
-        if (state.betState.cycleProfit >= 1) {
-          state.betState.currentBetUnits = 1;
-          state.betState.cycleProfit = 0;
-          state.betState.previousLosses = [];
-        } else {
-          if (state.betState.previousLosses.length > 0) {
-            state.betState.previousLosses.shift();
-          }
-          const lastLoss = state.betState.previousLosses.length > 0 ? state.betState.previousLosses[0] : 1;
-          state.betState.currentBetUnits = lastLoss + calculatePlusX(lastLoss);
-        }
-      } else if (state.mmSystem === 'plus1') {
-        state.betState.totalProfit += state.betState.currentBetUnits;
-        state.betState.cycleProfit += state.betState.currentBetUnits;
-        if (state.betState.previousLosses.length > 0) {
-          state.betState.previousLosses.shift();
-        }
-        if (state.betState.cycleProfit >= 1) {
-          state.betState.currentBetUnits = 1;
-          state.betState.cycleProfit = 0;
-        } else if (state.betState.previousLosses.length > 0) {
-          const nextLoss = state.betState.previousLosses[0];
-          state.betState.currentBetUnits = nextLoss + calculatePlusX(nextLoss);
-        } else {
-          state.betState.currentBetUnits = 1;
-        }
-      }
-    }
-
-    function handleLoss() {
-      const wager = state.baseUnit * state.betState.currentBetUnits;
-      state.currentBankroll -= wager;
-
-      if (state.mmSystem === 'default') {
-        state.betState.totalProfit -= state.betState.currentBetUnits;
-        state.betState.cycleProfit -= state.betState.currentBetUnits;
-        state.betState.previousLosses.push(state.betState.currentBetUnits);
-      } else if (state.mmSystem === 'plus1') {
-        state.betState.totalProfit -= state.betState.currentBetUnits;
-        state.betState.cycleProfit -= state.betState.currentBetUnits;
-        if (state.betState.previousLosses.length === 0) {
-          state.betState.previousLosses.push(state.baseUnit / state.baseUnit);
-        } else {
-          const nextLoss = state.betState.previousLosses[0];
-          const x = calculatePlusX(nextLoss);
-          state.betState.previousLosses.push(nextLoss + x);
-        }
-        const nextBet = state.betState.previousLosses[0];
-        state.betState.currentBetUnits = nextBet + calculatePlusX(nextBet);
-        if (state.betState.cycleProfit >= 1) {
-          state.betState.currentBetUnits = 1;
-          state.betState.cycleProfit = 0;
-        }
-      }
-    }
-
-    function resetBet() {
-      if (confirm('Reset bet?')) {
-        snapshots.push(JSON.parse(JSON.stringify(state)));
-        state.betState = { currentBetUnits: 1, totalProfit: 0, cycleProfit: 0, previousLosses: [] };
-        saveMemoryFast();
-        updateDisplay();
-      }
-    }
-
-    function getWager() {
-      if (!state.baseUnit || state.stopProfitReached) return 0;
-      return Math.min(state.betState.currentBetUnits * state.baseUnit, state.currentBankroll);
-    }
-
-    function updateDisplay() {
-      updatePrediction();
-      updateMMDisplay();
-      if (isAdmin) updateCardCountDisplay();
-    }
-
-    function updatePrediction() {
-      const predDiv = document.getElementById('prediction');
-      const historyDiv = document.getElementById('historyDisplay');
-      historyDiv.innerHTML = '';
-      const displayHistory = state.history.slice(-10);
-      displayHistory.forEach((item, index) => {
-        const actualIndex = state.history.length - displayHistory.length + index;
-        const cell = document.createElement('div');
-        cell.innerText = item;
-        cell.className = item;
-        if (state.outcomes[actualIndex]) {
-          cell.classList.add(state.outcomes[actualIndex]);
-          cell.setAttribute('data-outcome', state.outcomes[actualIndex]);
-        }
-        historyDiv.appendChild(cell);
-      });
-      const prediction = selectPredictionAlgorithm();
-      if (prediction.confidence <= getDynamicConfidenceThreshold()) {
-        predDiv.innerText = `Waiting for strong signal (threshold: ${getDynamicConfidenceThreshold()}%)...`;
-        if (isAdmin) {
-          document.getElementById('shoeType').innerText = 'Detected Pattern: N/A';
-        }
+    function undo() {
+      if (snapshots.length === 0) {
+        showMessage('Nothing to undo');
         return;
       }
-      if (isAdmin) {
-        let sequenceLength = 0;
-        for (let n = 5; n >= 2; n--) {
-          if (state.history.length >= n) {
-            const key = state.history.slice(-n + 1).join('');
-            if (state.patternMemory[key] && prediction.predict === (state.patternMemory[key].P > state.patternMemory[key].B ? 'P' : 'B')) {
-              sequenceLength = n;
-              break;
-            }
-          }
-        }
-        const accuracy = state.predictionPerformance[sequenceLength].total > 0 ? 
-          ((state.predictionPerformance[sequenceLength].correct / state.predictionPerformance[sequenceLength].total) * 100).toFixed(1) : 'N/A';
-        const algoName = prediction.algo.charAt(0).toUpperCase() + prediction.algo.slice(1) + ' Algorithm';
-        predDiv.innerText = `Prediction: ${prediction.predict === 'P' ? 'Player' : 'Banker'} (${prediction.confidence}%) [Seq: ${sequenceLength}, Acc: ${accuracy}%] Using ${algoName}`;
-        let streaks = 0;
-        for (let i = 1; i < state.history.length; i++) {
-          if (state.history[i] === state.history[i - 1]) streaks++;
-        }
-        const chopScore = state.history.length > 1 ? state.history.length - 1 - streaks : 0;
-        const chopRatio = state.history.length > 1 ? chopScore / (state.history.length - 1) : 0;
-        let pattern = 'Balanced';
-        if (chopRatio > 0.7) pattern = 'Chop';
-        else if (chopRatio < 0.3) pattern = 'Streak';
-        document.getElementById('shoeType').innerText = `Detected Pattern: ${pattern}`;
-      } else {
-        predDiv.innerText = `Prediction: ${prediction.predict === 'P' ? 'Player' : 'Banker'} (${prediction.confidence}%)`;
-      }
+      state = snapshots.pop();
+      updateUI();
+      saveMemoryFast();
+      logEvent(analytics, 'undo');
     }
 
-    function updateMMDisplay() {
-      document.getElementById('streakInfo').innerText = state.stopProfitReached ? '' : 
-        state.outcomes.slice(-3).every(v => v === 'L') ? `🧊 Cold Streak - Losses: ${state.betState.previousLosses.length}` :
-        state.outcomes.slice(-3).every(v => v === 'W') ? `🔥 Hot Streak` : '';
-      document.getElementById('currentWager').innerText = `💵 Current Bet: ${getWager().toFixed(2)}`;
-      document.getElementById('wins').innerText = state.wins;
-      document.getElementById('losses').innerText = state.losses;
-      document.getElementById('accuracy').innerText = state.wins + state.losses ? ((state.wins / (state.wins + state.losses)) * 100).toFixed(1) + '%' : '0%';
-      const previousLosses = state.betState.previousLosses.length > 0 ? state.betState.previousLosses.join(', ') : 'None';
-      const stopProfitDisplay = state.stopProfitValue > 0 ? 
-        state.stopProfitType === 'percentage' ? `${state.stopProfitValue}% ($${state.stopProfitEffective.toFixed(2)})` : 
-        `$${state.stopProfitValue.toFixed(2)}` : 'Not Set';
-      document.getElementById('bankrollDisplay').innerHTML = state.startBankroll ? 
-        `💼 Balance: ${state.currentBankroll.toFixed(2)} | Profit: ${(state.currentBankroll - state.startBankroll).toFixed(2)}<br>` +
-        `Bet: $${(state.betState.currentBetUnits * state.baseUnit).toFixed(2)} (${state.betState.currentBetUnits} units)<br>` +
-        `Losses: ${previousLosses}<br>` +
-        `<span class="${state.betState.cycleProfit >= 1 ? 'cycle-reset' : ''}">Cycle: $${(state.betState.cycleProfit * state.baseUnit).toFixed(2)}</span><br>` +
-        `Total: $${(state.betState.totalProfit * state.baseUnit).toFixed(2)}<br>` +
-        `Stop: ${stopProfitDisplay} | ${state.stopProfitReached ? '🚨 Reached' : 'Active'}<br>` +
-        `MM: ${state.mmSystem === 'plus1' ? 'Plus 1' : 'Default'}` : 
-        '💼 Balance: - | Profit: -';
-      document.getElementById('bankrollInput').value = state.startBankroll || '';
-      document.getElementById('basebetInput').value = state.baseUnit || '';
-      document.getElementById('stopProfitType').value = state.stopProfitType;
-      document.getElementById('stopProfitInput').value = state.stopProfitValue || '';
-      document.getElementById('mmSystem').value = state.mmSystem;
+    function toggleAdvanced() {
+      const advancedControls = document.getElementById('advancedControls');
+      advancedControls.classList.toggle('show');
+    }
+
+    async function saveMemory() {
+      clearTimeout(saveTimeout);
+      const user = auth.currentUser;
+      if (user) {
+        try {
+          await setDoc(doc(db, 'users', user.uid), { state }, { merge: true });
+          showMessage('State saved');
+          logEvent(analytics, 'save_memory');
+        } catch (error) {
+          showMessage('Error saving state: ' + error.message);
+        }
+      }
     }
 
     function saveMemoryFast() {
       clearTimeout(saveTimeout);
-      saveTimeout = setTimeout(saveMemory, 300);
-    }
-
-    async function saveMemory() {
-      try {
-        const user = auth.currentUser;
-        if (user) {
-          await setDoc(doc(db, 'users', user.uid), {
-            email: user.email,
-            subscriptionEnd: (await getDoc(doc(db, 'users', user.uid))).data().subscriptionEnd,
-            isAdmin: (await getDoc(doc(db, 'users', user.uid))).data().isAdmin || false,
-            isOnline: true,
-            state: state
-          }, { merge: true });
-        }
-      } catch (e) {
-        showMessage('Error saving to Firestore: ' + e.message);
-      }
+      saveTimeout = setTimeout(saveMemory, 1000);
     }
 
     async function loadMemory() {
-      try {
-        const user = auth.currentUser;
-        if (user) {
+      const user = auth.currentUser;
+      if (user) {
+        try {
           const userDoc = await getDoc(doc(db, 'users', user.uid));
           if (userDoc.exists()) {
-            const saved = userDoc.data().state || {};
-            state.wins = Number(saved.wins) || 0;
-            state.losses = Number(saved.losses) || 0;
-            state.baseUnit = Number(saved.baseUnit) || 0;
-            state.startBankroll = Number(saved.startBankroll) || 0;
-            state.currentBankroll = Number(saved.currentBankroll) || 0;
-            state.stopProfitType = saved.stopProfitType || 'percentage';
-            state.stopProfitValue = Number(saved.stopProfitValue) || 0;
-            state.stopProfitEffective = Number(saved.stopProfitEffective) || 0;
-            state.stopProfitReached = saved.stopProfitReached || false;
-            state.betState = saved.betState || { currentBetUnits: 1, totalProfit: 0, cycleProfit: 0, previousLosses: [] };
-            state.history = Array.isArray(saved.history) ? saved.history : [];
-            state.outcomes = Array.isArray(saved.outcomes) ? saved.outcomes : [];
-            state.patternMemory = saved.patternMemory || {};
-            state.predictionPerformance = saved.predictionPerformance || { 2: { correct: 0, total: 0 }, 3: { correct: 0, total: 0 }, 4: { correct: 0, total: 0 }, 5: { correct: 0, total: 0 } };
-            state.cardCounts = saved.cardCounts || { low: 0, high: 0, totalCards: 0, decks: 8 };
-            state.accuracyWindow = Array.isArray(saved.accuracyWindow) ? saved.accuracyWindow : [];
-            state.altAlgoCount = Number(saved.altAlgoCount) || 0;
-            state.useAltAlgo = saved.useAltAlgo || false;
-            state.altAlgoType = saved.altAlgoType || 'chatgpt';
-            state.mmSystem = saved.mmSystem || 'default';
-            state.selectedAlgorithms = isAdmin ? (Array.isArray(saved.selectedAlgorithms) ? saved.selectedAlgorithms : []) : [];
-            const subscriptionEnd = Number.isInteger(userDoc.data().subscriptionEnd) ? userDoc.data().subscriptionEnd : null;
-            document.getElementById('subscriptionStatus').innerText = subscriptionEnd ? 
-              `Subscription: Active until ${DateTime.fromMillis(subscriptionEnd, { zone: 'Asia/Manila' }).toLocaleString(DateTime.DATETIME_FULL)}` : 
-              'Subscription: Invalid or not set';
-            if (isAdmin) {
-              document.getElementById('bayesianCheckbox').checked = state.selectedAlgorithms.includes('bayesian');
-              document.getElementById('chatgptCheckbox').checked = state.selectedAlgorithms.includes('chatgpt');
-              document.getElementById('grokCheckbox').checked = state.selectedAlgorithms.includes('grok');
-              document.getElementById('neuralnetCheckbox').checked = state.selectedAlgorithms.includes('neuralnet');
-              document.getElementById('fusionCheckbox').checked = state.selectedAlgorithms.includes('fusion');
-            }
-            updateDisplay();
+            const userData = userDoc.data();
+            state = { ...state, ...userData.state };
+            state.history = state.history || [];
+            state.outcomes = state.outcomes || [];
+            state.wins = state.wins || 0;
+            state.losses = state.losses || 0;
+            state.baseUnit = state.baseUnit || 0;
+            state.startBankroll = state.startBankroll || 0;
+            state.currentBankroll = state.currentBankroll || 0;
+            state.betState = state.betState || { currentBetUnits: 1, totalProfit: 0, cycleProfit: 0, previousLosses: [] };
+            state.stopProfitType = state.stopProfitType || 'percentage';
+            state.stopProfitValue = state.stopProfitValue || 0;
+            state.stopProfitEffective = state.stopProfitEffective || 0;
+            state.stopProfitReached = state.stopProfitReached || false;
+            state.patternMemory = state.patternMemory || {};
+            state.predictionPerformance = state.predictionPerformance || { 2: { correct: 0, total: 0 }, 3: { correct: 0, total: 0 }, 4: { correct: 0, total: 0 }, 5: { correct: 0, total: 0 } };
+            state.cardCounts = state.cardCounts || { low: 0, high: 0, totalCards: 0, decks: 8 };
+            state.accuracyWindow = state.accuracyWindow || [];
+            state.altAlgoCount = state.altAlgoCount || 0;
+            state.useAltAlgo = state.useAltAlgo || false;
+            state.altAlgoType = state.altAlgoType || 'chatgpt';
+            state.mmSystem = state.mmSystem || 'default';
+            state.selectedAlgorithms = state.selectedAlgorithms || [];
+            updateUI();
+            showMessage('State loaded');
+            logEvent(analytics, 'load_memory');
           }
+        } catch (error) {
+          showMessage('Error loading state: ' + error.message);
         }
-      } catch (e) {
-        showMessage('Error loading from Firestore: ' + e.message);
       }
     }
 
-    function toggleAdvanced() {
-      const section = document.getElementById('advancedControls');
-      const button = document.querySelector('.toggle-section[onclick="toggleAdvanced()"]');
-      section.classList.toggle('show');
-      button.innerText = section.classList.contains('show') ? 'Hide Advanced' : 'Show Advanced';
+    async function resetMemory() {
+      if (!confirm('Are you sure you want to reset all memory?')) return;
+      state = {
+        history: [],
+        outcomes: [],
+        wins: 0,
+        losses: 0,
+        baseUnit: 0,
+        startBankroll: 0,
+        currentBankroll: 0,
+        betState: { currentBetUnits: 1, totalProfit: 0, cycleProfit: 0, previousLosses: [] },
+        stopProfitType: 'percentage',
+        stopProfitValue: 0,
+        stopProfitEffective: 0,
+        stopProfitReached: false,
+        patternMemory: {},
+        predictionPerformance: { 2: { correct: 0, total: 0 }, 3: { correct: 0, total: 0 }, 4: { correct: 0, total: 0 }, 5: { correct: 0, total: 0 } },
+        cardCounts: { low: 0, high: 0, totalCards: 0, decks: 8 },
+        accuracyWindow: [],
+        altAlgoCount: 0,
+        useAltAlgo: false,
+        altAlgoType: 'chatgpt',
+        mmSystem: 'default',
+        selectedAlgorithms: []
+      };
+      snapshots = [];
+      await saveMemory();
+      updateUI();
+      logEvent(analytics, 'reset_memory');
     }
 
-    window.signOutUser = signOutUser;
+    function updatePrediction() {
+      updateUI();
+    }
+
+    window.extendSubscriptionFor = async (uid, email) => {
+      document.getElementById('extendUserEmail').value = email;
+      document.getElementById('extendTimeUnit').value = 'days';
+      document.getElementById('extendTimeAmount').value = '1';
+    };
+
     window.createUser = createUser;
     window.updateUserSubscription = updateUserSubscription;
     window.fixUserSubscription = fixUserSubscription;
     window.extendSubscription = extendSubscription;
-    window.extendSubscriptionFor = (uid, email) => {
-      document.getElementById('extendUserEmail').value = email;
-      document.getElementById('extendTimeUnit').value = 'hours';
-      document.getElementById('extendTimeAmount').value = '';
-      document.getElementById('extendTimeUnit').focus();
-    };
     window.deleteUser = deleteUser;
     window.recordResult = recordResult;
-    window.undo = undo;
-    window.clearAll = clearAll;
-    window.resetStats = resetStats;
-    window.resetMemory = resetMemory;
     window.setBankroll = setBankroll;
     window.resetBet = resetBet;
+    window.clearAll = clearAll;
+    window.undo = undo;
+    window.toggleAdvanced = toggleAdvanced;
     window.saveMemory = saveMemory;
     window.loadMemory = loadMemory;
-    window.toggleAdvanced = toggleAdvanced;
+    window.resetMemory = resetMemory;
     window.setAlgorithms = setAlgorithms;
+
+    document.addEventListener('DOMContentLoaded', () => {
+      loadMemory();
+    });
   </script>
 </body>
-</html>
+</html>    
